@@ -1,0 +1,19 @@
+{
+  "name": "fision-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Web client for FisionServer",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "engine": "bash engine/build.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

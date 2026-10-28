@@ -1,0 +1,18 @@
+# Bitacora interna
+CLAUDE.md
+
+# Dependencias y salidas
+node_modules/
+dist/
+build/
+*.wasm.map
+# Motor compilado (npm run engine)
+public/engine/
+
+# Maquetas: perfiles de Chrome y cache de los generadores
+docs/mockups/prof_*/
+__pycache__/
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,19 @@
+/* Laboratorio provisional: se sustituye por la UI de las maquetas */
+:root { color-scheme: dark; --acc: #27B397; --line: #2a2a2a; }
+body { background: #000; color: #ddd; font: 14px/1.5 system-ui, sans-serif; margin: 0; }
+#app { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+h1 { font-size: 18px; color: #fff; }
+form, section { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
+input[type=text], input[type=password] { background: #111; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 6px 8px; margin-right: 8px; }
+button { background: var(--acc); color: #000; border: 0; border-radius: 6px; padding: 6px 14px; font-weight: 600; cursor: pointer; }
+button:disabled { opacity: .4; cursor: default; }
+input[type=range] { accent-color: var(--acc); width: 220px; }
+.err { color: #f87171; }
+.songs { list-style: none; padding: 0; margin: 0; }
+.songs li { display: flex; gap: 10px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.songs li:hover { background: #0d0d0d; }
+.songs img { width: 36px; height: 36px; border-radius: 4px; object-fit: cover; background: #222; }
+.songs .muted { color: #777; font-size: 12px; }
+.row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.stem { display: grid; grid-template-columns: 140px 220px 40px; gap: 8px; align-items: center; }
+pre { background: #111; padding: 10px; border-radius: 8px; white-space: pre-wrap; font-size: 12px; }
