@@ -1,0 +1,44 @@
+// Textos: claves completas en ingles, placeholders coherentes entre idiomas.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { test, expect } from './lib/harness.mjs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'src/i18n', f), 'utf8'));
+const keys = read('keys.json'), android = read('android.json'), web = read('web.json');
+const holes = (e) => [...(typeof e === 'string' ? e : Object.values(e).join(' ')).matchAll(/\{(\d+|n)\}/g)].map((m) => m[1]).sort().filter((v, i, a) => a.indexOf(v) === i).join(',');
+
+test('cada clave de keys.json esta en ingles', () => {
+  const miss = keys.filter((k) => !(k in android.en));
+  expect(!miss.length, `faltan en en: ${miss} (reimporta con tools/import-strings.mjs)`);
+});
+
+test('las claves web existen en ingles y espanol', () => {
+  const en = Object.keys(web.en), es = Object.keys(web.es);
+  const miss = [...en.filter((k) => !es.includes(k)).map((k) => `es:${k}`), ...es.filter((k) => !en.includes(k)).map((k) => `en:${k}`)];
+  expect(!miss.length, `faltan: ${miss}`);
+});
+
+test('mismos placeholders en todos los idiomas', () => {
+  const bad = [];
+  for (const [lang, tab] of Object.entries({ ...android, ...{} })) {
+    for (const [k, v] of Object.entries(tab)) if (holes(v) !== holes(android.en[k])) bad.push(`${lang}:${k} ${holes(v)}≠${holes(android.en[k])}`);
+  }
+  for (const [k, v] of Object.entries(web.es)) if (holes(v) !== holes(web.en[k] ?? '')) bad.push(`es:${k}`);
+  expect(!bad.length, bad.join('; '));
+  return `${Object.keys(android).length} idiomas`;
+});
+
+test('t(): placeholders, plurales y caida a ingles', async () => {
+  const { t, setLang, pickLang } = await import('../src/i18n/i18n.ts');
+  setLang('es');
+  expect(t('cloud_state_downloading', 42) === 'Descargando 42%', t('cloud_state_downloading', 42));
+  expect(t('search_result_count', { n: 1 }) === '1 resultado', t('search_result_count', { n: 1 }));
+  expect(t('search_result_count', { n: 3 }) === '3 resultados', t('search_result_count', { n: 3 }));
+  setLang('ru');
+  expect(t('search_result_count', { n: 3 }).startsWith('3 результата'), t('search_result_count', { n: 3 }));
+  expect(t('web_search') === 'Search', `caida a en: ${t('web_search')}`);
+  expect(t('no_existe') === 'no_existe', 'clave desconocida');
+  expect(pickLang(['pt-BR']) === 'pt-BR' && pickLang(['zh-CN']) === 'zh-Hans' && pickLang(['es-MX']) === 'es' && pickLang(['ja']) === 'en', 'pickLang');
+});

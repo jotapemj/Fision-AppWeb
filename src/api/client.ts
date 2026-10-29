@@ -14,6 +14,14 @@ export interface LibraryEntry {
   updated_at: string;
 }
 
+export interface LiveJob {
+  job_id: string;
+  hash: string;
+  filename: string;
+  state: 'queued' | 'running' | 'waiting_gpu' | 'done' | 'error' | 'cancelled';
+  position: number | null;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -56,6 +64,9 @@ export class Api {
   logout(): void { this.store.set(null); }
 
   async library(): Promise<LibraryEntry[]> { return this.json(await this.authed('/library')); }
+
+  /** Jobs vivos de la cuenta (cola, procesando, esperando GPU). */
+  async jobs(): Promise<LiveJob[]> { return this.json(await this.authed('/jobs')); }
 
   /** Letra actual; null si no existe (404). No fiarse del lyrics.json del zip. */
   async lyrics(hash: string): Promise<unknown | null> {

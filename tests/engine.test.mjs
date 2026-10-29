@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test, expect, near } from './lib/harness.mjs';
+import { sineWav as wav } from './lib/zipWriter.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BUILD = path.join(ROOT, 'engine/build/node/fision_engine.mjs');
@@ -18,20 +19,7 @@ async function engine() {
   return M;
 }
 
-// WAV PCM16 estereo con un seno
-function sineWav(freq, seconds, amp = 0.3) {
-  const n = Math.round(SR * seconds);
-  const buf = Buffer.alloc(44 + n * 4);
-  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 4, 4); buf.write('WAVE', 8);
-  buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22);
-  buf.writeUInt32LE(SR, 24); buf.writeUInt32LE(SR * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34);
-  buf.write('data', 36); buf.writeUInt32LE(n * 4, 40);
-  for (let i = 0; i < n; i++) {
-    const v = Math.round(Math.sin(2 * Math.PI * freq * i / SR) * amp * 32767);
-    buf.writeInt16LE(v, 44 + i * 4); buf.writeInt16LE(v, 46 + i * 4);
-  }
-  return buf;
-}
+const sineWav = (f, sec) => wav(f, sec, SR);
 
 // Carga en paralelo como la web; devuelve ids por fichero
 async function load(freqs, threads = 4, seconds = 6) {

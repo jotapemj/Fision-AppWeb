@@ -104,8 +104,9 @@ export class Engine {
   get positionMs(): number { return this.M._fe_position_ms(); }
   get durationMs(): number { return this.M._fe_duration_ms(); }
 
-  /** Tono y tempo van a todos los stems a la vez (sincronia). */
-  setPitch(semitones: number): void { for (const id of this.ids) this.M._fe_set_pitch(id, semitones); }
+  /** Tono por pista: la bateria no se transpone (StemSpec.isPitched). */
+  setPitch(id: number, semitones: number): void { this.M._fe_set_pitch(id, semitones); }
+  /** Tempo a todas las pistas a la vez (sincronia), metronomos incluidos. */
   setTempo(factor: number): void { for (const id of this.ids) this.M._fe_set_tempo(id, factor); }
   setVolume(id: number, volume: number, pan = 0): void { const [l, r] = stemGains(volume, pan); this.M._fe_set_volume(id, l, r); }
   setSoloMuted(id: number, muted: boolean): void { this.M._fe_set_solo_muted(id, muted ? 1 : 0); }

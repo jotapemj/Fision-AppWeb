@@ -32,4 +32,6 @@ for (const f of files) {
   }
 }
 console.log(`\n${pass} ok, ${fail} fallan, ${skip} saltadas (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
-process.exit(fail ? 1 : 0);
+// Salir sin process.exit inmediato: en Windows rompe libuv con handles cerrandose (exit 127)
+process.exitCode = fail ? 1 : 0;
+setTimeout(() => process.exit(), 500);
