@@ -6,7 +6,7 @@ import wordmark from '../assets/icons/wordmark.svg';
 
 export interface SidebarHooks {
   onPick(row: Row): void;
-  onLogout(): void;
+  onSettings(): void;
   cover(hash: string): Promise<string | null>;
 }
 
@@ -41,7 +41,8 @@ export class Sidebar {
     const me = h('div', { class: 'me' },
       h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } }),
       h('span', { class: 'who' }, h('b', { textContent: user }), h('span', { textContent: server })),
-      h('button', { class: 'out', textContent: t('settings_logout_title'), onclick: () => hooks.onLogout() }));
+      h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }));
+    me.lastElementChild!.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
     this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision')), find, bar, this.list, me);
   }
 

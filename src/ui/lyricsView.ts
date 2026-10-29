@@ -1,7 +1,6 @@
 // Vista Letra: linea activa centrada, karaoke por palabra, tocar = seek (maqueta player.html).
 import { t } from '../i18n/i18n.ts';
 import { activeRow, hasWords, wordProgress, type LyricRow } from '../player/lyrics.ts';
-import { formatChord } from '../player/chords.ts';
 import { h } from './dom.ts';
 
 const KARAOKE_PREF = 'fision.lyrics_karaoke_mode'; // lyrics_karaoke_mode, default false
@@ -10,7 +9,7 @@ function loadKaraoke(): boolean { try { return localStorage.getItem(KARAOKE_PREF
 function saveKaraoke(on: boolean) { try { localStorage.setItem(KARAOKE_PREF, on ? '1' : '0'); } catch { /* sin storage */ } }
 
 /** chords: "fila:palabra" -> acorde (acordes sobre la letra, solo web). */
-export type LyricsState = { kind: 'loading' } | { kind: 'none' } | { kind: 'content'; rows: LyricRow[]; chords?: Map<string, string> };
+export type LyricsState = { kind: 'loading' } | { kind: 'none' } | { kind: 'content'; rows: LyricRow[]; chords?: Map<string, string>; fmt?: (c: string | null) => string };
 
 export class LyricsView {
   private scroller = h('div', { class: 'lyrics' });
@@ -45,6 +44,7 @@ export class LyricsView {
     const opts = h('label', { class: 'lyopts' }, t('lyrics_karaoke_mode'), sw);
     this.lines = []; this.words = [];
     const chords = state.chords ?? new Map<string, string>();
+    const fmt = state.fmt ?? ((c: string | null) => c ?? '');
     const withChords = chords.size > 0;
     const list = h('div', { class: `lylist${withChords ? ' withch' : ''}` });
     this.rows.forEach((r, ri) => {
@@ -55,7 +55,7 @@ export class LyricsView {
         r.words.forEach((w, k) => {
           // Con acordes: celda de dos pisos (acorde encima, palabra debajo)
           const s = withChords
-            ? h('span', { class: 'wd' }, h('i', { class: 'ch', textContent: formatChord(chords.get(`${ri}:${k}`) ?? null) }), h('span', { textContent: w.text }))
+            ? h('span', { class: 'wd' }, h('i', { class: 'ch', textContent: fmt(chords.get(`${ri}:${k}`) ?? null) }), h('span', { textContent: w.text }))
             : h('span', { class: 'wd', textContent: w.text });
           // Palabra: seek a su onset (solo en karaoke; si no, la linea entera)
           s.onclick = (ev) => { if (this.karaoke) { ev.stopPropagation(); this.onSeek(w.onset); } };

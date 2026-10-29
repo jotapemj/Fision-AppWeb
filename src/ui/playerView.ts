@@ -6,7 +6,7 @@ import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
 import { LyricsView, type LyricsState } from './lyricsView.ts';
 import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
-import { currentBeat, formatChord, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
+import { currentBeat, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
 import { ChordStrip } from './chordStrip.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
@@ -30,6 +30,12 @@ export interface PlayerHooks {
   /** Beat nuevo: posicion en el compas, compas y tempo oido (BPM x multiplicador). */
   onBeat(pos: number, beatsPerBar: number, heardBpm: number | null): void;
   nebula: { get(): boolean; set(on: boolean): void };
+  /** Formato de acorde con los ajustes (latino, bemoles, transporte con el tono). */
+  formatChord(c: string | null): string;
+  /** Hay chords_basic.txt: se ofrece Basicos / Avanzado. */
+  hasBasicChords: boolean;
+  onChordsBasic(basic: boolean): void;
+  onPitch?(): void;
 }
 
 const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="13" width="5" height="3" rx="1" fill="currentColor"/><rect x="9.5" y="7" width="5" height="3" rx="1" fill="currentColor"/><rect x="15.5" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
@@ -130,12 +136,23 @@ export class PlayerView {
 
   destroy() { cancelAnimationFrame(this.raf); }
 
-  setLyrics(state: LyricsState) { this.lyrics.set(state); }
+  private lyricsState: LyricsState = { kind: 'loading' };
+
+  setLyrics(state: LyricsState) {
+    this.lyricsState = state;
+    this.lyrics.set(state.kind === 'content' ? { ...state, fmt: (c) => this.hooks.formatChord(c) } : state);
+  }
+
+  /** Los ajustes de acordes cambiaron (o el tono, si se transporta): repintar acordes. */
+  reformatChords() {
+    if (this.beats) this.setChords(this.beats.cells, this.beats.beatsPerBar);
+    this.setLyrics(this.lyricsState);
+  }
 
   setChords(cells: BeatCell[], beatsPerBar: number) {
     this.beats = cells.length ? { cells, beatsPerBar } : null;
     if (!cells.some((c) => c.chord)) return;
-    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000)) };
+    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000), (c) => this.hooks.formatChord(c)) };
     this.nowNext.hidden = false;
     this.chordBeat = -2;
     if (this.view === 'chords') this.renderView();
@@ -178,7 +195,8 @@ export class PlayerView {
       if (b !== this.chordBeat) {
         this.chordBeat = b;
         this.chords.strip.setBeat(b);
-        const now = formatChord(soundingChord(this.chords.cells, b)), next = formatChord(nextChord(this.chords.cells, b));
+        const fmt = (c: string | null) => this.hooks.formatChord(c);
+        const now = fmt(soundingChord(this.chords.cells, b)), next = fmt(nextChord(this.chords.cells, b));
         this.nowCh.textContent = now || '–'; this.nextCh.textContent = next || '–';
         this.big.replaceChildren(h('b', { textContent: now || '–' }), h('span', { textContent: next }));
       }
@@ -261,7 +279,7 @@ export class PlayerView {
     this.popover(anchor, host, (pop) => {
       const show = h('b');
       const r = slider(PITCH_MIN, PITCH_MAX, 1, this.p.pitch, t('cd_pitch'));
-      const apply = (v: number) => { this.p.setPitch(v); setSlider(r, this.p.pitch); show.textContent = this.pitchVal.textContent = this.p.pitch > 0 ? `+${this.p.pitch}` : String(this.p.pitch); };
+      const apply = (v: number) => { const before = this.p.pitch; this.p.setPitch(v); if (this.p.pitch !== before) this.hooks.onPitch?.(); setSlider(r, this.p.pitch); show.textContent = this.pitchVal.textContent = this.p.pitch > 0 ? `+${this.p.pitch}` : String(this.p.pitch); };
       r.addEventListener('input', () => apply(+r.value));
       apply(this.p.pitch);
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('cd_pitch') }), show), r,
@@ -278,6 +296,15 @@ export class PlayerView {
       const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(neb.get()), 'aria-label': t('drawer_switch_nebula') } });
       sw.onclick = () => { neb.set(!neb.get()); sw.setAttribute('aria-checked', String(neb.get())); };
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('drawer_switch_nebula') }), sw));
+      if (this.hooks.hasBasicChords) {
+        const g = h('div', { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': t('chords_dialog_title') } });
+        [t('chords_basic'), t('chords_advanced')].forEach((label, i) => {
+          const b = h('button', { textContent: label, attrs: { role: 'radio', 'aria-checked': String((i === 0) === this.p.chordsBasic) } });
+          b.onclick = () => { g.querySelectorAll('button').forEach((x, k) => x.setAttribute('aria-checked', String(k === i))); this.hooks.onChordsBasic(i === 0); };
+          g.append(b);
+        });
+        pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('chords_dialog_title') })), g);
+      }
     });
   }
 

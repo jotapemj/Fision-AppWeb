@@ -1,5 +1,5 @@
 // Tira de acordes: una celda por beat, barra en los downbeats (BeatCellAdapter de Android).
-import { formatChord, soundingChord, type BeatCell } from '../player/chords.ts';
+import { soundingChord, type BeatCell } from '../player/chords.ts';
 import { h } from './dom.ts';
 
 export class ChordStrip {
@@ -9,14 +9,14 @@ export class ChordStrip {
   private beatsPerBar: number;
   private cur = -2;
 
-  constructor(cells: BeatCell[], beatsPerBar: number, onSeek: (sec: number) => void) {
+  constructor(cells: BeatCell[], beatsPerBar: number, onSeek: (sec: number) => void, fmt: (c: string | null) => string) {
     this.beatsPerBar = beatsPerBar;
     cells.forEach((c, i) => {
       if (c.isDownbeat && i > 0) this.track.append(h('i', { class: 'bar', attrs: { 'aria-hidden': 'true' } }));
       // Compas sin acorde propio: se recuerda el sostenido, pequeno y tenue
       let label = c.chord, ghost = false;
       if (!label && c.isDownbeat) { label = soundingChord(cells, i - 1); ghost = !!label; }
-      const el = h('button', { class: `c${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}`, textContent: formatChord(label), attrs: { role: 'listitem', tabindex: '-1' } });
+      const el = h('button', { class: `c${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}`, textContent: fmt(label), attrs: { role: 'listitem', tabindex: '-1' } });
       el.onclick = () => onSeek(c.time);
       this.cellEls.push(el);
       this.track.append(el);

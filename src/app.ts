@@ -14,13 +14,20 @@ import { h } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
 import { Sidebar } from './ui/sidebar.ts';
-import { Nebula, nebulaPref } from './ui/nebula.ts';
-import { pulseFor } from './player/nebulaMath.ts';
+import { Nebula } from './ui/nebula.ts';
+import { accentPalette, pulseFor } from './player/nebulaMath.ts';
+import { ACCENTS, type SettingsStore } from './settings.ts';
+import { openSettings } from './ui/settingsView.ts';
+import { cssRgb, songColors, type SongColors } from './player/songPalette.ts';
+import { formatChord } from './player/chords.ts';
+import pkg from '../package.json' with { type: 'json' };
+import { capture, idbParamsStore, restore, type ParamsStore } from './player/songParams.ts';
 
 const JOB_POLL_MS = 4000;
 
 export class App {
   private api = new Api();
+  private settings: SettingsStore;
   private root: HTMLElement;
   private store: SongStore | null = null;
   private sidebar: Sidebar | null = null;
@@ -36,10 +43,17 @@ export class App {
   private opening = false;
   private pollTimer = 0;
   private nebula: Nebula | null = null;
+  private user = '';
+  private params: ParamsStore = idbParamsStore();
+  private saveTimer = 0;
+  private flushSave: (() => void) | null = null;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, settings: SettingsStore) {
     this.root = root;
+    this.settings = settings;
+    settings.subscribe((_, k) => this.onSetting(k));
     this.api.onUnauthorized = () => this.showLogin(t('login_session_expired'));
+    addEventListener('pagehide', () => this.flushSave?.());
   }
 
   async start() {
@@ -57,16 +71,19 @@ export class App {
   }
 
   private enter(s: Session) {
+    this.user = s.user;
     this.store = new SongStore(s.user);
     this.covers.clear();
     this.sidebar = new Sidebar(s.user, location.host, {
       onPick: (r) => this.pick(r),
-      onLogout: () => { this.api.logout(); this.showLogin(); },
+      onSettings: () => openSettings(this.settings, { user: s.user, server: location.host, webVersion: pkg.version,
+        serverInfo: () => this.api.serverInfo().catch(() => null), onLogout: () => { this.api.logout(); this.showLogin(); } }),
       cover: (hash) => this.cover(hash),
     });
     this.nebula?.destroy();
     this.nebula = new Nebula();
-    this.nebula.setEnabled(nebulaPref.get());
+    this.nebula.setColors(accentPalette(ACCENTS[this.settings.get('accentId')]));
+    this.nebula.setEnabled(this.settings.get('nebula'));
     this.shell = h('div', { class: 'app' }, this.nebula.el, this.sidebar.el, this.hintMain(t('web_pick_song')), idleBar());
     this.root.replaceChildren(this.shell);
     this.refreshLibrary();
@@ -86,7 +103,7 @@ export class App {
   }
 
   private render() {
-    this.rows = buildRows({ entries: this.entries, downloaded: this.downloaded, downloading: this.downloading, jobs: this.jobs });
+    this.rows = buildRows({ entries: this.entries, downloaded: this.downloaded, downloading: this.downloading, jobs: this.jobs }, this.settings.get('sortAsc'));
     this.sidebar?.update(this.rows, this.current?.entry.hash ?? null, this.current?.player.playing ?? false);
   }
 
@@ -108,6 +125,7 @@ export class App {
       const files = await Promise.all(listZip(zip).map(async (z) => ({ name: z.name, data: await readZipEntry(zip, z) })));
       await this.store!.save(e.hash, e.updated_at, files);
       this.downloaded.add(e.hash);
+      this.covers.delete(e.hash); // ahora hay portada local (antes pudo quedar null en cache)
     } catch (err) { console.warn('download', err); }
     finally { this.downloading.delete(e.hash); this.render(); }
   }
@@ -139,7 +157,7 @@ export class App {
       // AudioContext tras el gesto del usuario (este clic)
       this.engine ??= await Engine.create('playback');
       this.current?.player.pause();
-      const TEXT = ['beats.txt', 'downbeats.txt', 'chords.txt'];
+      const TEXT = ['beats.txt', 'downbeats.txt', 'chords.txt', 'chords_basic.txt'];
       const files = await this.store!.load(e.hash, (n) => /\.(flac|wav)$/i.test(n) || TEXT.includes(n));
       const txt = (n: string) => { const f = files.find((x) => x.name === n); return f ? new TextDecoder().decode(f.data) : null; };
       const beats = files.find((f) => f.name === 'beats.txt');
@@ -150,21 +168,37 @@ export class App {
       this.stopSong();
       const beatsTxt = beats ? new TextDecoder().decode(beats.data) : null;
       const player = new Player(this.engine, { stems: rep.stems, durationMs: rep.durationMs, bpm: parseBpm(beatsTxt), beats: parseBeats(beatsTxt) });
+      // Mezcla guardada de esta cancion (solo en este navegador)
+      const key = `${this.user}:${e.hash}`;
+      restore(player, await this.params.get(key));
+      player.autoplayNext = this.settings.get('autoplayNext');
+      const hasBasic = !!txt('chords_basic.txt');
+      if (!hasBasic) player.chordsBasic = false;
+      const save = () => { clearTimeout(this.saveTimer); this.flushSave = null; this.params.put(key, capture(player)); };
+      player.onChange = () => { clearTimeout(this.saveTimer); this.flushSave = save; this.saveTimer = window.setTimeout(save, 400); };
       const view = new PlayerView(player, e, await this.cover(e.hash), {
         onPrev: () => this.step(-1), onNext: () => this.step(1),
         onEnded: () => this.step(1), onPlayState: () => this.render(),
         onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
-        nebula: { get: () => nebulaPref.get(), set: (on) => { nebulaPref.set(on); this.nebula?.setEnabled(on); } },
+        nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
+        formatChord: (c) => formatChord(c, this.settings.get('chordTranspose') ? player.pitch : 0, this.settings.get('chordLatin'), this.settings.get('chordFlat')),
+        hasBasicChords: hasBasic,
+        onChordsBasic: (basic) => { player.setChordsBasic(basic); applyChords(); },
+        onPitch: () => { if (this.settings.get('chordTranspose')) view.reformatChords(); },
       });
       this.current = { entry: e, player, view };
       this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, view.main, view.bar);
+      this.applySongColors();
       this.render();
-      const { cells, beatsPerBar } = buildBeatCells(parseBeats(beatsTxt), parseTimes(txt('downbeats.txt')), parseChords(txt('chords.txt')));
-      view.setChords(cells, beatsPerBar);
-      this.loadLyrics(e, rep.durationMs / 1000).then((st) => {
-        if (this.current?.view !== view) return;
-        view.setLyrics(st.kind === 'content' ? { ...st, chords: chordsOverWords(st.rows, cells) } : st);
-      });
+      // Acordes avanzados o basicos (por cancion); la letra los lleva encima
+      let lyrics: LyricsState = { kind: 'loading' };
+      const applyChords = () => {
+        const { cells, beatsPerBar } = buildBeatCells(parseBeats(beatsTxt), parseTimes(txt('downbeats.txt')), parseChords(txt(player.chordsBasic ? 'chords_basic.txt' : 'chords.txt')));
+        view.setChords(cells, beatsPerBar);
+        view.setLyrics(lyrics.kind === 'content' ? { ...lyrics, chords: chordsOverWords(lyrics.rows, cells) } : lyrics);
+      };
+      applyChords();
+      this.loadLyrics(e, rep.durationMs / 1000).then((st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); });
       await view.toggle(); // abrir = reproducir, como Android
     } catch (err) {
       curtain.remove();
@@ -172,6 +206,54 @@ export class App {
       console.error('open', err);
       if (!this.current) this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, this.hintMain(msg), idleBar());
     } finally { this.opening = false; }
+  }
+
+  private onSetting(k: string) {
+    const cur = this.current;
+    if (k === 'nebula') this.nebula?.setEnabled(this.settings.get('nebula'));
+    if (k === 'accentId' || k === 'songColors') this.applySongColors();
+    if (k === 'sortAsc') this.render();
+    if (k === 'autoplayNext' && cur) cur.player.autoplayNext = this.settings.get('autoplayNext');
+    if ((k === 'chordLatin' || k === 'chordFlat' || k === 'chordTranspose') && cur) cur.view.reformatChords();
+  }
+
+  private paletteCache = new Map<string, SongColors | null>();
+
+  /** Colores de la portada en el reproductor (song_colors_enabled); si no, el acento elegido. */
+  private async applySongColors() {
+    const cur = this.current;
+    const els = cur ? [cur.view.main, cur.view.bar] : [];
+    const accent = ACCENTS[this.settings.get('accentId')];
+    let pal: SongColors | null = null;
+    if (cur && this.settings.get('songColors')) {
+      const hash = cur.entry.hash;
+      if (!this.paletteCache.has(hash)) this.paletteCache.set(hash, await this.coverPalette(hash));
+      if (this.current !== cur) return;
+      pal = this.paletteCache.get(hash) ?? null;
+    }
+    for (const el of els) {
+      if (pal) {
+        el.style.setProperty('--accent', cssRgb(pal.accent));
+        el.style.setProperty('--accent-2', cssRgb(pal.secondary));
+        el.style.setProperty('--accent-12', `rgb(${pal.accent.join(' ')} / .12)`);
+      } else for (const v of ['--accent', '--accent-2', '--accent-12']) el.style.removeProperty(v);
+    }
+    this.nebula?.setColors(pal ? { blobs: pal.blobs, anchor: pal.anchor } : accentPalette(accent));
+  }
+
+  /** Portada local -> pixeles (area 112x112, vecino mas cercano, como Palette.scaleBitmapDown). */
+  private async coverPalette(hash: string): Promise<SongColors | null> {
+    const url = await this.cover(hash);
+    if (!url) return null;
+    try {
+      const bmp = await createImageBitmap(await (await fetch(url)).blob());
+      const k = Math.min(1, Math.sqrt(12544 / (bmp.width * bmp.height)));
+      const w = Math.ceil(bmp.width * k), hh = Math.ceil(bmp.height * k);
+      const c = new OffscreenCanvas(w, hh), ctx = c.getContext('2d')!;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(bmp, 0, 0, w, hh);
+      return songColors(ctx.getImageData(0, 0, w, hh).data);
+    } catch { return null; }
   }
 
   /** Letra: siempre del server (la del zip puede estar vieja); sin red, la copia local. */
@@ -199,6 +281,7 @@ export class App {
   }
 
   private stopSong() {
+    this.flushSave?.();
     if (!this.current) return;
     this.current.player.pause();
     this.current.view.destroy();

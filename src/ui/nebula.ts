@@ -2,21 +2,17 @@
 // mezcla aditiva, velo 0x66000000, 30 fps, pulso por beat. Opt-in (nebula_enabled = false).
 import { accentPalette, decayPulse, orbits } from '../player/nebulaMath.ts';
 
+export interface NebulaColors { blobs: number[][]; anchor: number[] }
+
 const FRAME_MS = 1000 / 30;
 const SCALE = 0.5; // todo es difuso: media resolucion basta
 const ANCHOR_Y = 1.02, ANCHOR_W = 1.30, ANCHOR_SQUASH = 0.36;
-const PREF = 'fision.nebula_enabled';
-
-export const nebulaPref = {
-  get(): boolean { try { return localStorage.getItem(PREF) === '1'; } catch { return false; } },
-  set(on: boolean) { try { localStorage.setItem(PREF, on ? '1' : '0'); } catch { /* sin storage */ } },
-};
 
 export class Nebula {
   readonly el: HTMLCanvasElement = document.createElement('canvas');
   private ctx = this.el.getContext('2d')!;
   private orbit = orbits();
-  private palette = accentPalette(getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#27B397');
+  private palette: NebulaColors = accentPalette('#27B397');
   private pulse = 0;
   private t0 = performance.now();
   private last = 0;
@@ -29,6 +25,9 @@ export class Nebula {
     this.el.setAttribute('aria-hidden', 'true');
     document.addEventListener('visibilitychange', () => this.sync());
   }
+
+  /** Paleta: la del acento (fromAccent) o la de la portada. */
+  setColors(p: NebulaColors) { this.palette = p; }
 
   setEnabled(on: boolean) { this.on = on; this.el.classList.toggle('on', on); this.sync(); }
 

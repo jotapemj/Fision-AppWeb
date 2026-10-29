@@ -66,12 +66,15 @@ export class Player {
   metroSpeed: MetroSpeed = 1;
   metroVolume = 100;
   metroHalfB = false; // variante B del 0.5x: desfase de un beat local
+  chordsBasic = false; // chords_basic.txt en vez de chords.txt (por cancion)
   pitch = 0;
   tempoMult = 1;
   repeat: Repeat = Repeat.Off;
   autoplayNext = false;
   playing = false;
   private repeatOneUsed = false;
+  /** Algo guardable cambio (mezcla, tono, tempo, metronomo). El solo no cuenta. */
+  onChange: (() => void) | null = null;
   private engine: Engine;
 
   constructor(engine: Engine, song: SongData) {
@@ -118,6 +121,7 @@ export class Player {
     s.volume = Math.round(Math.min(100, Math.max(0, v)));
     if (s.volume > 0) s.lastVolume = s.volume;
     this.engine.setVolume(s.id, s.volume, s.pan);
+    this.onChange?.();
   }
 
   /** Mute = slider a 0; quitar mute = ultimo volumen o 75. */
@@ -137,6 +141,7 @@ export class Player {
     this.pitch = Math.round(Math.min(PITCH_MAX, Math.max(PITCH_MIN, semi)));
     // Bateria, percusion y metronomos no cambian de tono
     for (const s of this.stems) this.engine.setPitch(s.id, isPitched(s.stem) ? this.pitch : 0);
+    this.onChange?.();
   }
 
   get targetBpm(): number | null { return this.bpm ? Math.round(this.bpm * this.tempoMult) : null; }
@@ -149,6 +154,7 @@ export class Player {
   setTempoMult(m: number) {
     this.tempoMult = this.bpm ? m : Math.round(Math.min(MULT_MAX, Math.max(MULT_MIN, m)) / MULT_STEP) * MULT_STEP;
     this.engine.setTempo(this.tempoMult);
+    this.onChange?.();
   }
 
   get hasMetronome() { return METRO_STEM.some((m) => m in this.metronomeIds); }
@@ -160,9 +166,10 @@ export class Player {
       const id = this.metronomeIds[m];
       if (id !== undefined) this.engine.setVolume(id, on && i === speed ? this.metroVolume : 0);
     });
+    this.onChange?.();
   }
 
-  setHalfVariantB(b: boolean) { this.metroHalfB = b; this.applyHalfPhase(this.engine.positionMs); }
+  setHalfVariantB(b: boolean) { this.metroHalfB = b; this.applyHalfPhase(this.engine.positionMs); this.onChange?.(); }
 
   /** Variante A: sin desfase. B: la pista 0.5x adelantada un beat local (pista en bucle). */
   private applyHalfPhase(songMs: number) {
@@ -171,6 +178,8 @@ export class Player {
     const shift = this.metroHalfB ? localBeatIntervalMs(this.beats, songMs, this.bpm) : 0;
     this.engine.seekTrack(id, songMs + shift);
   }
+
+  setChordsBasic(b: boolean) { this.chordsBasic = b; this.onChange?.(); }
 
   cycleRepeat() { this.repeat = ((this.repeat + 1) % 3) as Repeat; this.repeatOneUsed = false; }
 

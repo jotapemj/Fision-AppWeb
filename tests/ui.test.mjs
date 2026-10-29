@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from './lib/harness.mjs';
 import { findChrome, launch } from './lib/chrome.mjs';
-import { makeZip, sineWav } from './lib/zipWriter.mjs';
+import { makeZip, sineWav, bandsPng } from './lib/zipWriter.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const H1 = '1'.repeat(64), H2 = '2'.repeat(64), H3 = '3'.repeat(64);
@@ -26,6 +26,8 @@ async function fakeServer() {
     { name: 'beats.txt', data: Buffer.from(['120.0', ...Array.from({ length: 40 }, (_, i) => (0.5 + i * 0.5).toFixed(2))].join('\n')), deflate: true },
     { name: 'downbeats.txt', data: Buffer.from(Array.from({ length: 10 }, (_, i) => (0.5 + i * 2).toFixed(2)).join('\n')) },
     { name: 'chords.txt', data: Buffer.from('N 0.000\nC 0.500\nG 2.500\nAm 12.000\n') },
+    // Portada magenta y azul: con colores de la cancion, el acento pasa a ser rojizo
+    { name: 'artcover.png', data: bandsPng(64, 64, [[[200, 30, 120], 0.6], [[30, 40, 160], 0.4]]) },
   ]);
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const srv = http.createServer(async (req, res) => {
@@ -225,6 +227,57 @@ for (const [w, hgt] of [[1440, 900], [1280, 800]]) {
     return `${m.measured} textos medidos`;
   });
 }
+
+test('ajustes: dialogo medible, cifrado latino y colores de portada', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`); // vista Acordes
+  await p.eval(`document.querySelector('.me .gear').click()`);
+  await p.waitFor(`document.querySelector('dialog.settings[open]')`);
+  const box = await p.eval(`(() => { const d = document.querySelector('dialog.settings').getBoundingClientRect(); return [d.top >= 0, d.bottom <= innerHeight, d.right <= innerWidth]; })()`);
+  expect(box.every(Boolean), `dialogo fuera de la ventana: ${box}`);
+  // Solapes de filas y contraste dentro del dialogo
+  const bad = await p.eval(`(() => { const out = []; for (const r of document.querySelectorAll('dialog.settings .srow')) {
+      const kids = [...r.children].map(k => k.getBoundingClientRect());
+      const [x, y] = kids; if (kids.length === 2 && x.left < y.right - 0.5 && y.left < x.right - 0.5 && x.top < y.bottom - 0.5 && y.top < x.bottom - 0.5) out.push(r.textContent.slice(0, 30)); } return out; })()`);
+  expect(!bad.length, `filas con solape: ${bad.join(' | ')}`);
+  const clipped = await p.eval(`(() => { const d = document.querySelector('dialog.settings').getBoundingClientRect(); const out = [];
+    for (const el of document.querySelectorAll('dialog.settings .seg, dialog.settings .seg button, dialog.settings .srow > *')) {
+      const r = el.getBoundingClientRect();
+      if (el.scrollWidth > el.clientWidth + 1 || r.right > d.right + 0.5) out.push(el.textContent.trim().slice(0, 24)); } return out; })()`);
+  expect(!clipped.length, `recortado en ajustes: ${clipped.join(' | ')}`);
+  const latin = `[...document.querySelectorAll('dialog.settings .seg button')].find(b => /Latin|Latino/.test(b.textContent))`;
+  await p.eval(`${latin}.click()`);
+  await p.waitFor(`[...document.querySelectorAll('.strip .c')].some(e => e.textContent === 'Lam')`, 3000);
+  await p.eval(`[...document.querySelectorAll('dialog.settings .seg button')].find(b => /American|Americano/.test(b.textContent)).click()`);
+  const root = await p.eval(`getComputedStyle(document.querySelector('.main')).getPropertyValue('--accent').trim()`);
+  const songSw = `[...document.querySelectorAll('dialog.settings .srow')].find(r => /cover|portada|canción|song/i.test(r.textContent)).querySelector('.switch')`;
+  await p.eval(`${songSw}.click()`);
+  await p.waitFor(`getComputedStyle(document.querySelector('.main')).getPropertyValue('--accent').trim() !== ${JSON.stringify(root)}`, 5000);
+  const song = await p.eval(`getComputedStyle(document.querySelector('.main')).getPropertyValue('--accent').trim()`);
+  const side = await p.eval(`getComputedStyle(document.querySelector('.pane')).getPropertyValue('--accent').trim()`);
+  await p.eval(`${songSw}.click()`); // dejarlo apagado
+  await p.waitFor(`getComputedStyle(document.querySelector('.main')).getPropertyValue('--accent').trim() === ${JSON.stringify(root)}`, 3000);
+  await p.eval(`document.querySelector('dialog.settings').close()`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+  expect(/^rgb/.test(song) && side === root, `acento cancion ${song}, lateral ${side} (debe seguir ${root})`);
+  return `acento ${root} -> ${song} (lateral sin cambio)`;
+});
+
+test('la mezcla de la cancion sobrevive a recargar la pagina', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const bass = `[...document.querySelectorAll('.stem')].find(r => r.querySelector('.nm').textContent === 'Bajo' || r.querySelector('.nm').textContent === 'Bass')`;
+  await p.eval(`(() => { const r = ${bass}.querySelector('input'); r.value = '40'; r.dispatchEvent(new Event('input')); })()`);
+  await new Promise((r) => setTimeout(r, 700)); // guardado diferido 400 ms
+  await p.goto(c.url);
+  await p.waitFor(`document.querySelectorAll('.dr').length === 3`, 20000);
+  await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+  await p.waitFor(`document.querySelectorAll('.stem').length === 3`, 20000);
+  const v = await p.eval(`${bass}.querySelector('.val').textContent`);
+  expect(v === '40', `bajo tras recargar: ${v}`);
+  return `bajo = ${v} tras recargar`;
+});
 
 test('sin excepciones en la pagina', async () => {
   const c = await setup(); if (c.skip) return c.skip;

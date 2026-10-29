@@ -113,3 +113,22 @@ test('0.5x variante B: pista half adelantada un beat local, reaplicado en cada s
   expect(localBeatIntervalMs([], 0, 120) === 500 && localBeatIntervalMs([], 0, null) === 500, 'sin beats: BPM global o 500');
   expect(parseBeats(['120', '0.5', '1.0', ''].join('\n')).join() === '0.5,1', 'parseBeats');
 });
+
+test('mezcla guardada: ida y vuelta, solo lo no default, el solo no se guarda', async () => {
+  const { capture, restore } = await import('../src/player/songParams.ts');
+  const e = fakeEngine(), p = new Player(e, song());
+  let changes = 0;
+  p.onChange = () => changes++;
+  p.setVolume('bass', 40); p.stems.find((s) => s.stem === 'guitar').pan = -30; p.setVolume('guitar', 75);
+  p.setPitch(-3); p.setTempoBpm(150); p.setMetronome(true, 0, 60); p.setHalfVariantB(true); p.toggleSolo('vocals');
+  expect(changes >= 6, `avisos de cambio: ${changes}`);
+  const saved = JSON.parse(JSON.stringify(capture(p)));
+  expect(JSON.stringify(saved.stems) === JSON.stringify({ bass: { v: 40 }, guitar: { p: -30 } }), `stems: ${JSON.stringify(saved.stems)}`);
+  const e2 = fakeEngine(), q = new Player(e2, song());
+  restore(q, saved);
+  const g = q.stems.find((s) => s.stem === 'guitar');
+  expect(e2.vol[q.stems.find((s) => s.stem === 'bass').id][0] === 40 && e2.vol[g.id][1] === -30, 'volumen y paneo al motor');
+  expect(q.pitch === -3 && q.targetBpm === 150 && q.metroOn && q.metroSpeed === 0 && q.metroVolume === 60 && q.metroHalfB, 'tono, tempo, metronomo');
+  expect(q.stems.every((s) => !s.solo), 'el solo no se guarda');
+  restore(new Player(fakeEngine(), song()), { stems: { bass: { v: 'x' } }, pitch: null, metroSpeed: 7 }); // basura: no revienta
+});

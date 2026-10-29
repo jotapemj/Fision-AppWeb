@@ -37,12 +37,12 @@ function stateOf(e: LibraryEntry, inp: LibraryInput): RowState {
 
 const busy = (s: RowState) => s.kind === 'queued' || s.kind === 'running' || s.kind === 'waiting_gpu';
 
-/** Arriba lo que procesa el server; el resto por fecha de creacion (desc), desempate por hash. */
-export function buildRows(inp: LibraryInput): Row[] {
+/** Arriba lo que procesa el server; el resto por fecha de creacion (songs_sort_order), desempate por hash. */
+export function buildRows(inp: LibraryInput, asc = false): Row[] {
   return inp.entries
     .map((entry) => ({ entry, state: stateOf(entry, inp) }))
     .sort((a, b) => Number(busy(b.state)) - Number(busy(a.state))
-      || b.entry.created_at.localeCompare(a.entry.created_at)
+      || (asc ? a.entry.created_at.localeCompare(b.entry.created_at) : b.entry.created_at.localeCompare(a.entry.created_at))
       || a.entry.hash.localeCompare(b.entry.hash));
 }
 

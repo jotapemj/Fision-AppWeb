@@ -25,7 +25,8 @@
   "web_no_lyrics": "This song has no lyrics yet.",
   "web_now": "now",
   "web_next_chord": "next",
-  "web_menu": "Player options"
+  "web_menu": "Player options",
+  "web_close": "Close"
  },
  "es": {
   "web_search": "Buscar",
@@ -53,6 +54,7 @@
   "web_no_lyrics": "Esta canción aún no tiene letra.",
   "web_now": "ahora",
   "web_next_chord": "luego",
-  "web_menu": "Opciones del reproductor"
+  "web_menu": "Opciones del reproductor",
+  "web_close": "Cerrar"
  }
 }

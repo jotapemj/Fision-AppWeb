@@ -23,6 +23,29 @@ export function makeZip(files) {
   return new Uint8Array(Buffer.concat([...locals, cd, eocd]));
 }
 
+// PNG RGB sin filtro: bandas horizontales [[r,g,b], fraccion]
+export function bandsPng(w, h, bands) {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  let y = 0;
+  for (const [[r, g, b], frac] of bands) {
+    const rows = Math.round(h * frac);
+    for (let k = 0; k < rows && y < h; k++, y++) {
+      const o = y * (w * 3 + 1);
+      raw[o] = 0;
+      for (let x = 0; x < w; x++) { raw[o + 1 + x * 3] = r; raw[o + 2 + x * 3] = g; raw[o + 3 + x * 3] = b; }
+    }
+  }
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td));
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
 // WAV PCM16 estereo con un seno
 export function sineWav(freq, seconds, sr = 48000, amp = 0.3) {
   const n = Math.round(sr * seconds);

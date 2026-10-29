@@ -65,6 +65,8 @@ export class Api {
 
   async library(): Promise<LibraryEntry[]> { return this.json(await this.authed('/library')); }
 
+  async serverInfo(): Promise<{ version?: string; gpu_name?: string }> { return this.json(await this.authed('/server/info')); }
+
   /** Jobs vivos de la cuenta (cola, procesando, esperando GPU). */
   async jobs(): Promise<LiveJob[]> { return this.json(await this.authed('/jobs')); }
 
