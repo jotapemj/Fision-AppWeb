@@ -3,6 +3,7 @@ import { t } from '../i18n/i18n.ts';
 import { applyFilter, counts, search, type Filter, type Row } from '../library/library.ts';
 import { dismissable, h, img } from './dom.ts';
 import wordmark from '../assets/icons/wordmark.svg';
+import { CoverWave } from './coverWave.ts';
 
 export interface SidebarHooks {
   onPick(row: Row): void;
@@ -12,7 +13,6 @@ export interface SidebarHooks {
 
 const SEARCH_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="#9e9e9e" stroke-width="2" fill="none"/><path d="M15.5 15.5 21 21" stroke="#9e9e9e" stroke-width="2"/></svg>';
 const CLOUD_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 18h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="#919191" stroke-width="1.7"/></svg>';
-const ring = (pct: number) => `<svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" stroke="#333" stroke-width="2.5" fill="none"/><circle cx="10" cy="10" r="7.5" stroke="var(--accent)" stroke-width="2.5" fill="none" stroke-dasharray="${(47.1 * pct / 100).toFixed(1)} 47.1" transform="rotate(-90 10 10)"/></svg>`;
 const svg = (markup: string) => { const s = h('span', { class: 'st' }); s.innerHTML = markup; return s; };
 
 const JOB_ERR = 'cloud_state_error';
@@ -28,6 +28,7 @@ export class Sidebar {
   private current: string | null = null;
   private playing = false;
   private hooks: SidebarHooks;
+  private waves = new Map<string, CoverWave>(); // una por descarga: conserva el nivel entre repintados
 
   constructor(user: string, server: string, hooks: SidebarHooks) {
     this.hooks = hooks;
@@ -61,6 +62,8 @@ export class Sidebar {
     this.count.hidden = c.showFilter;
     this.count.textContent = String(c.all);
 
+    // Olas de descargas terminadas fuera
+    for (const [hash, w] of this.waves) if (!this.rows.some((r) => r.entry.hash === hash && r.state.kind === 'downloading')) { w.stop(); this.waves.delete(hash); }
     const shown = search(applyFilter(this.rows, this.filter), this.q);
     if (!shown.length) {
       this.list.replaceChildren(h('p', { class: 'empty', textContent: this.rows.length ? t('no_results') : t('songs_empty_title') }));
@@ -80,7 +83,15 @@ export class Sidebar {
     let bad = false;
     switch (s.kind) {
       case 'cloud': veil = h('span', { class: 'veil' }); side = svg(CLOUD_SVG); break;
-      case 'downloading': veil = h('span', { class: 'veil' }); side = svg(ring(s.pct)); sub = t('cloud_state_downloading', s.pct); break;
+      case 'downloading': {
+        // Ola de llenado sobre la portada (CoverFillWaveView)
+        let w = this.waves.get(e.hash);
+        if (!w) { w = new CoverWave(); this.waves.set(e.hash, w); this.hooks.cover(e.hash).then((u) => w!.setCover(u)); }
+        w.setProgress(s.pct / 100);
+        veil = w.el;
+        sub = t('cloud_state_downloading', s.pct);
+        break;
+      }
       case 'queued': veil = h('span', { class: 'veil' }, h('span', { class: 'spin' })); sub = s.position ? t('cloud_state_queued_pos', s.position) : t('cloud_state_queued'); break;
       case 'running': veil = h('span', { class: 'veil' }, h('span', { class: 'spin' })); sub = t('cloud_state_running'); break;
       case 'waiting_gpu': veil = h('span', { class: 'veil' }, h('span', { class: 'spin gpu' })); sub = t('cloud_state_waiting_gpu'); break;

@@ -95,5 +95,20 @@
  "settings_logout_confirm",
  "chords_dialog_title",
  "chords_basic",
- "chords_advanced"
+ "chords_advanced",
+ "pan_title",
+ "pan_l",
+ "pan_r",
+ "cd_restore_pan",
+ "fx_title",
+ "fx_clear",
+ "fx_filter",
+ "fx_echo",
+ "fx_reverb",
+ "fx_filter_lowpass",
+ "fx_filter_highpass",
+ "fx_room_small",
+ "fx_room_medium",
+ "fx_room_large",
+ "cd_stem_options"
 ]

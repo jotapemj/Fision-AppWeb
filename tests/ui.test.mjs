@@ -39,7 +39,13 @@ async function fakeServer() {
     if (req.url === '/library') return json(200, [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', 'processing', '2026-10-01')]);
     if (req.url === '/jobs') return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]);
     if (req.url === `/library/${H1}/lyrics`) return json(200, LYRICS);
-    if (req.url === `/library/${H1}/zip`) { res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length }); return res.end(zip); }
+    if (req.url === `/library/${H1}/zip`) {
+      // Lento a proposito: 5 trozos cada 300 ms, para ver la ola de descarga
+      res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length });
+      const n = 5, step = Math.ceil(zip.length / n);
+      for (let i = 0; i < n; i++) { res.write(zip.subarray(i * step, (i + 1) * step)); await new Promise((r) => setTimeout(r, 300)); }
+      return res.end();
+    }
     json(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
@@ -64,7 +70,7 @@ const MEASURE = `(() => {
   const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const out = { contrast: [], overlap: [], clipped: [], measured: 0, hscroll: document.documentElement.scrollWidth > innerWidth, vscroll: document.documentElement.scrollHeight > innerHeight };
-  const SEL = ['.dr .tx b', '.dr .tx span', '.bar2 .t', '.flt', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
+  const SEL = ['.fxpanel b', '.fxv', '.lr small', '.fxpanel .seg button', '.dr .tx b', '.dr .tx span', '.bar2 .t', '.flt', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
     '.seek .meta span', '.seg2 button', '.top .t b', '.top .t span', '.me .who span', '.me .out'];
   for (const s of SEL) for (const el of document.querySelectorAll(s)) {
     if (!el.getClientRects().length) continue;
@@ -75,7 +81,7 @@ const MEASURE = `(() => {
   }
   const boxes = (sel) => [...document.querySelectorAll(sel)].map((e) => [sel + ':' + e.textContent.trim().slice(0, 12), e.getBoundingClientRect()]);
   const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
-  for (const group of [['.pbar > .seek', '.btns > *', '.act'], ['.stem > *'], ['.seg2 button']]) {
+  for (const group of [['.pbar > .seek', '.btns > *', '.act'], ['.stem > *'], ['.seg2 button'], ['.mixwrap > .mix', '.fxpanel'], ['.fxpanel .seg button']]) {
     const bs = group.flatMap(boxes);
     for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
       if (group[0] === '.stem > *' && bs[i][1].top !== bs[j][1].top) continue;
@@ -119,13 +125,29 @@ test('login, estados de la lista, descarga y apertura', async () => {
     const good = `[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena'))`;
     expect(await p.eval(`${good}.classList.contains('cld')`), 'buena empieza en la nube');
     await p.eval(`${good}.click()`);
+    // Ola sobre la portada mientras baja: canvas con pixeles pintados
+    await p.waitFor(`${good}.querySelector('canvas.wave')`, 5000);
+    await new Promise((r) => setTimeout(r, 400));
+    const wave = await p.eval(`(() => { const c = ${good}.querySelector('canvas.wave'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n / (d.length / 4); })()`);
+    expect(wave > 0.9, `ola sin pintar: ${(wave * 100).toFixed(0)} %`);
     await p.waitFor(`!${good}.classList.contains('cld')`, 20000);
+    expect(!(await p.eval(`!!${good}.querySelector('canvas.wave')`)), 'la ola sigue tras descargar');
     await p.eval(`${good}.click()`);
+    // Telon: canvas opaco con el nucleo blanco en el centro; luego se va
+    await p.waitFor(`document.querySelector('canvas.curtain-c')`, 3000);
+    await new Promise((r) => setTimeout(r, 300));
+    const cur = await p.eval(`(() => { const c = document.querySelector('canvas.curtain-c'); const x = c.getContext('2d'); const W = c.width, H = c.height;
+      const px = (fx, fy) => x.getImageData(Math.round(W * fx), Math.round(H * fy), 1, 1).data;
+      const corner = px(0.05, 0.05); let white = 0; const R = 34 * devicePixelRatio;
+      for (let a = 0; a < 64; a++) { const d = x.getImageData(Math.round(W / 2 + Math.cos(a / 64 * 2 * Math.PI) * R * 0.85), Math.round(H / 2 + Math.sin(a / 64 * 2 * Math.PI) * R * 0.85), 1, 1).data; if (d[0] > 200 && d[3] > 200) white++; }
+      return { cornerA: corner[3], white }; })()`);
+    expect(cur.cornerA === 255 && cur.white >= 3, `telon: alpha esquina ${cur.cornerA}, puntos blancos del arco ${cur.white}`);
+    await p.waitFor(`!document.querySelector('canvas.curtain-c')`, 8000);
     await p.waitFor(`document.querySelectorAll('.stem').length === 3`, 20000);
     const names = await p.eval(`[...document.querySelectorAll('.stem .nm')].map(e => e.textContent).join()`);
     const tempo = await p.eval(`[...document.querySelectorAll('.act b')].map(b => b.textContent).join(' / ')`);
     expect(tempo.includes('120 BPM'), `BPM de beats.txt: ${tempo}`);
-    return `stems: ${names}; ajustes: ${tempo}`;
+    return `ola ${(wave * 100).toFixed(0)} % pintada, telon con arco (${cur.white}/64), stems: ${names}; ajustes: ${tempo}`;
   } catch (e) { await c.close(); ctx = { skip: 'skip — fallo previo' }; throw e; }
 });
 
@@ -262,6 +284,20 @@ test('ajustes: dialogo medible, cifrado latino y colores de portada', async () =
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
   expect(/^rgb/.test(song) && side === root, `acento cancion ${song}, lateral ${side} (debe seguir ${root})`);
   return `acento ${root} -> ${song} (lateral sin cambio)`;
+});
+
+test('FX: el nombre abre el panel; el filtro se aplica, se rotula y se quita', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`[...document.querySelectorAll('.stem .nm')].find(b => /Voz|Vocals/.test(b.textContent)).click()`);
+  await p.waitFor(`/Voz|Vocals/.test(document.querySelector('.fxtop b')?.textContent)`, 3000);
+  await p.eval(`(() => { const r = document.querySelector('.fxpanel input[aria-label="Filtro"], .fxpanel input[aria-label="Filter"]'); r.value = '-60'; r.dispatchEvent(new Event('input')); })()`);
+  const label = await p.eval(`document.querySelectorAll('.fxpanel .fxv')[1].textContent`);
+  const marked = await p.eval(`document.querySelector('.stem.sel').classList.contains('fx')`);
+  await p.eval(`document.querySelector('.fxpanel .btn.ghost').click()`); // Quitar FX
+  const cleared = await p.eval(`!document.querySelector('.stem.fx')`);
+  expect(/(Paso bajo|Low-pass|Low pass).*Hz/i.test(label) && marked && cleared, `rotulo "${label}", fila marcada ${marked}, quitar FX ${cleared}`);
+  return label;
 });
 
 test('la mezcla de la cancion sobrevive a recargar la pagina', async () => {

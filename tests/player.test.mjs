@@ -1,6 +1,6 @@
 // Reglas del reproductor (app_spec §3) contra un motor falso que apunta las llamadas.
 import { test, expect, near } from './lib/harness.mjs';
-import { Player, Repeat, parseBpm, parseBeats, localBeatIntervalMs } from '../src/player/player.ts';
+import { Player, Repeat, parseBpm, parseBeats, localBeatIntervalMs, filterCutoffHz } from '../src/player/player.ts';
 
 function fakeEngine() {
   const e = { pos: 0, vol: {}, pitch: {}, solo: {}, tempo: 1, played: 0, paused: 0,
@@ -10,6 +10,10 @@ function fakeEngine() {
     setPitch(id, s) { e.pitch[id] = s; },
     setTempo(m) { e.tempo = m; },
     setSoloMuted(id, m) { e.solo[id] = m; },
+    fx: {},
+    setFilter(id, a) { (e.fx[id] ??= {}).filter = a; },
+    setEcho(id, a, d) { Object.assign(e.fx[id] ??= {}, { echo: a, delay: d }); },
+    setReverb(id, s, r) { Object.assign(e.fx[id] ??= {}, { reverb: s, room: r }); },
     seek(ms) { e.pos = ms; },
     trackSeeks: [],
     seekTrack(id, ms) { e.trackSeeks.push([id, ms]); },
@@ -131,4 +135,22 @@ test('mezcla guardada: ida y vuelta, solo lo no default, el solo no se guarda', 
   expect(q.pitch === -3 && q.targetBpm === 150 && q.metroOn && q.metroSpeed === 0 && q.metroVolume === 60 && q.metroHalfB, 'tono, tempo, metronomo');
   expect(q.stems.every((s) => !s.solo), 'el solo no se guarda');
   restore(new Player(fakeEngine(), song()), { stems: { bass: { v: 'x' } }, pitch: null, metroSpeed: 7 }); // basura: no revienta
+});
+
+test('FX: zona muerta del filtro, retardo del eco por BPM, paneo guardado y FX no', async () => {
+  const { capture } = await import('../src/player/songParams.ts');
+  const e = fakeEngine(), p = new Player(e, song(120));
+  const g = p.stems.find((s) => s.stem === 'guitar');
+  p.setFx('guitar', { filter: 0.02 });
+  expect(e.fx[g.id].filter === 0, `zona muerta: ${e.fx[g.id].filter}`);
+  p.setFx('guitar', { filter: -0.5, echo: 0.4, echoDivision: 3, reverb: 0.3, room: 2 });
+  expect(e.fx[g.id].filter === -0.5 && e.fx[g.id].delay === 250 && e.fx[g.id].room === 2, JSON.stringify(e.fx[g.id])); // 1/8 a 120 BPM
+  const q = new Player(fakeEngine(), song(null));
+  q.setFx('guitar', { echo: 0.5, echoDivision: 2 });
+  expect(Math.abs(q.stems.find((s) => s.stem === 'guitar').fx.echo - 0.5) < 1e-9, 'eco');
+  p.setPan('guitar', -40);
+  expect(e.vol[g.id][1] === -40, 'paneo al motor');
+  const saved = capture(p);
+  expect(saved.stems.guitar.p === -40 && !('fx' in saved) && !JSON.stringify(saved).includes('reverb'), `guardado: ${JSON.stringify(saved)}`);
+  expect(Math.round(filterCutoffHz(-1)) === 200 && Math.round(filterCutoffHz(1)) === 15000 && Math.round(filterCutoffHz(-0.8)) === 502, 'cortes');
 });

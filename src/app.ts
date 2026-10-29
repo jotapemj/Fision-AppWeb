@@ -13,6 +13,7 @@ import { buildBeatCells, chordsOverWords, parseChords, parseTimes } from './play
 import { h } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
+import { Curtain } from './ui/curtain.ts';
 import { Sidebar } from './ui/sidebar.ts';
 import { Nebula } from './ui/nebula.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
@@ -151,8 +152,11 @@ export class App {
   private async open(e: LibraryEntry) {
     if (this.opening || !this.shell) return;
     this.opening = true;
-    const curtain = h('div', { class: 'curtain', attrs: { role: 'status' } }, h('span', { class: 'spin' }), t('web_loading_song'));
-    this.shell.querySelector('.main')?.append(curtain);
+    // Telon con la marca (LoadingCurtain): opaco al abrir; con fundido de 220 ms al cambiar de cancion
+    const curtain = new Curtain(this.current ? 220 : 0);
+    curtain.el.setAttribute('aria-label', t('web_loading_song'));
+    this.shell.append(curtain.el);
+    await curtain.covered;
     try {
       // AudioContext tras el gesto del usuario (este clic)
       this.engine ??= await Engine.create('playback');
@@ -187,8 +191,8 @@ export class App {
         onPitch: () => { if (this.settings.get('chordTranspose')) view.reformatChords(); },
       });
       this.current = { entry: e, player, view };
-      this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, view.main, view.bar);
-      this.applySongColors();
+      this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, view.main, view.bar, curtain.el);
+      await this.applySongColors(); // como Android: revelar con la paleta ya puesta
       this.render();
       // Acordes avanzados o basicos (por cancion); la letra los lleva encima
       let lyrics: LyricsState = { kind: 'loading' };
@@ -199,9 +203,10 @@ export class App {
       };
       applyChords();
       this.loadLyrics(e, rep.durationMs / 1000).then((st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); });
-      await view.toggle(); // abrir = reproducir, como Android
+      // Al empezar el fundido arranca la musica (abrir = reproducir, como Android)
+      curtain.finish(() => { void view.toggle(); }, () => {});
     } catch (err) {
-      curtain.remove();
+      curtain.finish(() => {}, () => {}, false);
       const msg = err instanceof Error && err.message === 'engine_needs_isolation' ? t('web_engine_isolation') : t('err_song_missing_files');
       console.error('open', err);
       if (!this.current) this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, this.hintMain(msg), idleBar());

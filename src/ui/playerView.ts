@@ -1,7 +1,7 @@
 // Reproductor de escritorio (maquetas player.html y mix.html).
 import type { LibraryEntry } from '../api/client.ts';
 import { t } from '../i18n/i18n.ts';
-import { BPM_MAX, BPM_MIN, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, type MetroSpeed, type Player, type StemState } from '../player/player.ts';
+import { BPM_MAX, BPM_MIN, ECHO_BEATS, ECHO_LABELS, FX_FALLBACK_BPM, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, filterCutoffHz, fxActive, newFx, type MetroSpeed, type Player, type StemState } from '../player/player.ts';
 import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
 import { LyricsView, type LyricsState } from './lyricsView.ts';
@@ -81,6 +81,7 @@ export class PlayerView {
   private seeking = false;
   private raf = 0;
   private drumsOpen = true;
+  private fxStem: string | null = null; // stem del panel derecho
 
   constructor(p: Player, song: LibraryEntry, cover: string | null, hooks: PlayerHooks) {
     this.p = p; this.hooks = hooks;
@@ -233,14 +234,65 @@ export class PlayerView {
       head.onclick = () => { this.drumsOpen = !this.drumsOpen; body.hidden = !this.drumsOpen; head.setAttribute('aria-expanded', String(this.drumsOpen)); };
       mix.append(head, body);
     }
-    this.viewBox.replaceChildren(mix);
+    const sel = this.p.stems.find((s) => s.stem === this.fxStem) ?? this.p.stems[0];
+    this.fxStem = sel?.stem ?? null;
+    mix.querySelectorAll<HTMLElement>('.stem').forEach((r) => r.classList.toggle('sel', r.dataset.stem === this.fxStem));
+    this.viewBox.replaceChildren(h('div', { class: 'mixwrap' }, mix, sel ? this.fxPanel(sel, v2) : ''));
+  }
+
+  /** Panel derecho (mix.html): balance, filtro, eco con division, reverb con sala (player_modal_sheet_dialog). */
+  private fxPanel(s: StemState, v2: boolean): HTMLElement {
+    const p = this.p, name = t(titleKey(s.stem, v2)) || s.stem;
+    const val = () => h('span', { class: 'fxv' });
+    const panV = val(), filV = val(), echoV = val(), revV = val();
+    const pan = slider(-100, 100, 1, s.pan, t('pan_title'));
+    const fil = slider(-100, 100, 1, Math.round(s.fx.filter * 100), t('fx_filter'));
+    const echo = slider(0, 100, 1, Math.round(s.fx.echo * 100), t('fx_echo'));
+    const rev = slider(0, 100, 1, Math.round(s.fx.reverb * 100), t('fx_reverb'));
+    fil.classList.add('bi'); pan.classList.add('bi');
+    const hz = (a: number) => { const f = filterCutoffHz(a); return f >= 1000 ? `${(f / 1000).toFixed(1)} kHz` : `${Math.round(f)} Hz`; };
+    const choose = (labels: string[], cur: number, on: (i: number) => void, label: string) => {
+      const g = h('div', { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': label } });
+      labels.forEach((l, i) => { const b = h('button', { textContent: l, attrs: { role: 'radio', 'aria-checked': String(i === cur) } });
+        b.onclick = () => { g.querySelectorAll('button').forEach((x, k) => x.setAttribute('aria-checked', String(k === i))); on(i); }; g.append(b); });
+      return g;
+    };
+    // Sin BPM las divisiones se muestran en ms a 120 BPM (StemFx.echoLabels)
+    const divLabels = p.bpm ? ECHO_LABELS : ECHO_BEATS.map((b) => `${Math.round(60000 / FX_FALLBACK_BPM * b)} ms`);
+    const sync = () => {
+      panV.textContent = s.pan === 0 ? t('web_center') : s.pan < 0 ? `${t('pan_l')} ${-s.pan}` : `${t('pan_r')} ${s.pan}`;
+      filV.textContent = s.fx.filter === 0 ? t('fx_off') : t(s.fx.filter < 0 ? 'fx_filter_lowpass' : 'fx_filter_highpass', hz(s.fx.filter));
+      echoV.textContent = s.fx.echo > 0 ? `${Math.round(s.fx.echo * 100)} %` : t('fx_off');
+      revV.textContent = s.fx.reverb > 0 ? `${Math.round(s.fx.reverb * 100)} %` : t('fx_off');
+      clear.disabled = !fxActive(s.fx);
+      this.viewBox.querySelector(`.stem[data-stem="${s.stem}"]`)?.classList.toggle('fx', fxActive(s.fx));
+    };
+    pan.addEventListener('input', () => { p.setPan(s.stem, +pan.value); sync(); });
+    pan.ondblclick = () => { p.setPan(s.stem, 0); setSlider(pan, 0); sync(); };
+    fil.addEventListener('input', () => { p.setFx(s.stem, { filter: +fil.value / 100 }); sync(); });
+    echo.addEventListener('input', () => { p.setFx(s.stem, { echo: +echo.value / 100 }); sync(); });
+    rev.addEventListener('input', () => { p.setFx(s.stem, { reverb: +rev.value / 100 }); sync(); });
+    const clear = h('button', { class: 'btn ghost', textContent: t('fx_clear') });
+    clear.onclick = () => { const z = newFx(); p.setFx(s.stem, { filter: 0, echo: 0, reverb: 0, echoDivision: z.echoDivision, room: z.room }); this.renderView(); };
+    const sec = (title: string, v: HTMLElement, ...kids: HTMLElement[]) => h('div', { class: 'fxs' }, h('div', { class: 'fxh' }, h('b', { textContent: title }), v), ...kids);
+    const lr = (a: string, el: HTMLElement, b: string) => h('div', { class: 'lr' }, h('small', { textContent: a }), el, h('small', { textContent: b }));
+    const panel = h('aside', { class: 'fxpanel', attrs: { 'aria-label': `${t('fx_title')}: ${name}` } },
+      h('div', { class: 'fxtop' }, img(iconOf(s.stem, v2), 's', ''), h('b', { textContent: name })),
+      sec(t('pan_title'), panV, lr(t('pan_l'), pan, t('pan_r'))),
+      sec(t('fx_filter'), filV, lr('LP', fil, 'HP')),
+      sec(t('fx_echo'), echoV, echo, choose(divLabels, s.fx.echoDivision, (i) => { p.setFx(s.stem, { echoDivision: i }); }, t('fx_echo'))),
+      sec(t('fx_reverb'), revV, rev, choose([t('fx_room_small'), t('fx_room_medium'), t('fx_room_large')], s.fx.room, (i) => { p.setFx(s.stem, { room: i }); }, t('fx_reverb'))),
+      clear);
+    sync();
+    return panel;
   }
 
   private stemRow(s: StemState, v2: boolean): HTMLElement {
     const name = t(titleKey(s.stem, v2)) || s.stem;
     const val = h('span', { class: 'val', textContent: String(s.volume) });
     const r = slider(0, 100, 1, s.volume, name);
-    const row = h('div', { class: `stem${s.volume === 0 ? ' muted' : ''}` });
+    const row = h('div', { class: `stem${s.volume === 0 ? ' muted' : ''}${fxActive(s.fx) ? ' fx' : ''}` });
+    row.dataset.stem = s.stem;
     const sync = () => { val.textContent = String(s.volume); setSlider(r, s.volume); row.classList.toggle('muted', s.volume === 0); };
     r.addEventListener('input', () => { this.p.setVolume(s.stem, +r.value); sync(); });
     // Icono = mute/unmute (slider a 0)
@@ -248,7 +300,10 @@ export class PlayerView {
     const solo = h('button', { class: 'solo', textContent: 'S', attrs: { 'aria-pressed': String(s.solo), 'aria-label': `${t('web_solo')}: ${name}` } });
     solo.onclick = () => { this.p.toggleSolo(s.stem); solo.setAttribute('aria-pressed', String(s.solo)); };
     const rs = h('button', { class: 'rs', attrs: { 'aria-label': `${t('cd_restore_volume')}: ${name}` }, onclick: () => this.animateTo(s, DEFAULT_VOLUME, sync) }, img(icRestore, '', ''));
-    row.append(icon, h('span', { class: 'nm', textContent: name }), r, val, solo, rs);
+    // Nombre = elegir el stem del panel de FX
+    const nm = h('button', { class: 'nm', textContent: name, attrs: { 'aria-label': `${t('cd_stem_options')}: ${name}` } });
+    nm.onclick = () => { this.fxStem = s.stem; this.renderView(); };
+    row.append(icon, nm, r, val, solo, rs);
     return row;
   }
 

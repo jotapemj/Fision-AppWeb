@@ -27,6 +27,9 @@ interface EngineModule {
   _fe_set_volume(id: number, l: number, r: number): void;
   _fe_set_solo_muted(id: number, m: number): void;
   _fe_audio_attach(ctxHandle: number): void;
+  _fe_set_filter(id: number, a: number): void;
+  _fe_set_echo(id: number, a: number, delayMs: number): void;
+  _fe_set_reverb(id: number, send: number, room: number): void;
 }
 
 export interface StemFile { name: string; data: Uint8Array; loop?: boolean }
@@ -115,4 +118,7 @@ export class Engine {
   setTempo(factor: number): void { for (const id of this.ids) this.M._fe_set_tempo(id, factor); }
   setVolume(id: number, volume: number, pan = 0): void { const [l, r] = stemGains(volume, pan); this.M._fe_set_volume(id, l, r); }
   setSoloMuted(id: number, muted: boolean): void { this.M._fe_set_solo_muted(id, muted ? 1 : 0); }
+  setFilter(id: number, amount: number): void { this.M._fe_set_filter(id, amount); }
+  setEcho(id: number, amount: number, delayMs: number): void { this.M._fe_set_echo(id, amount, delayMs); }
+  setReverb(id: number, send: number, room: number): void { this.M._fe_set_reverb(id, send, room); }
 }

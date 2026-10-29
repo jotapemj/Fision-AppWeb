@@ -26,7 +26,8 @@
   "web_now": "now",
   "web_next_chord": "next",
   "web_menu": "Player options",
-  "web_close": "Close"
+  "web_close": "Close",
+  "web_center": "Center"
  },
  "es": {
   "web_search": "Buscar",
@@ -55,6 +56,7 @@
   "web_now": "ahora",
   "web_next_chord": "luego",
   "web_menu": "Opciones del reproductor",
-  "web_close": "Cerrar"
+  "web_close": "Cerrar",
+  "web_center": "Centro"
  }
 }

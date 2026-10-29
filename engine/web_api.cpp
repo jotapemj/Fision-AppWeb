@@ -104,6 +104,10 @@ EMSCRIPTEN_KEEPALIVE void fe_set_tempo(int id, float t) { gEngine->setTempo(id, 
 EMSCRIPTEN_KEEPALIVE void fe_set_pitch(int id, float semi) { gEngine->setPitch(id, semi); }
 EMSCRIPTEN_KEEPALIVE void fe_set_volume(int id, float l, float r) { gEngine->setVolume(id, l, r); }
 EMSCRIPTEN_KEEPALIVE void fe_set_solo_muted(int id, int m) { gEngine->setTrackSoloMuted(id, m != 0); }
+// FX por pista (no se guardan): filtro -1..1, eco 0..1 con retardo en ms de fuente, envio a reverb 0..1 + sala 0..2
+EMSCRIPTEN_KEEPALIVE void fe_set_filter(int id, float a) { gEngine->setTrackFilter(id, a); }
+EMSCRIPTEN_KEEPALIVE void fe_set_echo(int id, float a, float delayMs) { gEngine->setTrackEcho(id, a, delayMs); }
+EMSCRIPTEN_KEEPALIVE void fe_set_reverb(int id, float send, int room) { gEngine->setTrackReverbSend(id, send, room); }
 
 // Render offline (tests): `frames` frames estereo intercalados
 EMSCRIPTEN_KEEPALIVE float* fe_render(int frames) {

@@ -6,6 +6,19 @@ import { DEFAULT_VOLUME, isMetronome, isPitched, METRONOMES, orderIndex, stemOf 
 export const Repeat = { Off: 0, All: 1, One: 2 } as const;
 export type Repeat = (typeof Repeat)[keyof typeof Repeat];
 
+/** FX de un stem (StemFx.java): solo en memoria. */
+export interface StemFx { filter: number; echo: number; echoDivision: number; reverb: number; room: number }
+export const ECHO_BEATS = [2, 1, 0.75, 0.5, 1 / 3, 0.25];
+export const ECHO_LABELS = ['1/2', '1/4', '1/8·', '1/8', '1/3', '1/16'];
+export const FX_FALLBACK_BPM = 120;
+export const FILTER_DEAD_ZONE = 3; // en la escala -100..100
+export const newFx = (): StemFx => ({ filter: 0, echo: 0, echoDivision: 2, reverb: 0, room: 1 });
+export const fxActive = (f: StemFx) => f.filter !== 0 || f.echo > 0 || f.reverb > 0;
+/** Corte del filtro (Hz): paso alto 20*750^a, paso bajo 20000*0.01^a. */
+export const filterCutoffHz = (a: number) => (a > 0 ? 20 * Math.pow(750, a) : 20000 * Math.pow(0.01, Math.abs(a)));
+/** Retardo del eco en ms de la fuente (tempo original). */
+export const echoDelayMs = (bpm: number | null, division: number) => 60000 / (bpm && bpm > 0 ? bpm : FX_FALLBACK_BPM) * ECHO_BEATS[Math.max(0, Math.min(ECHO_BEATS.length - 1, division))];
+
 export interface StemState {
   stem: string;
   id: number;
@@ -13,6 +26,7 @@ export interface StemState {
   lastVolume: number; // para quitar mute
   pan: number;        // -100..100
   solo: boolean;      // no se guarda
+  fx: StemFx;         // no se guarda
 }
 
 /** Lo que el motor necesita de una cancion abierta. */
@@ -92,7 +106,7 @@ export class Player {
         engine.setVolume(s.id, 0);
         continue;
       }
-      st.push({ stem, id: s.id, volume: DEFAULT_VOLUME, lastVolume: DEFAULT_VOLUME, pan: 0, solo: false });
+      st.push({ stem, id: s.id, volume: DEFAULT_VOLUME, lastVolume: DEFAULT_VOLUME, pan: 0, solo: false, fx: newFx() });
       engine.setVolume(s.id, DEFAULT_VOLUME);
     }
     this.stems = st.sort((a, b) => orderIndex(a.stem) - orderIndex(b.stem) || a.stem.localeCompare(b.stem));
@@ -122,6 +136,23 @@ export class Player {
     if (s.volume > 0) s.lastVolume = s.volume;
     this.engine.setVolume(s.id, s.volume, s.pan);
     this.onChange?.();
+  }
+
+  /** Balance -100..100 (se guarda). */
+  setPan(stem: string, pan: number) {
+    const s = this.find(stem);
+    s.pan = Math.round(Math.min(100, Math.max(-100, pan)));
+    this.engine.setVolume(s.id, s.volume, s.pan);
+    this.onChange?.();
+  }
+
+  /** FX del stem; el filtro con zona muerta de +-3 alrededor del centro (como Android). */
+  setFx(stem: string, patch: Partial<StemFx>) {
+    const s = this.find(stem), f = Object.assign(s.fx, patch);
+    if (patch.filter !== undefined) f.filter = Math.abs(patch.filter * 100) <= FILTER_DEAD_ZONE ? 0 : Math.max(-1, Math.min(1, patch.filter));
+    this.engine.setFilter(s.id, f.filter);
+    this.engine.setEcho(s.id, f.echo, echoDelayMs(this.bpm, f.echoDivision));
+    this.engine.setReverb(s.id, Math.min(1, f.reverb), f.room);
   }
 
   /** Mute = slider a 0; quitar mute = ultimo volumen o 75. */

@@ -146,6 +146,48 @@ test('pista en bucle sigue sonando tras su final', async () => {
   return `${f.toFixed(0)} Hz a los 2.5 s`;
 });
 
+test('filtro: paso bajo atenua un agudo, paso alto un grave', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  const level = async (freq, amount) => {
+    const [id] = await load([freq]);
+    M._fe_set_volume(id, 1, 1); M._fe_set_filter(id, amount); M._fe_start();
+    render(0.6); // rampa del filtro
+    return rms(render(0.5));
+  };
+  const db = (a, b) => 20 * Math.log10(a / b);
+  const lp = db(await level(5000, -0.8), await level(5000, 0)); // corte 20 kHz * 0.01^0.8 = 500 Hz
+  const hp = db(await level(100, 0.8), await level(100, 0));    // corte 20 Hz * 750^0.8 = 4 kHz
+  expect(lp < -20 && hp < -20, `atenuacion: paso bajo ${lp.toFixed(1)} dB, paso alto ${hp.toFixed(1)} dB`);
+  return `paso bajo ${lp.toFixed(1)} dB, paso alto ${hp.toFixed(1)} dB`;
+});
+
+test('eco: repite el sonido al retardo pedido', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  // 0.3 s de seno y silencio despues: con eco, a 0.3 + 0.25 s debe volver a sonar
+  const n = Math.round(SR * 3), burst = Math.round(SR * 0.3);
+  const buf = Buffer.from(sineWav(440, 3));
+  for (let i = burst; i < n; i++) { buf.writeInt16LE(0, 44 + i * 4); buf.writeInt16LE(0, 46 + i * 4); }
+  const measure = async (echo) => {
+    expect(M._fe_create(SR) === 1, 'fe_create');
+    M._fe_load_clear();
+    M.FS.writeFile('/t/e.wav', buf);
+    const s = M.stringToNewUTF8('/t/e.wav'); M._fe_load_push(s, 0, 0); M._free(s);
+    M._fe_load_run(1);
+    while (M._fe_load_busy()) await new Promise((r) => setTimeout(r, 5));
+    M.FS.unlink('/t/e.wav');
+    const id = M._fe_load_id(0);
+    M._fe_set_volume(id, 1, 1); M._fe_set_echo(id, echo, 250); M._fe_start();
+    const x = render(1.2);
+    // Energia en 50 ms alrededor de cada instante, relativa al golpe
+    const win = (t) => rms(x.subarray(Math.round(SR * t), Math.round(SR * (t + 0.05))));
+    return { early: win(0.15), gap: win(0.42), echo: win(0.6) };
+  };
+  const dry = await measure(0), wet = await measure(0.6);
+  const echoDb = 20 * Math.log10(wet.echo / wet.early), dryDb = 20 * Math.log10((dry.echo + 1e-9) / dry.early);
+  expect(echoDb > -20 && dryDb < -40, `eco a 0.6 s: con eco ${echoDb.toFixed(1)} dB, sin eco ${dryDb.toFixed(1)} dB`);
+  return `repeticion ${echoDb.toFixed(1)} dB (sin eco ${dryDb.toFixed(0)} dB)`;
+});
+
 test('stemGains replica el paneo de Android', async () => {
   const { stemGains } = await import(pathToFileURL(path.join(ROOT, 'src/engine/engine.ts')).href);
   const cases = [[[75, 0], [0.75, 0.75]], [[100, 50], [0.5, 1]], [[100, -50], [1, 0.5]], [[80, 100], [0, 0.8]], [[0, 30], [0, 0]]];
