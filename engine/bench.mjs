@@ -18,7 +18,7 @@ M._fe_load_clear();
 for (const f of files) {
   M.FS.writeFile('/s/' + f, fs.readFileSync(path.join(dir, f)));
   const p = M.stringToNewUTF8('/s/' + f);
-  M._fe_load_push(p);
+  M._fe_load_push(p, 0, 0);
   M._free(p);
 }
 const t0 = performance.now();

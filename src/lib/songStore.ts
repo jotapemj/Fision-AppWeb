@@ -72,6 +72,15 @@ export class SongStore {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** Sustituye (o borra con null) un fichero de una copia completa: p. ej. lyrics.json al refrescar. */
+  async putFile(hash: string, name: string, data: Uint8Array | null): Promise<void> {
+    if (!safeName(name)) throw new Error('bad_entry_name');
+    if ((await this.version(hash)) === null) throw new Error('not_downloaded');
+    const d = await (await this.root).getDirectoryHandle(hash);
+    if (data) await writeFile(d, name, data);
+    else try { await d.removeEntry(name); } catch (e) { if (!notFound(e)) throw e; }
+  }
+
   async remove(hash: string): Promise<void> {
     try { await (await this.root).removeEntry(hash, { recursive: true }); } catch (e) { if (!notFound(e)) throw e; }
   }

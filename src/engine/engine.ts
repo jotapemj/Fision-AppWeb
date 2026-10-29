@@ -9,7 +9,7 @@ interface EngineModule {
   _free(p: number): void;
   _fe_create(sr: number): number;
   _fe_load_clear(): void;
-  _fe_load_push(path: number): number;
+  _fe_load_push(path: number, loop: number, deferred: number): number;
   _fe_load_run(threads: number): number;
   _fe_load_done(): number;
   _fe_load_busy(): number;
@@ -19,6 +19,7 @@ interface EngineModule {
   _fe_pause(): void;
   _fe_resume(): void;
   _fe_seek_all(ms: number): void;
+  _fe_seek_track(id: number, ms: number): void;
   _fe_position_ms(): number;
   _fe_duration_ms(): number;
   _fe_set_tempo(id: number, t: number): void;
@@ -28,7 +29,7 @@ interface EngineModule {
   _fe_audio_attach(ctxHandle: number): void;
 }
 
-export interface StemFile { name: string; data: Uint8Array }
+export interface StemFile { name: string; data: Uint8Array; loop?: boolean }
 export interface LoadedStem { name: string; id: number; decodeMs: number }
 export interface LoadReport { stems: LoadedStem[]; wallMs: number; threads: number; durationMs: number }
 
@@ -77,11 +78,14 @@ export class Engine {
     if (!M._fe_create(this.ctx.sampleRate)) throw new Error('engine_busy');
     this.started = false;
     M._fe_load_clear();
+    // Las pistas en bucle (metronomos) van al final y esperan al primer stem:
+    // la pista 0 es la referencia de posicion y duracion del motor
+    files = [...files.filter((f) => !f.loop), ...files.filter((f) => f.loop)];
     const paths = files.map((f, i) => `/s/${i}_${f.name}`);
     files.forEach((f, i) => {
       M.FS.writeFile(paths[i], f.data);
       const p = M.stringToNewUTF8(paths[i]);
-      M._fe_load_push(p);
+      M._fe_load_push(p, f.loop ? 1 : 0, f.loop ? 1 : 0);
       M._free(p);
     });
     const t0 = performance.now();
@@ -101,6 +105,7 @@ export class Engine {
 
   pause(): void { this.M._fe_pause(); }
   seek(ms: number): void { this.M._fe_seek_all(ms); }
+  seekTrack(id: number, ms: number): void { this.M._fe_seek_track(id, ms); }
   get positionMs(): number { return this.M._fe_position_ms(); }
   get durationMs(): number { return this.M._fe_duration_ms(); }
 

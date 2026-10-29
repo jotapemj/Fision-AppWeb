@@ -5,7 +5,10 @@ import { t } from './i18n/i18n.ts';
 import { buildRows, type Row } from './library/library.ts';
 import { SongStore } from './lib/songStore.ts';
 import { listZip, readZipEntry } from './lib/zip.ts';
-import { Player, parseBpm } from './player/player.ts';
+import { Player, parseBeats, parseBpm } from './player/player.ts';
+import { isMetronome, stemOf } from './player/stems.ts';
+import { buildRows as buildLyricRows } from './player/lyrics.ts';
+import type { LyricsState } from './ui/lyricsView.ts';
 import { h } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
@@ -130,11 +133,13 @@ export class App {
       this.current?.player.pause();
       const files = await this.store!.load(e.hash, (n) => /\.(flac|wav)$/i.test(n) || n === 'beats.txt');
       const beats = files.find((f) => f.name === 'beats.txt');
-      const audio = files.filter((f) => f !== beats);
+      // Metronomos en bucle, como PlaybackService
+      const audio = files.filter((f) => f !== beats).map((f) => ({ ...f, loop: isMetronome(stemOf(f.name)) }));
       if (!audio.length) throw new Error('err_song_missing_files');
       const rep = await this.engine.load(audio);
       this.stopSong();
-      const player = new Player(this.engine, { stems: rep.stems, durationMs: rep.durationMs, bpm: parseBpm(beats ? new TextDecoder().decode(beats.data) : null) });
+      const beatsTxt = beats ? new TextDecoder().decode(beats.data) : null;
+      const player = new Player(this.engine, { stems: rep.stems, durationMs: rep.durationMs, bpm: parseBpm(beatsTxt), beats: parseBeats(beatsTxt) });
       const view = new PlayerView(player, e, await this.cover(e.hash), {
         onPrev: () => this.step(-1), onNext: () => this.step(1),
         onEnded: () => this.step(1), onPlayState: () => this.render(),
@@ -142,6 +147,7 @@ export class App {
       this.current = { entry: e, player, view };
       this.shell.replaceChildren(this.sidebar!.el, view.main, view.bar);
       this.render();
+      this.loadLyrics(e, rep.durationMs / 1000).then((st) => { if (this.current?.view === view) view.setLyrics(st); });
       await view.toggle(); // abrir = reproducir, como Android
     } catch (err) {
       curtain.remove();
@@ -149,6 +155,22 @@ export class App {
       console.error('open', err);
       if (!this.current) this.shell.replaceChildren(this.sidebar!.el, this.hintMain(msg), idleBar());
     } finally { this.opening = false; }
+  }
+
+  /** Letra: siempre del server (la del zip puede estar vieja); sin red, la copia local. */
+  private async loadLyrics(e: LibraryEntry, durationSec: number): Promise<LyricsState> {
+    const store = this.store!;
+    let json: unknown = null;
+    try {
+      json = await this.api.lyrics(e.hash);
+      await store.putFile(e.hash, 'lyrics.json', json ? new TextEncoder().encode(JSON.stringify(json)) : null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return { kind: 'none' };
+      const [f] = await store.load(e.hash, (n) => n === 'lyrics.json').catch(() => []);
+      if (f) try { json = JSON.parse(new TextDecoder().decode(f.data)); } catch { json = null; }
+    }
+    const rows = json ? buildLyricRows(json, durationSec) : [];
+    return rows.some((r) => r.type === 'text') ? { kind: 'content', rows } : { kind: 'none' };
   }
 
   /** Anterior / siguiente entre las descargadas, en el orden de la lista. */

@@ -1,6 +1,6 @@
 // Estado y reglas del reproductor (sin DOM). Reglas de app_spec §3.
 import type { Engine, LoadedStem } from '../engine/engine.ts';
-import { DEFAULT_VOLUME, isMetronome, isPitched, orderIndex, stemOf } from './stems.ts';
+import { DEFAULT_VOLUME, isMetronome, isPitched, METRONOMES, orderIndex, stemOf } from './stems.ts';
 
 // repeat_mode de Android
 export const Repeat = { Off: 0, All: 1, One: 2 } as const;
@@ -16,7 +16,11 @@ export interface StemState {
 }
 
 /** Lo que el motor necesita de una cancion abierta. */
-export interface SongData { stems: LoadedStem[]; durationMs: number; bpm: number | null }
+export interface SongData { stems: LoadedStem[]; durationMs: number; bpm: number | null; beats?: number[] }
+
+/** Metronomo elegido: 0 = 0.5x, 1 = 1x, 2 = 2x (selectedMetronome de Android). */
+export type MetroSpeed = 0 | 1 | 2;
+const METRO_STEM = [METRONOMES.half, METRONOMES.one, METRONOMES.double] as const;
 
 export type EndResult = 'looped' | 'next' | 'stopped';
 
@@ -24,6 +28,26 @@ export type EndResult = 'looped' | 'next' | 'stopped';
 export function parseBpm(beatsTxt: string | null): number | null {
   const v = beatsTxt ? parseFloat(beatsTxt.split(/\r?\n/, 1)[0]) : NaN;
   return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** Beats (s) = lineas 2.. de beats.txt. */
+export function parseBeats(beatsTxt: string | null): number[] {
+  if (!beatsTxt) return [];
+  return beatsTxt.split(/\r?\n/).slice(1).map(parseFloat).filter((v) => Number.isFinite(v));
+}
+
+/** Intervalo entre los dos beats que rodean `posMs` (PlayerActivity.localBeatIntervalMs). */
+export function localBeatIntervalMs(beats: number[], posMs: number, bpm: number | null): number {
+  if (beats.length < 2) return bpm ? Math.trunc(60000 / bpm) : 500;
+  const sec = posMs / 1000;
+  let i = 0;
+  while (i + 1 < beats.length && beats[i + 1] <= sec) i++;
+  if (i + 1 >= beats.length) i = beats.length - 2;
+  // Aritmetica float de 32 bits, como Java: 2.8f - 2.1f da 700 ms, en double 699
+  const f = Math.fround;
+  let iv = f(f(beats[i + 1]) - f(beats[i]));
+  if (iv <= 0) iv = 0.5;
+  return Math.trunc(f(iv * 1000));
 }
 
 export const PITCH_MIN = -12, PITCH_MAX = 12;
@@ -36,6 +60,12 @@ export class Player {
   readonly metronomeIds: Record<string, number> = {};
   readonly durationMs: number;
   readonly bpm: number | null;
+  readonly beats: number[];
+  // Metronomo (§3.4): defaults de Room
+  metroOn = false;
+  metroSpeed: MetroSpeed = 1;
+  metroVolume = 100;
+  metroHalfB = false; // variante B del 0.5x: desfase de un beat local
   pitch = 0;
   tempoMult = 1;
   repeat: Repeat = Repeat.Off;
@@ -48,6 +78,7 @@ export class Player {
     this.engine = engine;
     this.durationMs = song.durationMs;
     this.bpm = song.bpm;
+    this.beats = song.beats ?? [];
     const st: StemState[] = [];
     for (const s of song.stems) {
       if (s.id < 0) continue;
@@ -75,7 +106,11 @@ export class Player {
   async play() { await this.engine.play(); this.playing = true; }
   pause() { this.engine.pause(); this.playing = false; }
   toggle() { return this.playing ? this.pause() : this.play(); }
-  seek(ms: number) { this.engine.seek(Math.min(Math.max(0, ms), this.durationMs)); }
+  seek(ms: number) {
+    const to = Math.min(Math.max(0, ms), this.durationMs);
+    this.engine.seek(to);
+    this.applyHalfPhase(to); // se reaplica en cada seek
+  }
   skip(deltaMs: number) { this.seek(this.engine.positionMs + deltaMs); }
 
   setVolume(stem: string, v: number) {
@@ -116,12 +151,33 @@ export class Player {
     this.engine.setTempo(this.tempoMult);
   }
 
+  get hasMetronome() { return METRO_STEM.some((m) => m in this.metronomeIds); }
+
+  setMetronome(on: boolean, speed: MetroSpeed = this.metroSpeed, volume = this.metroVolume) {
+    this.metroOn = on; this.metroSpeed = speed; this.metroVolume = Math.round(Math.min(100, Math.max(0, volume)));
+    // Solo suena el elegido, a metronomeVol/100
+    METRO_STEM.forEach((m, i) => {
+      const id = this.metronomeIds[m];
+      if (id !== undefined) this.engine.setVolume(id, on && i === speed ? this.metroVolume : 0);
+    });
+  }
+
+  setHalfVariantB(b: boolean) { this.metroHalfB = b; this.applyHalfPhase(this.engine.positionMs); }
+
+  /** Variante A: sin desfase. B: la pista 0.5x adelantada un beat local (pista en bucle). */
+  private applyHalfPhase(songMs: number) {
+    const id = this.metronomeIds[METRONOMES.half];
+    if (id === undefined) return;
+    const shift = this.metroHalfB ? localBeatIntervalMs(this.beats, songMs, this.bpm) : 0;
+    this.engine.seekTrack(id, songMs + shift);
+  }
+
   cycleRepeat() { this.repeat = ((this.repeat + 1) % 3) as Repeat; this.repeatOneUsed = false; }
 
   /** Llamar a menudo mientras suena. Devuelve que hacer si la cancion acabo (PlaybackService.handleSongEnded). */
   checkEnd(): EndResult | null {
     if (!this.playing || this.engine.positionMs < this.durationMs - 250) return null;
-    if (this.repeat === Repeat.All) { this.seek(0); return 'looped'; }
+    if (this.repeat === Repeat.All) { this.seek(0); return 'looped'; } // seek reaplica la fase del 0.5x
     if (this.repeat === Repeat.One && !this.repeatOneUsed) { this.repeatOneUsed = true; this.seek(0); return 'looped'; }
     this.repeatOneUsed = false;
     if (this.repeat === Repeat.Off && this.autoplayNext) return 'next';

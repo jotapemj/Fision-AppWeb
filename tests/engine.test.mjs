@@ -22,13 +22,15 @@ async function engine() {
 const sineWav = (f, sec) => wav(f, sec, SR);
 
 // Carga en paralelo como la web; devuelve ids por fichero
-async function load(freqs, threads = 4, seconds = 6) {
+// opts[i] = { seconds, loop, deferred } por fichero (opcional)
+async function load(freqs, threads = 4, seconds = 6, opts = []) {
   expect(M._fe_create(SR) === 1, 'fe_create rechazado');
   M._fe_load_clear();
   freqs.forEach((f, i) => {
+    const o = opts[i] ?? {};
     const p = `/t/s${i}.wav`;
-    M.FS.writeFile(p, sineWav(f, seconds));
-    const s = M.stringToNewUTF8(p); M._fe_load_push(s); M._free(s);
+    M.FS.writeFile(p, sineWav(f, o.seconds ?? seconds));
+    const s = M.stringToNewUTF8(p); M._fe_load_push(s, o.loop ? 1 : 0, o.deferred ? 1 : 0); M._free(s);
   });
   M._fe_load_run(threads);
   while (M._fe_load_busy()) await new Promise((r) => setTimeout(r, 5));
@@ -119,6 +121,29 @@ test('carga en paralelo: cada id es su fichero', async () => {
     got.push(f.toFixed(0));
   }
   return `ids ${ids.join(',')} -> ${got.join(', ')} Hz`;
+});
+
+// Stem largo (lento de decodificar) + metronomo corto: sin diferir, el corto acaba antes y es la pista 0
+async function firstTrackIsMetronome(deferred) {
+  const ids = await load([440, 1000], 2, 6, [{ seconds: 120 }, { seconds: 1, loop: true, deferred }]);
+  return ids[1] === 0;
+}
+
+test('la pista 0 (referencia de posicion) nunca es un metronomo diferido', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  expect(await firstTrackIsMetronome(false), 'el escenario no reproduce el riesgo: sin diferir el metronomo deberia ser la pista 0');
+  expect(!(await firstTrackIsMetronome(true)), 'diferido y aun asi es la pista 0');
+  return 'sin diferir: metronomo = pista 0; diferido: stem = pista 0';
+});
+
+test('pista en bucle sigue sonando tras su final', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  const [a, b] = await load([440, 1000], 2, 6, [{ seconds: 6 }, { seconds: 1, loop: true, deferred: true }]);
+  M._fe_set_volume(a, 0, 0); M._fe_set_volume(b, 1, 1); M._fe_start();
+  render(2.5); // pasada la duracion del metronomo (1 s)
+  const f = freqOf(render(0.5));
+  near(f, 1000, 10, 'frecuencia del bucle');
+  return `${f.toFixed(0)} Hz a los 2.5 s`;
 });
 
 test('stemGains replica el paneo de Android', async () => {

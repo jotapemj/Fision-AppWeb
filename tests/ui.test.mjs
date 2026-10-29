@@ -10,6 +10,13 @@ import { makeZip, sineWav } from './lib/zipWriter.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const H1 = '1'.repeat(64), H2 = '2'.repeat(64), H3 = '3'.repeat(64);
 
+const wd = (start, end, text) => ({ start, end, text });
+const LYRICS = { language: 'es', segments: [
+  { start: 0.5, end: 2, text: 'primera linea', words: [wd(0.5, 1, 'primera'), wd(1, 2, 'linea')] },
+  { start: 2.5, end: 4, text: 'segunda linea', words: [wd(2.5, 3, 'segunda'), wd(3, 4, 'linea')] },
+  { start: 12, end: 15, text: 'tercera tras pausa', words: [wd(12, 12.5, 'tercera'), wd(12.5, 13, 'tras'), wd(13, 15, 'pausa')] },
+] };
+
 // Server falso: cuenta "demo"/"pw"; H1 lista, H2 con error, H3 en cola
 async function fakeServer() {
   const zip = makeZip([
@@ -26,6 +33,7 @@ async function fakeServer() {
     if (req.url === '/auth/refresh') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
     if (req.url === '/library') return json(200, [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', 'processing', '2026-10-01')]);
     if (req.url === '/jobs') return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]);
+    if (req.url === `/library/${H1}/lyrics`) return json(200, LYRICS);
     if (req.url === `/library/${H1}/zip`) { res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length }); return res.end(zip); }
     json(404, { detail: 'nope' });
   });
@@ -50,7 +58,7 @@ const MEASURE = `(() => {
   };
   const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-  const out = { contrast: [], overlap: [], clipped: [], measured: 0, hscroll: document.documentElement.scrollWidth > innerWidth };
+  const out = { contrast: [], overlap: [], clipped: [], measured: 0, hscroll: document.documentElement.scrollWidth > innerWidth, vscroll: document.documentElement.scrollHeight > innerHeight };
   const SEL = ['.dr .tx b', '.dr .tx span', '.bar2 .t', '.flt', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
     '.seek .meta span', '.seg2 button', '.top .t b', '.top .t span', '.me .who span', '.me .out'];
   for (const s of SEL) for (const el of document.querySelectorAll(s)) {
@@ -62,7 +70,7 @@ const MEASURE = `(() => {
   }
   const boxes = (sel) => [...document.querySelectorAll(sel)].map((e) => [sel + ':' + e.textContent.trim().slice(0, 12), e.getBoundingClientRect()]);
   const hit = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
-  for (const group of [['.pbar > .seek', '.pbar > .btns', '.pbar > .acts'], ['.act'], ['.stem > *'], ['.seg2 button']]) {
+  for (const group of [['.pbar > .seek', '.btns > *', '.act'], ['.stem > *'], ['.seg2 button']]) {
     const bs = group.flatMap(boxes);
     for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
       if (group[0] === '.stem > *' && bs[i][1].top !== bs[j][1].top) continue;
@@ -116,6 +124,42 @@ test('login, estados de la lista, descarga y apertura', async () => {
   } catch (e) { await c.close(); ctx = { skip: 'skip — fallo previo' }; throw e; }
 });
 
+test('metronomo: encender y elegir 2x desde su desplegable', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const metro = `[...document.querySelectorAll('.act')].find(b => b.querySelector('small').textContent === 'Metronome' || b.querySelector('small').textContent === 'Metrónomo')`;
+  const before = await p.eval(`${metro}.querySelector('b').textContent`);
+  await p.eval(`${metro}.click()`);
+  await p.waitFor(`document.querySelector('.pop .switch')`);
+  await p.eval(`document.querySelector('.pop .switch').click()`);
+  await p.eval(`[...document.querySelectorAll('.pop .seg button')].find(b => b.textContent === '2×').click()`);
+  const after = await p.eval(`${metro}.querySelector('b').textContent`);
+  const abHidden = await p.eval(`document.querySelectorAll('.pop .seg')[1].hidden`);
+  await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  expect(after === '2×' && before !== after && abHidden, `antes ${before}, despues ${after}, A/B oculto ${abHidden}`);
+  return `${before} -> ${after}`;
+});
+
+test('letra: la linea activa sigue a la cancion y tocar una linea hace seek', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
+  await p.waitFor(`document.querySelectorAll('.lyrics .cl').length >= 4`, 10000);
+  const kinds = await p.eval(`[...document.querySelectorAll('.lyrics .cl')].map(e => e.classList.contains('ins') ? 'i' : 't').join('')`);
+  expect(kinds === 'ttit', `filas (texto/instrumental): ${kinds}`);
+  // Seek a la tercera linea tocandola
+  await p.eval(`document.querySelectorAll('.lyrics .cl')[3].click()`);
+  await p.waitFor(`document.querySelectorAll('.lyrics .cl')[3].classList.contains('now')`, 5000);
+  const pos = await p.eval(`document.querySelector('.seek .meta span').textContent`);
+  const nNow = await p.eval(`document.querySelectorAll('.lyrics .cl.now').length`);
+  expect(pos === '00:12' && nNow === 1, `tras tocar: posicion ${pos}, activas ${nNow}`);
+  // La pagina no crece con la letra: el transporte sigue dentro de la ventana
+  const lay = await p.eval(`({ doc: document.documentElement.scrollHeight, vh: innerHeight, bar: document.querySelector('.pbar').getBoundingClientRect().bottom, scroller: document.querySelector('.lyrics').scrollHeight > document.querySelector('.lyrics').clientHeight })`);
+  expect(lay.doc <= lay.vh && Math.round(lay.bar) <= lay.vh && lay.scroller, `pagina ${lay.doc}px en ventana ${lay.vh}px, transporte acaba en ${Math.round(lay.bar)}px, letra con scroll propio: ${lay.scroller}`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`); // volver a Mezcla para las medidas
+  return `filas ${kinds}, seek a ${pos}`;
+});
+
 test('suena: la posicion avanza', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const t0 = await c.page.eval(`document.querySelector('.seek .meta span').textContent`);
@@ -132,8 +176,8 @@ for (const [w, hgt] of [[1440, 900], [1280, 800]]) {
     await new Promise((r) => setTimeout(r, 300));
     const m = await c.page.eval(MEASURE);
     const acts = await c.page.eval(`document.querySelectorAll('.act').length`), stems = await c.page.eval(`document.querySelectorAll('.stem').length`);
-    expect(acts === 3 && stems === 3 && m.measured > 30, `nada que medir: ${acts} ajustes, ${stems} stems, ${m.measured} textos (¿no se abrio la cancion?)`);
-    expect(!m.hscroll, 'scroll horizontal en la pagina');
+    expect(acts === 4 && stems === 3 && m.measured > 30, `nada que medir: ${acts} ajustes, ${stems} stems, ${m.measured} textos (¿no se abrio la cancion?)`);
+    expect(!m.hscroll && !m.vscroll, `scroll en la pagina: horizontal ${m.hscroll}, vertical ${m.vscroll}`);
     expect(!m.overlap.length, `solapes: ${m.overlap.join('; ')}`);
     expect(!m.clipped.length, `recortados: ${m.clipped.join('; ')}`);
     expect(!m.contrast.length, `contraste < minimo: ${m.contrast.join('; ')}`);

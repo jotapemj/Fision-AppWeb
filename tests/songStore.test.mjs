@@ -47,6 +47,20 @@ test('rechaza nombres con ruta (zip-slip) sin escribir nada', () => withTmp(asyn
   expect(!fs.existsSync(path.join(dir, 'evil.flac')), 'escapo de la carpeta');
 }));
 
+test('putFile sustituye y borra un fichero suelto (letra refrescada)', () => withTmp(async (_, store) => {
+  const s = store('demo');
+  await s.save(H, 'v1', [...files, { name: 'lyrics.json', data: new TextEncoder().encode('{"viejo":1}') }]);
+  await s.putFile(H, 'lyrics.json', new TextEncoder().encode('{"nuevo":1}'));
+  const [ly] = await s.load(H, (n) => n === 'lyrics.json');
+  expect(new TextDecoder().decode(ly.data) === '{"nuevo":1}', 'no sustituyo');
+  await s.putFile(H, 'lyrics.json', null);
+  await s.putFile(H, 'lyrics.json', null); // ya borrado: no falla
+  expect((await s.load(H, (n) => n === 'lyrics.json')).length === 0, 'no borro');
+  let code = '';
+  try { await s.putFile(H2, 'lyrics.json', null); } catch (e) { code = e.message; }
+  expect(code === 'not_downloaded', `sin copia: ${code}`);
+}));
+
 test('cada cuenta ve solo lo suyo; borrar', () => withTmp(async (_, store) => {
   const a = store('demo'), b = store('jp');
   await a.save(H, 'v1', files);

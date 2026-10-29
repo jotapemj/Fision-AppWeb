@@ -3,6 +3,7 @@
 // Node (tests): sin worklet; fe_render() renderiza offline.
 #include <emscripten/emscripten.h>
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <string>
 #include <thread>
@@ -24,6 +25,8 @@ std::atomic<bool> gInRender{false}; // hilo de audio dentro de onAudioReady
 // Carga en paralelo: varios hilos llaman a addTrack, como Java en Android
 struct LoadJob {
     std::vector<std::string> paths;
+    std::vector<char> loop;      // metronomos: en bucle (como Android)
+    std::vector<char> deferred;  // esperan al primer stem: la pista 0 (referencia de posicion) es musica
     std::vector<int> ids;
     std::vector<double> ms;
     std::atomic<int> next{0};
@@ -35,8 +38,9 @@ void loadWorker() {
     for (;;) {
         int i = gLoad.next.fetch_add(1);
         if (i >= (int)gLoad.paths.size()) break;
+        if (gLoad.deferred[i]) while (gLoad.done.load() == 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
         double t0 = emscripten_get_now();
-        gLoad.ids[i] = gEngine->addTrack(gLoad.paths[i].c_str(), false);
+        gLoad.ids[i] = gEngine->addTrack(gLoad.paths[i].c_str(), gLoad.loop[i] != 0);
         gLoad.ms[i] = emscripten_get_now() - t0;
         gLoad.done.fetch_add(1);
     }
@@ -59,17 +63,23 @@ EMSCRIPTEN_KEEPALIVE int fe_create(int sampleRate) {
 
 // === Carga ===
 EMSCRIPTEN_KEEPALIVE void fe_load_clear() {
-    gLoad.paths.clear(); gLoad.ids.clear(); gLoad.ms.clear();
+    gLoad.paths.clear(); gLoad.loop.clear(); gLoad.deferred.clear(); gLoad.ids.clear(); gLoad.ms.clear();
     gLoad.next = 0; gLoad.done = 0;
 }
-EMSCRIPTEN_KEEPALIVE int fe_load_push(const char* path) {
+// Los diferidos van al final de la lista (si no, un hilo podria esperar sin stems pendientes)
+EMSCRIPTEN_KEEPALIVE int fe_load_push(const char* path, int loop, int deferred) {
     gLoad.paths.emplace_back(path);
+    gLoad.loop.push_back(loop != 0); gLoad.deferred.push_back(deferred != 0);
     gLoad.ids.push_back(-1); gLoad.ms.push_back(0);
     return (int)gLoad.paths.size() - 1;
 }
 // Lanza `threads` hilos y vuelve al momento; JS consulta fe_load_done()
 EMSCRIPTEN_KEEPALIVE int fe_load_run(int threads) {
     if (gLoad.workers.load() > 0) return 0;
+    // Sin stems normales nadie desbloquearia a los diferidos
+    bool anyNormal = false;
+    for (char d : gLoad.deferred) anyNormal |= !d;
+    if (!anyNormal) std::fill(gLoad.deferred.begin(), gLoad.deferred.end(), 0);
     int n = std::max(1, std::min(threads, (int)gLoad.paths.size()));
     gLoad.workers = n;
     for (int k = 0; k < n; ++k) std::thread(loadWorker).detach();
@@ -85,6 +95,7 @@ EMSCRIPTEN_KEEPALIVE int fe_start() { bool ok = gEngine->start(); gRunning.store
 EMSCRIPTEN_KEEPALIVE void fe_pause() { gEngine->pause(); }
 EMSCRIPTEN_KEEPALIVE void fe_resume() { gEngine->resume(); }
 EMSCRIPTEN_KEEPALIVE void fe_seek_all(double ms) { gEngine->seekToAll((int64_t)ms); }
+EMSCRIPTEN_KEEPALIVE void fe_seek_track(int id, double ms) { gEngine->seekToMs(id, (int64_t)ms); }
 EMSCRIPTEN_KEEPALIVE double fe_position_ms() { return (double)gEngine->getCurrentPositionAllMs(); }
 EMSCRIPTEN_KEEPALIVE double fe_duration_ms() { return (double)gEngine->getDurationMs(); }
 

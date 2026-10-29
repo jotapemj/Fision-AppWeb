@@ -64,7 +64,16 @@
   "cd_stem_mute": "Mute or unmute",
   "cd_drumset": "Drum kit",
   "cd_expand_collapse": "Expand or collapse",
-  "fx_off": "Off"
+  "fx_off": "Off",
+  "tv_metronome_title": "Dynamic metronome",
+  "tv_metronome_volume": "Volume",
+  "b_metronome": "1x",
+  "b_metronomeHalf": "0.5x",
+  "b_metronomeDouble": "2x",
+  "metronome_half_variant_a": "A",
+  "metronome_half_variant_b": "B",
+  "lyrics_karaoke_mode": "Karaoke mode",
+  "lyrics_karaoke_unavailable": "Reprocess to enable"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -132,7 +141,16 @@
   "cd_stem_mute": "Silenciar o activar",
   "cd_drumset": "Batería",
   "cd_expand_collapse": "Expandir o contraer",
-  "fx_off": "Apagado"
+  "fx_off": "Apagado",
+  "tv_metronome_title": "Metrónomo dinámico",
+  "tv_metronome_volume": "Volumen",
+  "b_metronome": "1x",
+  "b_metronomeHalf": "0.5x",
+  "b_metronomeDouble": "2x",
+  "metronome_half_variant_a": "A",
+  "metronome_half_variant_b": "B",
+  "lyrics_karaoke_mode": "Modo karaoke",
+  "lyrics_karaoke_unavailable": "Reprocesa para habilitar"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -199,7 +217,16 @@
   "cd_stem_mute": "Silencia o activa",
   "cd_drumset": "Bateria",
   "cd_expand_collapse": "Desplega o plega",
-  "fx_off": "Apagat"
+  "fx_off": "Apagat",
+  "tv_metronome_title": "Metrònom dinàmic",
+  "tv_metronome_volume": "Volum",
+  "b_metronome": "1x",
+  "b_metronomeHalf": "0.5x",
+  "b_metronomeDouble": "2x",
+  "metronome_half_variant_a": "A",
+  "metronome_half_variant_b": "B",
+  "lyrics_karaoke_mode": "Mode karaoke",
+  "lyrics_karaoke_unavailable": "Reprocessa per habilitar"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -268,7 +295,16 @@
   "cd_stem_mute": "Вимкнути або ввімкнути звук",
   "cd_drumset": "Ударна установка",
   "cd_expand_collapse": "Розгорнути або згорнути",
-  "fx_off": "Вимкнено"
+  "fx_off": "Вимкнено",
+  "tv_metronome_title": "Динамічний метроном",
+  "tv_metronome_volume": "Обсяг",
+  "b_metronome": "1x",
+  "b_metronomeHalf": "0.5x",
+  "b_metronomeDouble": "2x",
+  "metronome_half_variant_a": "A",
+  "metronome_half_variant_b": "B",
+  "lyrics_karaoke_mode": "Режим караоке",
+  "lyrics_karaoke_unavailable": "Обробити знову для активації"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -336,7 +372,11 @@
   "cd_stem_mute": "Silenciar ou ativar",
   "cd_drumset": "Bateria",
   "cd_expand_collapse": "Expandir ou recolher",
-  "fx_off": "Desligado"
+  "fx_off": "Desligado",
+  "tv_metronome_title": "Metrônomo dinâmico",
+  "tv_metronome_volume": "Volume",
+  "lyrics_karaoke_mode": "Modo karaokê",
+  "lyrics_karaoke_unavailable": "Reprocesse para ativar"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -404,7 +444,11 @@
   "cd_stem_mute": "Couper ou rétablir le son",
   "cd_drumset": "Batterie",
   "cd_expand_collapse": "Développer ou réduire",
-  "fx_off": "Désactivé"
+  "fx_off": "Désactivé",
+  "tv_metronome_title": "Métronome dynamique",
+  "tv_metronome_volume": "Volume",
+  "lyrics_karaoke_mode": "Mode karaoké",
+  "lyrics_karaoke_unavailable": "Retraiter pour l'activer"
  },
  "de": {
   "tab_songs": "Songs",
@@ -471,7 +515,11 @@
   "cd_stem_mute": "Stumm oder laut schalten",
   "cd_drumset": "Schlagzeug",
   "cd_expand_collapse": "Auf- oder zuklappen",
-  "fx_off": "Aus"
+  "fx_off": "Aus",
+  "tv_metronome_title": "Dynamisches Metronom",
+  "tv_metronome_volume": "Lautstärke",
+  "lyrics_karaoke_mode": "Karaoke-Modus",
+  "lyrics_karaoke_unavailable": "Zum Aktivieren neu verarbeiten"
  },
  "it": {
   "tab_songs": "Brani",
@@ -539,7 +587,11 @@
   "cd_stem_mute": "Silenzia o riattiva",
   "cd_drumset": "Batteria",
   "cd_expand_collapse": "Espandi o comprimi",
-  "fx_off": "Spento"
+  "fx_off": "Spento",
+  "tv_metronome_title": "Metronomo dinamico",
+  "tv_metronome_volume": "Volume",
+  "lyrics_karaoke_mode": "Modalità karaoke",
+  "lyrics_karaoke_unavailable": "Rielabora per attivarla"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -608,7 +660,11 @@
   "cd_stem_mute": "Выключить или включить звук",
   "cd_drumset": "Ударная установка",
   "cd_expand_collapse": "Развернуть или свернуть",
-  "fx_off": "Выкл."
+  "fx_off": "Выкл.",
+  "tv_metronome_title": "Динамический метроном",
+  "tv_metronome_volume": "Громкость",
+  "lyrics_karaoke_mode": "Режим караоке",
+  "lyrics_karaoke_unavailable": "Распознайте заново, чтобы включить"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -674,6 +730,10 @@
   "cd_stem_mute": "静音或取消静音",
   "cd_drumset": "架子鼓",
   "cd_expand_collapse": "展开或收起",
-  "fx_off": "关闭"
+  "fx_off": "关闭",
+  "tv_metronome_title": "动态节拍器",
+  "tv_metronome_volume": "音量",
+  "lyrics_karaoke_mode": "卡拉 OK 模式",
+  "lyrics_karaoke_unavailable": "重新识别后可启用"
  }
 }

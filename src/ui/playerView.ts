@@ -1,15 +1,18 @@
 // Reproductor de escritorio (maquetas player.html y mix.html).
 import type { LibraryEntry } from '../api/client.ts';
 import { t } from '../i18n/i18n.ts';
-import { BPM_MAX, BPM_MIN, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, type Player, type StemState } from '../player/player.ts';
+import { BPM_MAX, BPM_MIN, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, type MetroSpeed, type Player, type StemState } from '../player/player.ts';
 import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
+import { LyricsView, type LyricsState } from './lyricsView.ts';
+import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
 import icChords from '../assets/icons/ic_chord_carousel.svg';
 import icItd from '../assets/icons/ic_itd.png';
 import icRepeat from '../assets/icons/ic_repeat.svg';
 import icPitch from '../assets/icons/ic_pitch.svg';
+import icMetronome from '../assets/icons/ic_metronome.svg';
 import icBack5 from '../assets/icons/ic_seek_back_5.svg';
 import icFwd5 from '../assets/icons/ic_seek_forward_5.svg';
 import icPrev from '../assets/icons/ic_skip_previous.svg';
@@ -25,6 +28,9 @@ const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="tr
 const PLAY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="#000"/></svg>';
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="#000"/></svg>';
 const SPEED_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a8 8 0 1 1 16 0" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 15l4-5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
+const VIEW_PREF = 'fision.view'; // vista recordada (comodidad por navegador)
+function loadView(): View { try { const v = localStorage.getItem(VIEW_PREF); return v === 'lyrics' || v === 'chords' || v === '3d' ? v : 'mix'; } catch { return 'mix'; } }
+
 const withSvg = (el: HTMLElement, markup: string) => { el.insertAdjacentHTML('afterbegin', markup); return el; };
 
 /** Barra inferior sin cancion: todo desactivado. */
@@ -39,7 +45,8 @@ export class PlayerView {
   readonly bar: HTMLElement;
   private p: Player;
   private hooks: PlayerHooks;
-  private view: View = 'mix';
+  private view: View = loadView();
+  private lyrics: LyricsView;
   private viewBox = h('div', { class: 'view' });
   private tabs = new Map<View, HTMLButtonElement>();
   private seekEl: HTMLInputElement;
@@ -48,12 +55,14 @@ export class PlayerView {
   private repeatVal = h('b');
   private pitchVal = h('b');
   private tempoVal = h('b');
+  private metroVal = h('b');
   private seeking = false;
   private raf = 0;
   private drumsOpen = true;
 
   constructor(p: Player, song: LibraryEntry, cover: string | null, hooks: PlayerHooks) {
     this.p = p; this.hooks = hooks;
+    this.lyrics = new LyricsView({ kind: 'loading' }, (sec) => p.seek(sec * 1000));
     const top = h('div', { class: 'top' },
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
       h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })));
@@ -88,6 +97,7 @@ export class PlayerView {
     const acts = h('div', { class: 'acts' },
       act(icRepeat, '', t('web_repeat'), this.repeatVal, () => { p.cycleRepeat(); this.refreshActs(); }),
       act(icPitch, '', t('cd_pitch'), this.pitchVal, (b) => this.pitchPop(b, acts)),
+      p.hasMetronome ? act(icMetronome, '', t('cd_metronome'), this.metroVal, (b) => this.metroPop(b, acts)) : null,
       act(null, SPEED_SVG, t('web_tempo'), this.tempoVal, (b) => this.tempoPop(b, acts)));
     this.bar = h('div', { class: 'pbar' }, seek, btns, acts);
 
@@ -98,6 +108,8 @@ export class PlayerView {
   }
 
   destroy() { cancelAnimationFrame(this.raf); }
+
+  setLyrics(state: LyricsState) { this.lyrics.set(state); }
 
   async toggle() { await this.p.toggle(); this.refreshPlay(); }
 
@@ -110,6 +122,8 @@ export class PlayerView {
   private refreshActs() {
     this.repeatVal.textContent = t(['web_repeat_off', 'web_repeat_all', 'web_repeat_one'][this.p.repeat]);
     this.pitchVal.textContent = this.p.pitch > 0 ? `+${this.p.pitch}` : String(this.p.pitch);
+    const speed = ['0.5×', '1×', '2×'][this.p.metroSpeed];
+    this.metroVal.textContent = this.p.metroOn ? (this.p.metroSpeed === 0 ? `${speed} ${this.p.metroHalfB ? 'B' : 'A'}` : speed) : t('fx_off');
     this.tempoVal.textContent = this.p.targetBpm ? `${this.p.targetBpm} BPM` : `${this.p.tempoMult.toFixed(2)}×`;
   }
 
@@ -120,16 +134,20 @@ export class PlayerView {
     const pos = this.p.positionMs;
     this.posEl.textContent = fmtTime(pos);
     if (!this.seeking) setSlider(this.seekEl, this.p.durationMs ? Math.round(pos / this.p.durationMs * 1000) : 0);
+    if (this.view === 'lyrics') this.lyrics.tick((pos + LYRICS_CLOCK_OFFSET_MS) / 1000);
     this.raf = requestAnimationFrame(this.loop);
   };
 
   private setView(v: View) {
     this.view = v;
+    try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
     for (const [k, b] of this.tabs) b.setAttribute('aria-selected', String(k === v));
     this.renderView();
   }
 
   private renderView() {
+    this.viewBox.className = this.view === 'lyrics' ? 'view lyr' : 'view';
+    if (this.view === 'lyrics') { this.viewBox.replaceChildren(this.lyrics.el); return; }
     if (this.view !== 'mix') { this.viewBox.replaceChildren(h('p', { class: 'soon', textContent: t('web_view_soon') })); return; }
     const mix = h('div', { class: 'mix' });
     const v2 = this.p.hasVocals2;
@@ -194,6 +212,35 @@ export class PlayerView {
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('cd_pitch') }), show), r,
         h('div', { class: 'row' }, h('button', { textContent: '−1', onclick: () => apply(this.p.pitch - 1) }),
           h('button', { textContent: '0', onclick: () => apply(0) }), h('button', { textContent: '+1', onclick: () => apply(this.p.pitch + 1) })));
+    });
+  }
+
+  /** Metronomo: encendido, 0.5x (A/B) / 1x / 2x y volumen (metronome_modal_sheet_dialog). */
+  private metroPop(anchor: HTMLButtonElement, host: HTMLElement) {
+    this.popover(anchor, host, (pop) => {
+      const p = this.p;
+      const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(p.metroOn), 'aria-label': t('tv_metronome_title') } });
+      const speeds = h('div', { class: 'seg', attrs: { role: 'radiogroup' } });
+      const ab = h('div', { class: 'seg', attrs: { role: 'radiogroup' } });
+      const vol = slider(0, 100, 1, p.metroVolume, t('tv_metronome_volume'));
+      const volV = h('span', { class: 'val' });
+      const sync = () => {
+        sw.setAttribute('aria-checked', String(p.metroOn));
+        speeds.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-checked', String(i === p.metroSpeed)));
+        ab.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-checked', String(i === Number(p.metroHalfB))));
+        ab.hidden = p.metroSpeed !== 0; // A/B solo en 0.5x
+        volV.textContent = String(p.metroVolume);
+        this.refreshActs();
+      };
+      sw.onclick = () => { p.setMetronome(!p.metroOn); sync(); };
+      ['0.5×', '1×', '2×'].forEach((label, i) => speeds.append(h('button', { textContent: label, attrs: { role: 'radio' },
+        onclick: () => { p.setMetronome(true, i as MetroSpeed); sync(); } })));
+      [t('metronome_half_variant_a'), t('metronome_half_variant_b')].forEach((label, i) => ab.append(h('button', { textContent: label, attrs: { role: 'radio' },
+        onclick: () => { p.setHalfVariantB(i === 1); sync(); } })));
+      vol.addEventListener('input', () => { p.setMetronome(p.metroOn, p.metroSpeed, +vol.value); sync(); });
+      pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_title') }), sw), speeds, ab,
+        h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_volume') }), volV), vol);
+      sync();
     });
   }
 

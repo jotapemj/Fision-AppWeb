@@ -1,6 +1,6 @@
 // Reglas del reproductor (app_spec §3) contra un motor falso que apunta las llamadas.
 import { test, expect, near } from './lib/harness.mjs';
-import { Player, Repeat, parseBpm } from '../src/player/player.ts';
+import { Player, Repeat, parseBpm, parseBeats, localBeatIntervalMs } from '../src/player/player.ts';
 
 function fakeEngine() {
   const e = { pos: 0, vol: {}, pitch: {}, solo: {}, tempo: 1, played: 0, paused: 0,
@@ -11,12 +11,14 @@ function fakeEngine() {
     setTempo(m) { e.tempo = m; },
     setSoloMuted(id, m) { e.solo[id] = m; },
     seek(ms) { e.pos = ms; },
+    trackSeeks: [],
+    seekTrack(id, ms) { e.trackSeeks.push([id, ms]); },
     async play() { e.played++; },
     pause() { e.paused++; } };
   return e;
 }
-const names = ['bass.flac', 'kick.flac', 'vocals.flac', 'metronome.flac', 'vocals2.flac', 'perc.flac', 'guitar.flac'];
-const song = (bpm = 176.47) => ({ stems: names.map((name, id) => ({ name, id, decodeMs: 1 })), durationMs: 200_000, bpm });
+const names = ['bass.flac', 'kick.flac', 'vocals.flac', 'metronome.flac', 'vocals2.flac', 'perc.flac', 'guitar.flac', 'metronome_half.flac', 'metronome_double.flac'];
+const song = (bpm = 176.47, beats = [0.5, 1.0, 1.5, 2.1, 2.8]) => ({ stems: names.map((name, id) => ({ name, id, decodeMs: 1 })), durationMs: 200_000, bpm, beats });
 const idOf = (p, stem) => p.stems.find((s) => s.stem === stem).id;
 
 test('orden StemSpec, metronomo aparte y mudo, todo a 75', () => {
@@ -86,4 +88,28 @@ test('BPM de beats.txt y posicion percibida', () => {
   const e = fakeEngine(), p = new Player(e, song());
   e.pos = 10_000; p.playing = true;
   near(p.positionMs, 10_000 - 40 - 130, 1e-9, 'percibida');
+});
+
+test('metronomo: solo suena el elegido, a su volumen', () => {
+  const e = fakeEngine(), p = new Player(e, song());
+  const [half, one, dbl] = [7, 3, 8];
+  expect([half, one, dbl].every((id) => e.vol[id][0] === 0), 'mudos al abrir');
+  p.setMetronome(true);
+  expect(e.vol[one][0] === 100 && e.vol[half][0] === 0 && e.vol[dbl][0] === 0, '1x por defecto a 100');
+  p.setMetronome(true, 2, 60);
+  expect(e.vol[dbl][0] === 60 && e.vol[one][0] === 0, '2x a 60');
+  p.setMetronome(false);
+  expect([half, one, dbl].every((id) => e.vol[id][0] === 0), 'apagado');
+});
+
+test('0.5x variante B: pista half adelantada un beat local, reaplicado en cada seek', () => {
+  const e = fakeEngine(), p = new Player(e, song());
+  p.seek(1200);
+  expect(JSON.stringify(e.trackSeeks.at(-1)) === '[7,1200]', `A sin desfase: ${e.trackSeeks.at(-1)}`);
+  p.setHalfVariantB(true);
+  p.seek(2500); // entre 2.1 y 2.8 -> 700 ms
+  expect(JSON.stringify(e.trackSeeks.at(-1)) === '[7,3200]', `B: ${e.trackSeeks.at(-1)}`);
+  expect(localBeatIntervalMs([0.5, 1.0], 9000, null) === 500, 'pasado el final: ultimo intervalo');
+  expect(localBeatIntervalMs([], 0, 120) === 500 && localBeatIntervalMs([], 0, null) === 500, 'sin beats: BPM global o 500');
+  expect(parseBeats(['120', '0.5', '1.0', ''].join('\n')).join() === '0.5,1', 'parseBeats');
 });
