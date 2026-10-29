@@ -14,6 +14,8 @@ import { h } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
 import { Sidebar } from './ui/sidebar.ts';
+import { Nebula, nebulaPref } from './ui/nebula.ts';
+import { pulseFor } from './player/nebulaMath.ts';
 
 const JOB_POLL_MS = 4000;
 
@@ -33,6 +35,7 @@ export class App {
   private current: { entry: LibraryEntry; player: Player; view: PlayerView } | null = null;
   private opening = false;
   private pollTimer = 0;
+  private nebula: Nebula | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -47,6 +50,7 @@ export class App {
 
   private showLogin(notice = '') {
     this.stopSong();
+    this.nebula?.destroy();
     clearTimeout(this.pollTimer);
     this.shell = this.sidebar = null;
     this.root.replaceChildren(loginView(this.api, (s) => this.enter(s), notice));
@@ -60,7 +64,10 @@ export class App {
       onLogout: () => { this.api.logout(); this.showLogin(); },
       cover: (hash) => this.cover(hash),
     });
-    this.shell = h('div', { class: 'app' }, this.sidebar.el, this.hintMain(t('web_pick_song')), idleBar());
+    this.nebula?.destroy();
+    this.nebula = new Nebula();
+    this.nebula.setEnabled(nebulaPref.get());
+    this.shell = h('div', { class: 'app' }, this.nebula.el, this.sidebar.el, this.hintMain(t('web_pick_song')), idleBar());
     this.root.replaceChildren(this.shell);
     this.refreshLibrary();
   }
@@ -146,9 +153,11 @@ export class App {
       const view = new PlayerView(player, e, await this.cover(e.hash), {
         onPrev: () => this.step(-1), onNext: () => this.step(1),
         onEnded: () => this.step(1), onPlayState: () => this.render(),
+        onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
+        nebula: { get: () => nebulaPref.get(), set: (on) => { nebulaPref.set(on); this.nebula?.setEnabled(on); } },
       });
       this.current = { entry: e, player, view };
-      this.shell.replaceChildren(this.sidebar!.el, view.main, view.bar);
+      this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, view.main, view.bar);
       this.render();
       const { cells, beatsPerBar } = buildBeatCells(parseBeats(beatsTxt), parseTimes(txt('downbeats.txt')), parseChords(txt('chords.txt')));
       view.setChords(cells, beatsPerBar);
@@ -161,7 +170,7 @@ export class App {
       curtain.remove();
       const msg = err instanceof Error && err.message === 'engine_needs_isolation' ? t('web_engine_isolation') : t('err_song_missing_files');
       console.error('open', err);
-      if (!this.current) this.shell.replaceChildren(this.sidebar!.el, this.hintMain(msg), idleBar());
+      if (!this.current) this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, this.hintMain(msg), idleBar());
     } finally { this.opening = false; }
   }
 

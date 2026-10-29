@@ -21,10 +21,16 @@ import icPrev from '../assets/icons/ic_skip_previous.svg';
 import icNext from '../assets/icons/ic_skip_next.svg';
 import icRestore from '../assets/icons/ic_restore_stem.svg';
 import icDrumset from '../assets/icons/ic_drumset.png';
+import icMenu from '../assets/icons/ic_menu.svg';
 
 export type View = 'lyrics' | 'chords' | 'mix' | '3d';
 
-export interface PlayerHooks { onPrev(): void; onNext(): void; onEnded(r: 'next'): void; onPlayState(playing: boolean): void }
+export interface PlayerHooks {
+  onPrev(): void; onNext(): void; onEnded(r: 'next'): void; onPlayState(playing: boolean): void;
+  /** Beat nuevo: posicion en el compas, compas y tempo oido (BPM x multiplicador). */
+  onBeat(pos: number, beatsPerBar: number, heardBpm: number | null): void;
+  nebula: { get(): boolean; set(on: boolean): void };
+}
 
 const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="13" width="5" height="3" rx="1" fill="currentColor"/><rect x="9.5" y="7" width="5" height="3" rx="1" fill="currentColor"/><rect x="15.5" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
 const PLAY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="#000"/></svg>';
@@ -49,8 +55,10 @@ export class PlayerView {
   private hooks: PlayerHooks;
   private view: View = loadView();
   private lyrics: LyricsView;
+  private beats: { cells: BeatCell[]; beatsPerBar: number } | null = null;
   private chords: { cells: BeatCell[]; beatsPerBar: number; strip: ChordStrip } | null = null;
   private beat = -2;
+  private chordBeat = -2;
   private nowCh = h('b', { class: 'ch' });
   private nextCh = h('b', { class: 'ch nx' });
   private nowNext = h('span', { class: 'now-ch', hidden: true });
@@ -73,7 +81,11 @@ export class PlayerView {
     this.lyrics = new LyricsView({ kind: 'loading' }, (sec) => p.seek(sec * 1000));
     const top = h('div', { class: 'top' },
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
-      h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })));
+      h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })),
+      h('span', { class: 'sp' }));
+    const menuBtn = h('button', { class: 'ib', attrs: { 'aria-label': t('web_menu'), 'aria-haspopup': 'dialog' } }, img(icMenu, '', ''));
+    menuBtn.onclick = () => this.menuPop(menuBtn, top);
+    top.append(menuBtn);
 
     const seg = h('div', { class: 'seg2', attrs: { role: 'tablist' } });
     const tab = (v: View, label: string, icon: string | null, svgMarkup = '') => {
@@ -121,10 +133,11 @@ export class PlayerView {
   setLyrics(state: LyricsState) { this.lyrics.set(state); }
 
   setChords(cells: BeatCell[], beatsPerBar: number) {
+    this.beats = cells.length ? { cells, beatsPerBar } : null;
     if (!cells.some((c) => c.chord)) return;
     this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000)) };
     this.nowNext.hidden = false;
-    this.beat = -2;
+    this.chordBeat = -2;
     if (this.view === 'chords') this.renderView();
   }
 
@@ -152,10 +165,18 @@ export class PlayerView {
     this.posEl.textContent = fmtTime(pos);
     if (!this.seeking) setSlider(this.seekEl, this.p.durationMs ? Math.round(pos / this.p.durationMs * 1000) : 0);
     if (this.view === 'lyrics') this.lyrics.tick((pos + LYRICS_CLOCK_OFFSET_MS) / 1000);
-    if (this.chords) {
-      const b = currentBeat(this.chords.cells, pos / 1000);
+    if (this.beats) {
+      const b = currentBeat(this.beats.cells, pos / 1000);
       if (b !== this.beat) {
+        const forward = b === this.beat + 1; // pulso solo al avanzar beat a beat (no en seeks)
         this.beat = b;
+        if (forward && b >= 0 && this.p.playing) this.hooks.onBeat(this.beats.cells[b].pos, this.beats.beatsPerBar, this.p.bpm ? this.p.bpm * this.p.tempoMult : null);
+      }
+    }
+    if (this.chords) {
+      const b = this.beat;
+      if (b !== this.chordBeat) {
+        this.chordBeat = b;
         this.chords.strip.setBeat(b);
         const now = formatChord(soundingChord(this.chords.cells, b)), next = formatChord(nextChord(this.chords.cells, b));
         this.nowCh.textContent = now || '–'; this.nextCh.textContent = next || '–';
@@ -178,7 +199,7 @@ export class PlayerView {
     if (this.view === 'chords' && this.chords) {
       const meta = h('p', { class: 'chmeta', textContent: `${this.p.bpm ? Math.round(this.p.bpm) + ' BPM · ' : ''}${this.chords.beatsPerBar}/4` });
       this.viewBox.replaceChildren(meta, this.chords.strip.el, this.big);
-      this.beat = -2; // repintar la tira al volver
+      this.chordBeat = -2; // repintar la tira al volver
       this.chords.strip.invalidate();
       return;
     }
@@ -246,6 +267,17 @@ export class PlayerView {
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('cd_pitch') }), show), r,
         h('div', { class: 'row' }, h('button', { textContent: '−1', onclick: () => apply(this.p.pitch - 1) }),
           h('button', { textContent: '0', onclick: () => apply(0) }), h('button', { textContent: '+1', onclick: () => apply(this.p.pitch + 1) })));
+    });
+  }
+
+  /** Menu del reproductor (drawer de Android): por ahora, el fondo animado. */
+  private menuPop(anchor: HTMLButtonElement, host: HTMLElement) {
+    this.popover(anchor, host, (pop) => {
+      pop.classList.add('menu-pop');
+      const neb = this.hooks.nebula;
+      const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(neb.get()), 'aria-label': t('drawer_switch_nebula') } });
+      sw.onclick = () => { neb.set(!neb.get()); sw.setAttribute('aria-checked', String(neb.get())); };
+      pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('drawer_switch_nebula') }), sw));
     });
   }
 

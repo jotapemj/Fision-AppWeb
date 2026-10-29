@@ -73,7 +73,8 @@
   "metronome_half_variant_a": "A",
   "metronome_half_variant_b": "B",
   "lyrics_karaoke_mode": "Karaoke mode",
-  "lyrics_karaoke_unavailable": "Reprocess to enable"
+  "lyrics_karaoke_unavailable": "Reprocess to enable",
+  "drawer_switch_nebula": "Animated background"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -150,7 +151,8 @@
   "metronome_half_variant_a": "A",
   "metronome_half_variant_b": "B",
   "lyrics_karaoke_mode": "Modo karaoke",
-  "lyrics_karaoke_unavailable": "Reprocesa para habilitar"
+  "lyrics_karaoke_unavailable": "Reprocesa para habilitar",
+  "drawer_switch_nebula": "Fondo animado"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -226,7 +228,8 @@
   "metronome_half_variant_a": "A",
   "metronome_half_variant_b": "B",
   "lyrics_karaoke_mode": "Mode karaoke",
-  "lyrics_karaoke_unavailable": "Reprocessa per habilitar"
+  "lyrics_karaoke_unavailable": "Reprocessa per habilitar",
+  "drawer_switch_nebula": "Fons animat"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -304,7 +307,8 @@
   "metronome_half_variant_a": "A",
   "metronome_half_variant_b": "B",
   "lyrics_karaoke_mode": "Режим караоке",
-  "lyrics_karaoke_unavailable": "Обробити знову для активації"
+  "lyrics_karaoke_unavailable": "Обробити знову для активації",
+  "drawer_switch_nebula": "Анімований фон"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -376,7 +380,8 @@
   "tv_metronome_title": "Metrônomo dinâmico",
   "tv_metronome_volume": "Volume",
   "lyrics_karaoke_mode": "Modo karaokê",
-  "lyrics_karaoke_unavailable": "Reprocesse para ativar"
+  "lyrics_karaoke_unavailable": "Reprocesse para ativar",
+  "drawer_switch_nebula": "Fundo animado"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -448,7 +453,8 @@
   "tv_metronome_title": "Métronome dynamique",
   "tv_metronome_volume": "Volume",
   "lyrics_karaoke_mode": "Mode karaoké",
-  "lyrics_karaoke_unavailable": "Retraiter pour l'activer"
+  "lyrics_karaoke_unavailable": "Retraiter pour l'activer",
+  "drawer_switch_nebula": "Fond animé"
  },
  "de": {
   "tab_songs": "Songs",
@@ -519,7 +525,8 @@
   "tv_metronome_title": "Dynamisches Metronom",
   "tv_metronome_volume": "Lautstärke",
   "lyrics_karaoke_mode": "Karaoke-Modus",
-  "lyrics_karaoke_unavailable": "Zum Aktivieren neu verarbeiten"
+  "lyrics_karaoke_unavailable": "Zum Aktivieren neu verarbeiten",
+  "drawer_switch_nebula": "Animierter Hintergrund"
  },
  "it": {
   "tab_songs": "Brani",
@@ -591,7 +598,8 @@
   "tv_metronome_title": "Metronomo dinamico",
   "tv_metronome_volume": "Volume",
   "lyrics_karaoke_mode": "Modalità karaoke",
-  "lyrics_karaoke_unavailable": "Rielabora per attivarla"
+  "lyrics_karaoke_unavailable": "Rielabora per attivarla",
+  "drawer_switch_nebula": "Sfondo animato"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -664,7 +672,8 @@
   "tv_metronome_title": "Динамический метроном",
   "tv_metronome_volume": "Громкость",
   "lyrics_karaoke_mode": "Режим караоке",
-  "lyrics_karaoke_unavailable": "Распознайте заново, чтобы включить"
+  "lyrics_karaoke_unavailable": "Распознайте заново, чтобы включить",
+  "drawer_switch_nebula": "Анимированный фон"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -734,6 +743,7 @@
   "tv_metronome_title": "动态节拍器",
   "tv_metronome_volume": "音量",
   "lyrics_karaoke_mode": "卡拉 OK 模式",
-  "lyrics_karaoke_unavailable": "重新识别后可启用"
+  "lyrics_karaoke_unavailable": "重新识别后可启用",
+  "drawer_switch_nebula": "动态背景"
  }
 }

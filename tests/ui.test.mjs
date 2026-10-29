@@ -181,6 +181,26 @@ test('acordes: tira por beat, ahora/luego y acorde sobre la palabra', async () =
   return `ahora/luego ${nowNext}; ${over}`;
 });
 
+test('fondo animado: apagado por defecto; encendido pinta color y no tapa clics', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const state = `(() => { const n = document.querySelector('canvas.nebula'); const d = n.getContext('2d').getImageData(0, 0, n.width, n.height).data;
+    let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 30) lit++;
+    return { op: +getComputedStyle(n).opacity, lit: lit / (d.length / 4), top: document.elementFromPoint(innerWidth - 200, innerHeight / 2)?.tagName }; })()`;
+  const off = await p.eval(state);
+  expect(off.op === 0, `apagado por defecto: opacidad ${off.op}`);
+  await p.eval(`document.querySelector('.top .ib').click()`);
+  await p.waitFor(`document.querySelector('.menu-pop .switch')`);
+  await p.eval(`document.querySelector('.menu-pop .switch').click()`);
+  await new Promise((r) => setTimeout(r, 900));
+  const on = await p.eval(state);
+  await p.eval(`document.querySelector('.menu-pop .switch').click()`); // dejarlo como estaba
+  await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  expect(on.op === 1 && on.lit > 0.2, `encendido: opacidad ${on.op}, pixeles con color ${(on.lit * 100).toFixed(0)} %`);
+  expect(on.top !== 'CANVAS', `el canvas tapa la UI: ${on.top}`);
+  return `encendido: ${(on.lit * 100).toFixed(0)} % de pixeles con color`;
+});
+
 test('suena: la posicion avanza', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const t0 = await c.page.eval(`document.querySelector('.seek .meta span').textContent`);

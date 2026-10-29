@@ -97,6 +97,17 @@ input[type=range].sl::-moz-range-thumb { width: 18px; height: 18px; border: 0; b
 .me .out { font-size: 12px; color: var(--text-muted); padding: 6px 8px; border-radius: 8px; }
 .me .out:hover { background: var(--press); color: var(--text); }
 
+/* ---------- Fondo animado ---------- */
+.nebula { grid-column: 2; grid-row: 1 / 3; width: 100%; height: 100%; opacity: 0; transition: opacity .4s; pointer-events: none; }
+.nebula.on { opacity: 1; transition-duration: .5s; }
+.main, .pbar { position: relative; z-index: 1; }
+.top .ib { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; }
+.top .ib:hover, .top .ib[aria-expanded=true] { background: var(--press); }
+.top .ib img { width: 26px; height: 26px; }
+.top .sp { flex: 1; }
+.top { position: relative; }
+.pop.menu-pop { top: 60px; bottom: auto; right: 16px; }
+
 /* ---------- Zona central ---------- */
 .main { grid-column: 2; grid-row: 1; display: grid; grid-template-rows: 72px 68px minmax(0, 1fr); min-width: 0; min-height: 0; position: relative; }
 .top { display: flex; align-items: center; gap: 16px; padding: 0 24px; min-width: 0; }
@@ -147,9 +158,8 @@ input[type=range].sl::-moz-range-thumb { width: 18px; height: 18px; border: 0; b
 .now-ch b.nx { font-size: 28px; color: rgba(255,255,255,.55); }
 .chmeta { text-align: right; color: var(--text-muted); font-size: 13px; padding: 0 0 8px; }
 .strip { position: relative; overflow: hidden; height: 88px; display: flex; align-items: center; }
-.strip::before, .strip::after { content: ""; position: absolute; top: 0; bottom: 0; width: 100px; z-index: 1; pointer-events: none; }
-.strip::before { left: 0; background: linear-gradient(90deg, var(--bg) 0%, transparent); }
-.strip::after { right: 0; background: linear-gradient(-90deg, var(--bg) 0%, transparent); }
+/* Bordes por mascara, no por degradado negro: sobre la nebulosa serian rectangulos */
+.strip { -webkit-mask: linear-gradient(90deg, transparent, #000 100px, #000 calc(100% - 100px), transparent); mask: linear-gradient(90deg, transparent, #000 100px, #000 calc(100% - 100px), transparent); }
 .strip-track { display: flex; align-items: center; gap: 8px; transition: transform 300ms cubic-bezier(.2,.7,.3,1); will-change: transform; }
 .strip .c { flex: none; width: 64px; height: 64px; border-radius: 8px; background: #262626; font: 26px "MusGlyphs", serif; color: #fff; display: grid; place-items: center; }
 .strip .c.db { background: #3a3a3a; }
