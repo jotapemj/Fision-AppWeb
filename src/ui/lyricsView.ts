@@ -1,6 +1,7 @@
 // Vista Letra: linea activa centrada, karaoke por palabra, tocar = seek (maqueta player.html).
 import { t } from '../i18n/i18n.ts';
 import { activeRow, hasWords, wordProgress, type LyricRow } from '../player/lyrics.ts';
+import { formatChord } from '../player/chords.ts';
 import { h } from './dom.ts';
 
 const KARAOKE_PREF = 'fision.lyrics_karaoke_mode'; // lyrics_karaoke_mode, default false
@@ -8,7 +9,8 @@ const KARAOKE_PREF = 'fision.lyrics_karaoke_mode'; // lyrics_karaoke_mode, defau
 function loadKaraoke(): boolean { try { return localStorage.getItem(KARAOKE_PREF) === '1'; } catch { return false; } }
 function saveKaraoke(on: boolean) { try { localStorage.setItem(KARAOKE_PREF, on ? '1' : '0'); } catch { /* sin storage */ } }
 
-export type LyricsState = { kind: 'loading' } | { kind: 'none' } | { kind: 'content'; rows: LyricRow[] };
+/** chords: "fila:palabra" -> acorde (acordes sobre la letra, solo web). */
+export type LyricsState = { kind: 'loading' } | { kind: 'none' } | { kind: 'content'; rows: LyricRow[]; chords?: Map<string, string> };
 
 export class LyricsView {
   private scroller = h('div', { class: 'lyrics' });
@@ -42,18 +44,23 @@ export class LyricsView {
     sw.onclick = () => { this.karaoke = !this.karaoke; saveKaraoke(this.karaoke); sw.setAttribute('aria-checked', String(this.karaoke)); this.scroller.classList.toggle('kar', this.karaoke); this.active = -2; };
     const opts = h('label', { class: 'lyopts' }, t('lyrics_karaoke_mode'), sw);
     this.lines = []; this.words = [];
-    const list = h('div', { class: 'lylist' });
-    this.rows.forEach((r) => {
+    const chords = state.chords ?? new Map<string, string>();
+    const withChords = chords.size > 0;
+    const list = h('div', { class: `lylist${withChords ? ' withch' : ''}` });
+    this.rows.forEach((r, ri) => {
       const line = h('div', { class: `cl${r.type === 'instrumental' ? ' ins' : ''}`, attrs: { role: 'button', tabindex: '0' } });
       const ws: HTMLElement[] = [];
       if (r.type === 'instrumental') line.textContent = '♪';
       else if (r.words.length) {
         r.words.forEach((w, k) => {
-          const s = h('span', { class: 'wd', textContent: w.text });
+          // Con acordes: celda de dos pisos (acorde encima, palabra debajo)
+          const s = withChords
+            ? h('span', { class: 'wd' }, h('i', { class: 'ch', textContent: formatChord(chords.get(`${ri}:${k}`) ?? null) }), h('span', { textContent: w.text }))
+            : h('span', { class: 'wd', textContent: w.text });
           // Palabra: seek a su onset (solo en karaoke; si no, la linea entera)
           s.onclick = (ev) => { if (this.karaoke) { ev.stopPropagation(); this.onSeek(w.onset); } };
           ws.push(s);
-          line.append(s, k < r.words.length - 1 ? ' ' : '');
+          line.append(s, k < r.words.length - 1 && !withChords ? ' ' : '');
         });
       } else line.textContent = r.text;
       line.onclick = () => this.onSeek(r.start);

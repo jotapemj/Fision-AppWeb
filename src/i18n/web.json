@@ -22,7 +22,9 @@
   "web_pick_song": "Pick a song",
   "web_engine_isolation": "This browser blocks the audio engine here. Open Fision over HTTPS or localhost.",
   "web_position": "Position",
-  "web_no_lyrics": "This song has no lyrics yet."
+  "web_no_lyrics": "This song has no lyrics yet.",
+  "web_now": "now",
+  "web_next_chord": "next"
  },
  "es": {
   "web_search": "Buscar",
@@ -47,6 +49,8 @@
   "web_pick_song": "Elige una canción",
   "web_engine_isolation": "Este navegador bloquea aquí el motor de audio. Abre Fision por HTTPS o localhost.",
   "web_position": "Posición",
-  "web_no_lyrics": "Esta canción aún no tiene letra."
+  "web_no_lyrics": "Esta canción aún no tiene letra.",
+  "web_now": "ahora",
+  "web_next_chord": "luego"
  }
 }

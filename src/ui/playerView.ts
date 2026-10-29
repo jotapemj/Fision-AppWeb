@@ -6,6 +6,8 @@ import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
 import { LyricsView, type LyricsState } from './lyricsView.ts';
 import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
+import { currentBeat, formatChord, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
+import { ChordStrip } from './chordStrip.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
 import icChords from '../assets/icons/ic_chord_carousel.svg';
@@ -47,6 +49,12 @@ export class PlayerView {
   private hooks: PlayerHooks;
   private view: View = loadView();
   private lyrics: LyricsView;
+  private chords: { cells: BeatCell[]; beatsPerBar: number; strip: ChordStrip } | null = null;
+  private beat = -2;
+  private nowCh = h('b', { class: 'ch' });
+  private nextCh = h('b', { class: 'ch nx' });
+  private nowNext = h('span', { class: 'now-ch', hidden: true });
+  private big = h('div', { class: 'bigch' });
   private viewBox = h('div', { class: 'view' });
   private tabs = new Map<View, HTMLButtonElement>();
   private seekEl: HTMLInputElement;
@@ -77,7 +85,8 @@ export class PlayerView {
     tab('chords', t('web_view_chords'), icChords);
     tab('mix', t('web_view_mix'), null, MIX_SVG);
     tab('3d', t('web_view_3d'), icItd);
-    this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg), this.viewBox);
+    this.nowNext.append(h('small', { textContent: t('web_now') }), this.nowCh, h('small', { textContent: t('web_next_chord') }), this.nextCh);
+    this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg, h('span', { class: 'sp' }), this.nowNext), this.viewBox);
 
     // --- barra inferior ---
     this.seekEl = slider(0, 1000, 1, 0, t('web_position'));
@@ -111,6 +120,14 @@ export class PlayerView {
 
   setLyrics(state: LyricsState) { this.lyrics.set(state); }
 
+  setChords(cells: BeatCell[], beatsPerBar: number) {
+    if (!cells.some((c) => c.chord)) return;
+    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000)) };
+    this.nowNext.hidden = false;
+    this.beat = -2;
+    if (this.view === 'chords') this.renderView();
+  }
+
   async toggle() { await this.p.toggle(); this.refreshPlay(); }
 
   private refreshPlay() {
@@ -135,6 +152,16 @@ export class PlayerView {
     this.posEl.textContent = fmtTime(pos);
     if (!this.seeking) setSlider(this.seekEl, this.p.durationMs ? Math.round(pos / this.p.durationMs * 1000) : 0);
     if (this.view === 'lyrics') this.lyrics.tick((pos + LYRICS_CLOCK_OFFSET_MS) / 1000);
+    if (this.chords) {
+      const b = currentBeat(this.chords.cells, pos / 1000);
+      if (b !== this.beat) {
+        this.beat = b;
+        this.chords.strip.setBeat(b);
+        const now = formatChord(soundingChord(this.chords.cells, b)), next = formatChord(nextChord(this.chords.cells, b));
+        this.nowCh.textContent = now || '–'; this.nextCh.textContent = next || '–';
+        this.big.replaceChildren(h('b', { textContent: now || '–' }), h('span', { textContent: next }));
+      }
+    }
     this.raf = requestAnimationFrame(this.loop);
   };
 
@@ -148,6 +175,13 @@ export class PlayerView {
   private renderView() {
     this.viewBox.className = this.view === 'lyrics' ? 'view lyr' : 'view';
     if (this.view === 'lyrics') { this.viewBox.replaceChildren(this.lyrics.el); return; }
+    if (this.view === 'chords' && this.chords) {
+      const meta = h('p', { class: 'chmeta', textContent: `${this.p.bpm ? Math.round(this.p.bpm) + ' BPM · ' : ''}${this.chords.beatsPerBar}/4` });
+      this.viewBox.replaceChildren(meta, this.chords.strip.el, this.big);
+      this.beat = -2; // repintar la tira al volver
+      this.chords.strip.invalidate();
+      return;
+    }
     if (this.view !== 'mix') { this.viewBox.replaceChildren(h('p', { class: 'soon', textContent: t('web_view_soon') })); return; }
     const mix = h('div', { class: 'mix' });
     const v2 = this.p.hasVocals2;

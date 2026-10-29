@@ -9,6 +9,7 @@ import { Player, parseBeats, parseBpm } from './player/player.ts';
 import { isMetronome, stemOf } from './player/stems.ts';
 import { buildRows as buildLyricRows } from './player/lyrics.ts';
 import type { LyricsState } from './ui/lyricsView.ts';
+import { buildBeatCells, chordsOverWords, parseChords, parseTimes } from './player/chords.ts';
 import { h } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
@@ -131,10 +132,12 @@ export class App {
       // AudioContext tras el gesto del usuario (este clic)
       this.engine ??= await Engine.create('playback');
       this.current?.player.pause();
-      const files = await this.store!.load(e.hash, (n) => /\.(flac|wav)$/i.test(n) || n === 'beats.txt');
+      const TEXT = ['beats.txt', 'downbeats.txt', 'chords.txt'];
+      const files = await this.store!.load(e.hash, (n) => /\.(flac|wav)$/i.test(n) || TEXT.includes(n));
+      const txt = (n: string) => { const f = files.find((x) => x.name === n); return f ? new TextDecoder().decode(f.data) : null; };
       const beats = files.find((f) => f.name === 'beats.txt');
       // Metronomos en bucle, como PlaybackService
-      const audio = files.filter((f) => f !== beats).map((f) => ({ ...f, loop: isMetronome(stemOf(f.name)) }));
+      const audio = files.filter((f) => !TEXT.includes(f.name)).map((f) => ({ ...f, loop: isMetronome(stemOf(f.name)) }));
       if (!audio.length) throw new Error('err_song_missing_files');
       const rep = await this.engine.load(audio);
       this.stopSong();
@@ -147,7 +150,12 @@ export class App {
       this.current = { entry: e, player, view };
       this.shell.replaceChildren(this.sidebar!.el, view.main, view.bar);
       this.render();
-      this.loadLyrics(e, rep.durationMs / 1000).then((st) => { if (this.current?.view === view) view.setLyrics(st); });
+      const { cells, beatsPerBar } = buildBeatCells(parseBeats(beatsTxt), parseTimes(txt('downbeats.txt')), parseChords(txt('chords.txt')));
+      view.setChords(cells, beatsPerBar);
+      this.loadLyrics(e, rep.durationMs / 1000).then((st) => {
+        if (this.current?.view !== view) return;
+        view.setLyrics(st.kind === 'content' ? { ...st, chords: chordsOverWords(st.rows, cells) } : st);
+      });
       await view.toggle(); // abrir = reproducir, como Android
     } catch (err) {
       curtain.remove();

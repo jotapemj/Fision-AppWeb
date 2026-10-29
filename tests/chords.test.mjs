@@ -1,0 +1,55 @@
+// Acordes: lectura, celdas por beat como Android, formato y acordes sobre la letra.
+import { test, expect } from './lib/harness.mjs';
+import { parseChords, buildBeatCells, currentBeat, soundingChord, nextChord, formatChord, chordsOverWords } from '../src/player/chords.ts';
+import { buildRows } from '../src/player/lyrics.ts';
+
+const beats = Array.from({ length: 16 }, (_, i) => 0.5 + i * 0.5); // 120 BPM desde 0.5 s
+
+test('lectura: N se salta, lineas rotas fuera', () => {
+  const c = parseChords('N 0.000\nC 1.440\nbasura\nE;7 97.34\n');
+  expect(c.map((x) => x.chord).join() === 'C,E;7' && c[0].time === 1.44, JSON.stringify(c));
+});
+
+test('celdas: 3/4 por moda de downbeats, posicion en el compas', () => {
+  const db = [1.0, 2.5, 4.0, 5.5]; // cada 3 beats; empieza en el beat 1 (1.0 s)
+  const { cells, beatsPerBar } = buildBeatCells(beats, db, []);
+  expect(beatsPerBar === 3, `compas ${beatsPerBar}`);
+  expect(cells.slice(0, 5).map((c) => c.pos).join() === '3,1,2,3,1', cells.slice(0, 5).map((c) => c.pos).join());
+  expect(cells[1].isDownbeat && !cells[0].isDownbeat, 'downbeat');
+  const none = buildBeatCells(beats, [], []);
+  expect(none.beatsPerBar === 4 && none.cells[4].pos === 1, 'sin downbeats: 4/4 desde el primer beat');
+});
+
+test('cuantizacion al beat mas cercano; el ultimo gana; sin repetidos', () => {
+  const ch = [{ chord: 'C', time: 0.7 }, { chord: 'G', time: 1.8 }, { chord: 'Am', time: 2.1 }, { chord: 'Am', time: 3.0 }];
+  const { cells } = buildBeatCells(beats, [], ch);
+  // 0.7 -> 0.5 (beat 0); 1.8 -> 2.0 (beat 3); 2.1 -> 2.0 (beat 3, gana Am); 3.0 -> beat 5, Am repetido -> null
+  expect(cells[0].chord === 'C' && cells[3].chord === 'Am' && cells[5].chord === null, cells.map((c) => c.chord ?? '-').join(' '));
+  expect(soundingChord(cells, 4) === 'Am' && nextChord(cells, 0) === 'Am', 'sonando / siguiente');
+  expect(currentBeat(cells, 0.4) === -1 && currentBeat(cells, 1.74) === 2 && currentBeat(cells, 99) === 15, 'beat actual');
+});
+
+test('formato: transporte, bemoles, latino quita ;, bajo invertido', () => {
+  expect(formatChord('C', 2) === 'D' && formatChord('A', 3) === 'C' && formatChord('B', 1) === 'C', 'transporte');
+  expect(formatChord('C#m', 0, false, true) === 'Dbm', 'bemol');
+  expect(formatChord('E;7', 0, true) === 'Mi7' && formatChord('E;7') === 'E;7', 'latino sin ;');
+  expect(formatChord('C/G', -2) === 'A#/F', `invertido: ${formatChord('C/G', -2)}`);
+  expect(formatChord('N.C.') === 'N.C.' && formatChord(null) === '', 'no parseable');
+});
+
+test('acordes sobre la letra: palabra que suena, hueco corto -> 1a palabra, instrumental fuera', () => {
+  const w = (s, e, t) => ({ start: s, end: e, text: t });
+  const rows = buildRows({ segments: [
+    { start: 2, end: 4, words: [w(2, 2.4, 'uno'), w(2.4, 3, 'dos'), w(3, 4, 'tres')] },
+    { start: 20, end: 22, words: [w(20, 21, 'cuatro'), w(21, 22, 'cinco')] },
+  ] }, 40);
+  const cellsAt = (times) => times.map(([time, chord]) => ({ time, pos: 1, isDownbeat: true, chord }));
+  const m = chordsOverWords(rows, cellsAt([[1.0, 'C'], [2.5, 'G'], [12, 'Am'], [19, 'F'], [21.5, 'E']]));
+  const t1 = rows.findIndex((r) => r.type === 'text');
+  const got = [...m.entries()].map(([k, v]) => `${k}=${v}`).join(' ');
+  expect(m.get(`${t1}:0`) === 'C' && m.get(`${t1}:1`) === 'G', `linea 1: ${got}`);
+  expect(![...m.values()].includes('Am'), `instrumental no se pinta: ${got}`);
+  const t2 = rows.findIndex((r, i) => r.type === 'text' && i > t1);
+  expect(m.get(`${t2}:0`) === 'F' && m.get(`${t2}:1`) === 'E', `linea 2: ${got}`);
+  return got;
+});

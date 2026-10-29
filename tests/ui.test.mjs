@@ -22,7 +22,10 @@ async function fakeServer() {
   const zip = makeZip([
     { name: 'vocals.wav', data: sineWav(440, 20) }, { name: 'bass.wav', data: sineWav(110, 20) },
     { name: 'kick.wav', data: sineWav(60, 20) }, { name: 'metronome.wav', data: sineWav(1000, 20) },
-    { name: 'beats.txt', data: Buffer.from('120.0\n0.5\n1.0\n'), deflate: true },
+    // 120 BPM: un beat cada 0.5 s, compas de 4 (downbeat cada 2 s)
+    { name: 'beats.txt', data: Buffer.from(['120.0', ...Array.from({ length: 40 }, (_, i) => (0.5 + i * 0.5).toFixed(2))].join('\n')), deflate: true },
+    { name: 'downbeats.txt', data: Buffer.from(Array.from({ length: 10 }, (_, i) => (0.5 + i * 2).toFixed(2)).join('\n')) },
+    { name: 'chords.txt', data: Buffer.from('N 0.000\nC 0.500\nG 2.500\nAm 12.000\n') },
   ]);
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const srv = http.createServer(async (req, res) => {
@@ -158,6 +161,24 @@ test('letra: la linea activa sigue a la cancion y tocar una linea hace seek', as
   expect(lay.doc <= lay.vh && Math.round(lay.bar) <= lay.vh && lay.scroller, `pagina ${lay.doc}px en ventana ${lay.vh}px, transporte acaba en ${Math.round(lay.bar)}px, letra con scroll propio: ${lay.scroller}`);
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`); // volver a Mezcla para las medidas
   return `filas ${kinds}, seek a ${pos}`;
+});
+
+test('acordes: tira por beat, ahora/luego y acorde sobre la palabra', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
+  await p.waitFor(`document.querySelectorAll('.strip .c').length === 40`, 5000);
+  const bars = await p.eval(`document.querySelectorAll('.strip .bar').length`);
+  await p.eval(`document.querySelectorAll('.strip .c')[24].click()`); // 12.5 s, suena Am
+  await p.waitFor(`document.querySelector('.strip .c.now') === document.querySelectorAll('.strip .c')[24]`, 5000);
+  const nowNext = await p.eval(`[...document.querySelectorAll('.now-ch b')].map(b => b.textContent).join(' / ')`);
+  expect(bars === 9 && nowNext === 'Am / –', `barras ${bars}, ahora/luego ${nowNext}`);
+  // En la letra, G (2.5 s) cae sobre "segunda" (2.5-3.0)
+  await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
+  const over = await p.eval(`[...document.querySelectorAll('.lyrics .wd')].filter(w => w.querySelector('.ch')?.textContent).map(w => w.querySelector('.ch').textContent + '>' + w.lastChild.textContent).join(' ')`);
+  expect(over.includes('G>segunda') && over.includes('C>primera'), `acordes sobre palabras: ${over}`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+  return `ahora/luego ${nowNext}; ${over}`;
 });
 
 test('suena: la posicion avanza', async () => {
