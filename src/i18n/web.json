@@ -27,7 +27,17 @@
   "web_next_chord": "next",
   "web_menu": "Player options",
   "web_close": "Close",
-  "web_center": "Center"
+  "web_center": "Center",
+  "web_3d_legend_drag": "Drag · position",
+  "web_3d_legend_click": "Click · select",
+  "web_3d_legend_double": "Double-click · omnipresent",
+  "web_3d_legend_long": "Long press · mute",
+  "web_3d_legend_camera": "Drag the room · turn the camera; wheel · zoom",
+  "web_3d_reset": "Initial positions",
+  "web_3d_stop_dance": "Stop the dance",
+  "web_3d_loading": "Loading the 3D scene",
+  "web_3d_unavailable": "This browser has no WebGL: the 3D scene cannot be shown.",
+  "web_3d_locked": "3D audio is on: volume and balance do not apply."
  },
  "es": {
   "web_search": "Buscar",
@@ -57,6 +67,16 @@
   "web_next_chord": "luego",
   "web_menu": "Opciones del reproductor",
   "web_close": "Cerrar",
-  "web_center": "Centro"
+  "web_center": "Centro",
+  "web_3d_legend_drag": "Arrastrar · posicionar",
+  "web_3d_legend_click": "Clic · seleccionar",
+  "web_3d_legend_double": "Doble clic · omnipresente",
+  "web_3d_legend_long": "Pulsación larga · silenciar",
+  "web_3d_legend_camera": "Arrastrar la sala · girar la cámara; rueda · zoom",
+  "web_3d_reset": "Posiciones iniciales",
+  "web_3d_stop_dance": "Parar el baile",
+  "web_3d_loading": "Cargando la escena 3D",
+  "web_3d_unavailable": "Este navegador no tiene WebGL: la escena 3D no puede mostrarse.",
+  "web_3d_locked": "Audio 3D activo: el volumen y el balance no cuentan."
  }
 }

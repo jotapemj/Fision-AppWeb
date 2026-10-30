@@ -15,6 +15,8 @@ function fakeEngine() {
     setEcho(id, a, d) { Object.assign(e.fx[id] ??= {}, { echo: a, delay: d }); },
     setReverb(id, s, r) { Object.assign(e.fx[id] ??= {}, { reverb: s, room: r }); },
     seek(ms) { e.pos = ms; },
+    d3: {}, set3DEnabled(id, on) { (e.d3[id] ??= {}).on = on; }, set3DPosition(id, az, dist, elev) { Object.assign(e.d3[id] ??= {}, { az, dist, elev }); },
+    set3DOmni(id, on) { (e.d3[id] ??= {}).omni = on; }, set3DMuted(id, on) { (e.d3[id] ??= {}).muted = on; },
     trackSeeks: [],
     seekTrack(id, ms) { e.trackSeeks.push([id, ms]); },
     async play() { e.played++; },
@@ -153,4 +155,67 @@ test('FX: zona muerta del filtro, retardo del eco por BPM, paneo guardado y FX n
   const saved = capture(p);
   expect(saved.stems.guitar.p === -40 && !('fx' in saved) && !JSON.stringify(saved).includes('reverb'), `guardado: ${JSON.stringify(saved)}`);
   expect(Math.round(filterCutoffHz(-1)) === 200 && Math.round(filterCutoffHz(1)) === 15000 && Math.round(filterCutoffHz(-0.8)) === 502, 'cortes');
+});
+
+const close = (a, b, tol) => Math.abs(a - b) <= tol;
+
+test('3D: semicirculo frontal, esfericas al motor, al apagar vuelven volumen y balance', async () => {
+  const { worldPos, azOfWorld, H_MAX_M } = await import('../src/player/audio3d.ts');
+  const e = fakeEngine(), p = new Player(e, song());
+  const az = p.stems.map((s) => p.poses.get(s.stem).az);
+  expect(close(az[0], -Math.PI / 2, 1e-9) && close(az.at(-1), Math.PI / 2, 1e-9), `semicirculo: ${az.map((a) => a.toFixed(2))}`);
+  p.setPan('guitar', 50);
+  p.set3DEnabled(true);
+  const g = idOf(p, 'guitar');
+  expect(e.d3[g].on && e.d3[g].dist === 1.5 && e.d3[g].elev === 0, JSON.stringify(e.d3[g]));
+  // Altura 1.5 a radio 1.5: elevacion 45 grados y distancia real 1.5*raiz(2)
+  p.setPose('guitar', { h: 1.5, az: Math.PI / 2, placed: true });
+  expect(close(e.d3[g].elev, 45, 1e-6) && close(e.d3[g].dist, 1.5 * Math.SQRT2, 1e-6), JSON.stringify(e.d3[g]));
+  // Oido derecho en -X (la camara empieza detras): la ida y vuelta conserva el azimut
+  const w = worldPos({ az: Math.PI / 2, h: 0, rh: 1 });
+  expect(close(w.x, -1, 1e-9) && close(azOfWorld(w.x, w.z), Math.PI / 2, 1e-9), `mundo: ${JSON.stringify(w)}`);
+  p.setPose('guitar', { muted: true, omni: true });
+  expect(e.d3[g].muted && e.d3[g].omni, 'mute y omni al motor');
+  p.set3DEnabled(false);
+  expect(!e.d3[g].on && e.vol[g][1] === 50, 'balance de vuelta');
+  expect(H_MAX_M > 2 && H_MAX_M < 2.1, `techo: ${H_MAX_M}`);
+});
+
+test('3D guardado: x/y en convencion motor, ida y vuelta, sin tocar = sin claves', async () => {
+  const { capture, restore } = await import('../src/player/songParams.ts');
+  const e = fakeEngine(), p = new Player(e, song());
+  expect(JSON.stringify(capture(p).stems) === '{}', `sin tocar: ${JSON.stringify(capture(p).stems)}`);
+  p.setPose('bass', { az: Math.PI / 2, h: 0.75, rh: 0.75, placed: true });
+  p.setPose('kick', { muted: true });
+  p.set3DEnabled(true);
+  const saved = JSON.parse(JSON.stringify(capture(p)));
+  const b = saved.stems.bass;
+  expect(close(b.x, 1, 1e-9) && close(b.y, 0, 1e-9) && close(b.e, 45, 1e-9) && b.d === 0.75 && saved.stems.kick.m === true && saved.audio3d === true, JSON.stringify(saved.stems));
+  const e2 = fakeEngine(), q = new Player(e2, song());
+  restore(q, saved);
+  const qb = q.poses.get('bass'), bid = idOf(q, 'bass');
+  expect(q.audio3d && close(qb.az, Math.PI / 2, 1e-9) && close(qb.h, 0.75, 1e-9) && e2.d3[bid].on && e2.d3[idOf(q, 'kick')].muted, JSON.stringify(qb));
+  // Datos de Android: solo e sin x/y = hueco del semicirculo con esa elevacion
+  restore(q, { stems: { vocals: { e: 10 } } });
+  expect(!q.poses.get('vocals').placed && q.poses.get('vocals').h > 0.2, 'elevacion sin posicion');
+});
+
+test('baile: orbita a su velocidad, swing 0.6 sin(fase), el agarrado no se mueve', async () => {
+  const { Dance, defaultPose } = await import('../src/player/audio3d.ts');
+  const poses = new Map([['a', defaultPose(0, 2)], ['b', defaultPose(1, 2)]]);
+  const d = new Dance();
+  d.distance = 2; d.speed = 0.25; d.setHz('a', 1);
+  const r = [0.5, 0, 0.5]; let k = 0; // factor 1.0 para a; 0.7 para b
+  d.start(poses, ['a', 'b'], ['a'], false, () => r[k++ % r.length]);
+  expect(poses.get('a').rh === 2 && poses.get('b').rh === 2, 'distancia del baile');
+  const a0 = poses.get('a').az;
+  d.tick(0.25, poses);
+  // 0.25 vueltas/s x 0.25 s = 1/16 de vuelta; el motor gira al contrario que la escena
+  expect(close(poses.get('a').az, a0 - Math.PI / 8, 1e-9), `orbita: ${poses.get('a').az - a0}`);
+  expect(close(poses.get('a').h, 0.6, 1e-9) && poses.get('b').h === 0, `swing: ${poses.get('a').h}`);
+  const bz = poses.get('b').az;
+  d.tick(0.1, poses, 'b');
+  expect(poses.get('b').az === bz, 'agarrado quieto');
+  d.stop();
+  expect(d.tick(1, poses).length === 0, 'parado');
 });

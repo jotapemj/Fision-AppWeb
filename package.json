@@ -1,6 +1,6 @@
 {
   "name": "fision-web",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Web client for FisionServer",
@@ -13,7 +13,11 @@
     "test": "node tests/run.mjs"
   },
   "devDependencies": {
+    "@types/three": "^0.186.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
   }
 }

@@ -1,6 +1,7 @@
 // Estado y reglas del reproductor (sin DOM). Reglas de app_spec §3.
 import type { Engine, LoadedStem } from '../engine/engine.ts';
 import { DEFAULT_VOLUME, isMetronome, isPitched, METRONOMES, orderIndex, stemOf } from './stems.ts';
+import { defaultPose, elevRad, sphericalDist, type Pose3D } from './audio3d.ts';
 
 // repeat_mode de Android
 export const Repeat = { Off: 0, All: 1, One: 2 } as const;
@@ -84,6 +85,9 @@ export class Player {
   pitch = 0;
   tempoMult = 1;
   repeat: Repeat = Repeat.Off;
+  // Audio 3D (§3.7): en 3D no cuentan volumen ni balance
+  audio3d = false;
+  readonly poses = new Map<string, Pose3D>();
   autoplayNext = false;
   playing = false;
   private repeatOneUsed = false;
@@ -110,6 +114,7 @@ export class Player {
       engine.setVolume(s.id, DEFAULT_VOLUME);
     }
     this.stems = st.sort((a, b) => orderIndex(a.stem) - orderIndex(b.stem) || a.stem.localeCompare(b.stem));
+    this.stems.forEach((s, i) => this.poses.set(s.stem, defaultPose(i, this.stems.length)));
   }
 
   get hasVocals2() { return this.stems.some((s) => s.stem === 'vocals2'); }
@@ -208,6 +213,36 @@ export class Player {
     if (id === undefined) return;
     const shift = this.metroHalfB ? localBeatIntervalMs(this.beats, songMs, this.bpm) : 0;
     this.engine.seekTrack(id, songMs + shift);
+  }
+
+  /** apply3DEnabled: pose, omni y mute antes de encender; al apagar vuelven volumen y balance. */
+  set3DEnabled(on: boolean) {
+    this.audio3d = on;
+    for (const s of this.stems) {
+      const p = this.poses.get(s.stem)!;
+      if (on) { this.push3D(s.stem); this.engine.set3DOmni(s.id, p.omni); }
+      this.engine.set3DEnabled(s.id, on);
+      if (on) this.engine.set3DMuted(s.id, p.muted);
+      else this.engine.setVolume(s.id, s.volume, s.pan);
+    }
+    this.onChange?.();
+  }
+
+  /** Cambia la pose; `save` = asentado (soltar, parar baile), no a 60 fps. */
+  setPose(stem: string, patch: Partial<Pose3D>, save = true) {
+    const p = this.poses.get(stem);
+    if (!p) return;
+    Object.assign(p, patch);
+    this.push3D(stem);
+    if (patch.omni !== undefined) this.engine.set3DOmni(this.find(stem).id, p.omni);
+    if (patch.muted !== undefined) this.engine.set3DMuted(this.find(stem).id, p.muted);
+    if (save) this.onChange?.();
+  }
+
+  /** El motor recibe esfericas: azimut, distancia real y elevacion en grados. */
+  push3D(stem: string) {
+    const p = this.poses.get(stem)!;
+    this.engine.set3DPosition(this.find(stem).id, p.az, sphericalDist(p), elevRad(p) * 180 / Math.PI);
   }
 
   setChordsBasic(b: boolean) { this.chordsBasic = b; this.onChange?.(); }

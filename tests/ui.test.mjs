@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect } from './lib/harness.mjs';
 import { findChrome, launch } from './lib/chrome.mjs';
 import { makeZip, sineWav, bandsPng } from './lib/zipWriter.mjs';
+import { decodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const H1 = '1'.repeat(64), H2 = '2'.repeat(64), H3 = '3'.repeat(64);
@@ -313,6 +314,68 @@ test('la mezcla de la cancion sobrevive a recargar la pagina', async () => {
   const v = await p.eval(`${bass}.querySelector('.val').textContent`);
   expect(v === '40', `bajo tras recargar: ${v}`);
   return `bajo = ${v} tras recargar`;
+});
+
+test('3D: escena pintada, luces con el interruptor, arrastre, omni, mute, baile y reset', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
+  await p.waitFor(`document.querySelector('.d3 canvas') && !document.querySelector('.d3 .d3load')`, 20000);
+  await new Promise((r) => setTimeout(r, 300));
+  // Brillo medio de la escena en una captura (WebGL no se lee desde la pagina)
+  const shotLum = async () => {
+    const r = await p.eval(`(() => { const b = document.querySelector('.d3').getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; })()`);
+    const png = decodePng(Buffer.from((await p.send('Page.captureScreenshot', { format: 'png', clip: { ...r, scale: 1 } })).result.data, 'base64'));
+    let sum = 0, lit = 0;
+    for (let i = 0; i < png.data.length; i += 4) { const l = (png.data[i] + png.data[i + 1] + png.data[i + 2]) / 3; sum += l; if (l > 12) lit++; }
+    return { mean: sum / (png.data.length / 4), lit: lit / (png.data.length / 4) };
+  };
+  const off = await shotLum();
+  const sc = `document.querySelector('.d3').scene3d`;
+  await p.eval(`document.querySelector('.d3head .switch').click()`);
+  await new Promise((r) => setTimeout(r, 500));
+  const on = await shotLum();
+  expect(on.lit > 0.6 && on.mean > off.mean * 1.5, `escena: con 3D ${(on.lit * 100).toFixed(0)} % pintado, brillo ${on.mean.toFixed(1)} frente a ${off.mean.toFixed(1)} apagado`);
+  expect(await p.eval(`document.querySelectorAll('.seg2 button')[3].classList.contains('on3d')`), 'pestana 3D sin marca de encendido');
+  const stem = await p.eval(`[...${sc}.sprites.keys()][0]`);
+  const mouse = async (type, x, y, extra = {}) => p.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, ...extra });
+  // Arrastre: 120 px a la derecha de la pantalla
+  let s0 = await p.eval(`${sc}.probe('${stem}')`);
+  await mouse('mousePressed', s0.x, s0.y);
+  for (let k = 1; k <= 6; k++) await mouse('mouseMoved', s0.x + k * 20, s0.y);
+  await mouse('mouseReleased', s0.x + 120, s0.y);
+  const s1 = await p.eval(`${sc}.probe('${stem}')`);
+  expect(s1.pose.placed && Math.abs(s1.x - (s0.x + 120)) < 12 && Math.abs(s1.pose.az - s0.pose.az) > 0.05, `arrastre: pantalla ${s0.x.toFixed(0)} -> ${s1.x.toFixed(0)}, az ${s0.pose.az.toFixed(2)} -> ${s1.pose.az.toFixed(2)}`);
+  expect(!(await p.eval(`document.querySelector('.d3btns .d3btn:last-child').hidden`)), 'reset oculto tras mover');
+  // Doble clic = omnipresente
+  for (let k = 0; k < 2; k++) { await mouse('mousePressed', s1.x, s1.y); await mouse('mouseReleased', s1.x, s1.y); }
+  const omni = (await p.eval(`${sc}.probe('${stem}')`)).pose.omni;
+  // Pulsacion larga = mute 3D
+  await mouse('mousePressed', s1.x, s1.y); await new Promise((r) => setTimeout(r, 650)); await mouse('mouseReleased', s1.x, s1.y);
+  const muted = (await p.eval(`${sc}.probe('${stem}')`)).pose.muted;
+  expect(omni && muted, `omni ${omni}, mute ${muted}`);
+  // Baile: dialogo, iniciar, gira, parar
+  await p.eval(`document.querySelector('.d3btns .d3btn').click()`);
+  await p.waitFor(`document.querySelector('dialog.dance')`, 3000);
+  await p.eval(`document.querySelector('dialog.dance .btn').click()`);
+  const a0 = (await p.eval(`${sc}.probe('${stem}')`)).pose.az;
+  await new Promise((r) => setTimeout(r, 600));
+  const d = await p.eval(`${sc}.probe('${stem}')`);
+  const panel = await p.eval(`!document.querySelector('.d3panel').hidden`);
+  expect(d.dancing && panel && Math.abs(d.pose.az - a0) > 0.05, `baile: activo ${d.dancing}, panel ${panel}, giro ${(d.pose.az - a0).toFixed(3)} rad`);
+  await p.eval(`document.querySelector('.d3btns .d3btn').click()`);
+  // Reset: todo al semicirculo, sin omni ni mute
+  await p.eval(`document.querySelector('.d3btns .d3btn:last-child').click()`);
+  await new Promise((r) => setTimeout(r, 1300));
+  const after = await p.eval(`[...${sc}.sprites.keys()].map((k) => ${sc}.probe(k).pose)`);
+  expect(after.every((q) => !q.placed && !q.omni && !q.muted && q.rh === 1.5 && q.h === 0), `reset: ${JSON.stringify(after)}`);
+  // Mezcla bloqueada con el 3D encendido
+  await p.eval(`[...document.querySelectorAll('.seg2 button')][2].click()`);
+  const locked = await p.eval(`!!document.querySelector('.note3d') && [...document.querySelectorAll('.stem input')].every((i) => i.disabled)`);
+  await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
+  await p.eval(`document.querySelector('.d3head .switch').click()`); // deja el 3D como estaba
+  expect(locked, 'mezcla sin bloquear en 3D');
+  return `pintado ${(on.lit * 100).toFixed(0)} %, brillo ${off.mean.toFixed(0)} -> ${on.mean.toFixed(0)}, arrastre, omni, mute, baile, reset y mezcla bloqueada`;
 });
 
 test('sin excepciones en la pagina', async () => {

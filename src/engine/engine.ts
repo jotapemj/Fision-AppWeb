@@ -28,6 +28,11 @@ interface EngineModule {
   _fe_set_solo_muted(id: number, m: number): void;
   _fe_audio_attach(ctxHandle: number): void;
   _fe_set_filter(id: number, a: number): void;
+  _fe_init_hrtf(path: number): number;
+  _fe_set_3d_enabled(id: number, on: number): void;
+  _fe_set_3d_position(id: number, az: number, dist: number, elevDeg: number): void;
+  _fe_set_3d_omni(id: number, on: number): void;
+  _fe_set_3d_muted(id: number, on: number): void;
   _fe_set_echo(id: number, a: number, delayMs: number): void;
   _fe_set_reverb(id: number, send: number, room: number): void;
 }
@@ -51,6 +56,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class Engine {
   private ids: number[] = [];
+  hrtfLoaded = false;
+  private hrtf = false; // /hrtf.bin escrito en el FS
   private started = false;
 
   private M: EngineModule;
@@ -79,6 +86,12 @@ export class Engine {
     const M = this.M;
     await this.ctx.suspend();
     if (!M._fe_create(this.ctx.sampleRate)) throw new Error('engine_busy');
+    // HRTF: una vez en el FS, cargado en cada motor nuevo (sin el, el motor usa ITD/ILD sintetico)
+    if (!this.hrtf) {
+      const r = await fetch(`${import.meta.env.BASE_URL}hrtf/hrtf_horizontal.bin`).catch(() => null);
+      if (r?.ok) { M.FS.writeFile('/hrtf.bin', new Uint8Array(await r.arrayBuffer())); this.hrtf = true; }
+    }
+    if (this.hrtf) { const p = M.stringToNewUTF8('/hrtf.bin'); this.hrtfLoaded = M._fe_init_hrtf(p) === 1; M._free(p); }
     this.started = false;
     M._fe_load_clear();
     // Las pistas en bucle (metronomos) van al final y esperan al primer stem:
@@ -119,6 +132,10 @@ export class Engine {
   setVolume(id: number, volume: number, pan = 0): void { const [l, r] = stemGains(volume, pan); this.M._fe_set_volume(id, l, r); }
   setSoloMuted(id: number, muted: boolean): void { this.M._fe_set_solo_muted(id, muted ? 1 : 0); }
   setFilter(id: number, amount: number): void { this.M._fe_set_filter(id, amount); }
+  set3DEnabled(id: number, on: boolean): void { this.M._fe_set_3d_enabled(id, on ? 1 : 0); }
+  set3DPosition(id: number, azRad: number, dist: number, elevDeg: number): void { this.M._fe_set_3d_position(id, azRad, dist, elevDeg); }
+  set3DOmni(id: number, on: boolean): void { this.M._fe_set_3d_omni(id, on ? 1 : 0); }
+  set3DMuted(id: number, on: boolean): void { this.M._fe_set_3d_muted(id, on ? 1 : 0); }
   setEcho(id: number, amount: number, delayMs: number): void { this.M._fe_set_echo(id, amount, delayMs); }
   setReverb(id: number, send: number, room: number): void { this.M._fe_set_reverb(id, send, room); }
 }

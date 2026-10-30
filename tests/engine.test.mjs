@@ -188,6 +188,32 @@ test('eco: repite el sonido al retardo pedido', async () => {
   return `repeticion ${echoDb.toFixed(1)} dB (sin eco ${dryDb.toFixed(0)} dB)`;
 });
 
+test('audio 3D con HRTF: lado derecho suena a la derecha, mute 3D silencia', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  const bin = path.join(ROOT, 'public/hrtf/hrtf_horizontal.bin');
+  if (!fs.existsSync(bin)) return 'skip — falta public/hrtf/hrtf_horizontal.bin';
+  const lr = async (az, muted = false) => {
+    const [id] = await load([3000]) // agudo: diferencia interaural clara;
+    M.FS.writeFile('/hrtf.bin', fs.readFileSync(bin));
+    const p = M.stringToNewUTF8('/hrtf.bin'); const ok = M._fe_init_hrtf(p); M._free(p);
+    expect(ok === 1, 'HRTF no cargado');
+    M._fe_set_3d_enabled(id, 1); M._fe_set_3d_position(id, az, 1, 0); M._fe_set_3d_muted(id, muted ? 1 : 0); M._fe_start();
+    render(0.4);
+    const frames = Math.round(SR * 0.5), Q = 128; let l = 0, r = 0;
+    for (let o = 0; o < frames; o += Q) {
+      const out = new Float32Array(M.wasmMemory.buffer, M._fe_render(Q), Q * 2);
+      for (let i = 0; i < Q; i++) { l += out[2 * i] ** 2; r += out[2 * i + 1] ** 2; }
+    }
+    return { l: Math.sqrt(l / frames), r: Math.sqrt(r / frames) };
+  };
+  const db = (a, b) => 20 * Math.log10(a / b);
+  const right = await lr(Math.PI / 2), left = await lr(-Math.PI / 2), mute = await lr(Math.PI / 2, true);
+  const dR = db(right.r, right.l), dL = db(left.l, left.r);
+  expect(dR > 6 && dL > 6, `diferencia interaural: derecha ${dR.toFixed(1)} dB, izquierda ${dL.toFixed(1)} dB`);
+  expect(mute.l + mute.r < 1e-6, `mute 3D: ${mute.l + mute.r}`);
+  return `+90 grados: R ${dR.toFixed(1)} dB sobre L; -90: L ${dL.toFixed(1)} dB sobre R`;
+});
+
 test('stemGains replica el paneo de Android', async () => {
   const { stemGains } = await import(pathToFileURL(path.join(ROOT, 'src/engine/engine.ts')).href);
   const cases = [[[75, 0], [0.75, 0.75]], [[100, 50], [0.5, 1]], [[100, -50], [1, 0.5]], [[80, 100], [0, 0.8]], [[0, 30], [0, 0]]];

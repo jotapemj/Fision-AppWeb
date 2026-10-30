@@ -110,5 +110,16 @@
  "fx_room_small",
  "fx_room_medium",
  "fx_room_large",
- "cd_stem_options"
+ "cd_stem_options",
+ "audio3d_title",
+ "audio3d_info_title",
+ "audio3d_info_body",
+ "stems_dance_title",
+ "stems_dance_start",
+ "stems_dance_speed",
+ "stems_dance_distance",
+ "dance_swing",
+ "dance_randomize_swing",
+ "dance_tab_swing",
+ "dance_value_speed"
 ]

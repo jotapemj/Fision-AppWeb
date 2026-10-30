@@ -2,9 +2,10 @@
 // Stems como StemSettingsCodec: {"<stem>": {"v": 75, "p": 0}} solo con claves no default.
 import type { MetroSpeed, Player } from './player.ts';
 import { DEFAULT_VOLUME } from './stems.ts';
+import { fromSaved, toSaved, type Saved3D } from './audio3d.ts';
 
 export interface SongParams {
-  stems: Record<string, { v?: number; p?: number }>;
+  stems: Record<string, { v?: number; p?: number } & Saved3D>;
   pitch: number;
   tempoMilli: number;      // Tempo mult milli (1000 = 1x)
   metroOn: boolean;
@@ -12,18 +13,20 @@ export interface SongParams {
   metroVolume: number;     // default 100
   metroHalfB: boolean;     // Metronome half variant (0 = A)
   chordsBasic?: boolean;   // Chords basic mode
+  audio3d?: boolean;       // 3D enabled
 }
 
 export function capture(p: Player): SongParams {
   const stems: SongParams['stems'] = {};
   for (const s of p.stems) {
-    const e: { v?: number; p?: number } = {};
+    const e: SongParams['stems'][string] = {};
     if (s.volume !== DEFAULT_VOLUME) e.v = s.volume;
     if (s.pan !== 0) e.p = s.pan;
+    Object.assign(e, toSaved(p.poses.get(s.stem)!));
     if (Object.keys(e).length) stems[s.stem] = e;
   }
   return { stems, pitch: p.pitch, tempoMilli: Math.round(p.tempoMult * 1000), metroOn: p.metroOn,
-    metroSpeed: p.metroSpeed, metroVolume: p.metroVolume, metroHalfB: p.metroHalfB, chordsBasic: p.chordsBasic };
+    metroSpeed: p.metroSpeed, metroVolume: p.metroVolume, metroHalfB: p.metroHalfB, chordsBasic: p.chordsBasic, audio3d: p.audio3d };
 }
 
 const n = (v: unknown, def: number) => (typeof v === 'number' && Number.isFinite(v) ? v : def);
@@ -32,6 +35,7 @@ const n = (v: unknown, def: number) => (typeof v === 'number' && Number.isFinite
 export function restore(p: Player, saved: unknown) {
   if (!saved || typeof saved !== 'object') return;
   const sp = saved as Partial<SongParams>;
+  p.stems.forEach((s, i) => p.poses.set(s.stem, fromSaved(sp.stems?.[s.stem], i, p.stems.length)));
   for (const s of p.stems) {
     const e = sp.stems?.[s.stem];
     if (!e) continue;
@@ -45,6 +49,7 @@ export function restore(p: Player, saved: unknown) {
   p.setMetronome(sp.metroOn === true, speed, n(sp.metroVolume, 100));
   if (sp.metroHalfB === true) p.setHalfVariantB(true);
   if (sp.chordsBasic === true) p.chordsBasic = true;
+  if (sp.audio3d === true) p.set3DEnabled(true); // empuja las poses ya restauradas
 }
 
 /** Almacen clave/valor (IndexedDB en el navegador; en memoria en las pruebas). */

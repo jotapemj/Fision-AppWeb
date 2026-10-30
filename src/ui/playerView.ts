@@ -22,6 +22,7 @@ import icNext from '../assets/icons/ic_skip_next.svg';
 import icRestore from '../assets/icons/ic_restore_stem.svg';
 import icDrumset from '../assets/icons/ic_drumset.png';
 import icMenu from '../assets/icons/ic_menu.svg';
+import type { Scene3D } from './scene3d.ts';
 
 export type View = 'lyrics' | 'chords' | 'mix' | '3d';
 
@@ -82,6 +83,9 @@ export class PlayerView {
   private raf = 0;
   private drumsOpen = true;
   private fxStem: string | null = null; // stem del panel derecho
+  private scene3d: Scene3D | null = null; // se construye la primera vez y vive con la cancion
+  private scene3dLoading = false;
+  private dead = false;
 
   constructor(p: Player, song: LibraryEntry, cover: string | null, hooks: PlayerHooks) {
     this.p = p; this.hooks = hooks;
@@ -104,6 +108,7 @@ export class PlayerView {
     tab('chords', t('web_view_chords'), icChords);
     tab('mix', t('web_view_mix'), null, MIX_SVG);
     tab('3d', t('web_view_3d'), icItd);
+    this.tabs.get('3d')!.classList.toggle('on3d', p.audio3d);
     this.nowNext.append(h('small', { textContent: t('web_now') }), this.nowCh, h('small', { textContent: t('web_next_chord') }), this.nextCh);
     this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg, h('span', { class: 'sp' }), this.nowNext), this.viewBox);
 
@@ -135,7 +140,7 @@ export class PlayerView {
     this.loop();
   }
 
-  destroy() { cancelAnimationFrame(this.raf); }
+  destroy() { this.dead = true; cancelAnimationFrame(this.raf); this.scene3d?.destroy(); this.scene3d = null; }
 
   private lyricsState: LyricsState = { kind: 'loading' };
 
@@ -215,6 +220,7 @@ export class PlayerView {
   private renderView() {
     this.viewBox.className = this.view === 'lyrics' ? 'view lyr' : 'view';
     if (this.view === 'lyrics') { this.viewBox.replaceChildren(this.lyrics.el); return; }
+    if (this.view !== '3d') this.scene3d?.watchAccent(this.main); // sigue al acento aunque no se vea
     if (this.view === 'chords' && this.chords) {
       const meta = h('p', { class: 'chmeta', textContent: `${this.p.bpm ? Math.round(this.p.bpm) + ' BPM · ' : ''}${this.chords.beatsPerBar}/4` });
       this.viewBox.replaceChildren(meta, this.chords.strip.el, this.big);
@@ -222,8 +228,10 @@ export class PlayerView {
       this.chords.strip.invalidate();
       return;
     }
+    if (this.view === '3d') { this.show3D(); return; }
     if (this.view !== 'mix') { this.viewBox.replaceChildren(h('p', { class: 'soon', textContent: t('web_view_soon') })); return; }
-    const mix = h('div', { class: 'mix' });
+    // En 3D no cuentan volumen ni balance: mezcla bloqueada (setEditingLocked)
+    const mix = h('div', { class: `mix${this.p.audio3d ? ' locked' : ''}` });
     const v2 = this.p.hasVocals2;
     const drums = this.p.stems.filter((s) => isDrumPart(s.stem));
     for (const s of this.p.stems.filter((x) => !isDrumPart(x.stem))) mix.append(this.stemRow(s, v2));
@@ -237,7 +245,24 @@ export class PlayerView {
     const sel = this.p.stems.find((s) => s.stem === this.fxStem) ?? this.p.stems[0];
     this.fxStem = sel?.stem ?? null;
     mix.querySelectorAll<HTMLElement>('.stem').forEach((r) => r.classList.toggle('sel', r.dataset.stem === this.fxStem));
-    this.viewBox.replaceChildren(h('div', { class: 'mixwrap' }, mix, sel ? this.fxPanel(sel, v2) : ''));
+    if (this.p.audio3d) mix.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.stem input, .stem .s, .stem .rs').forEach((c) => (c.disabled = true));
+    const note = this.p.audio3d ? h('p', { class: 'note3d', textContent: t('web_3d_locked') }) : '';
+    this.viewBox.replaceChildren(note, h('div', { class: 'mixwrap' }, mix, sel ? this.fxPanel(sel, v2) : ''));
+  }
+
+  /** Vista 3D: three.js se carga aparte, la primera vez que hace falta. */
+  private show3D() {
+    this.viewBox.className = 'view v3d';
+    if (this.scene3d) { this.viewBox.replaceChildren(this.scene3d.el); this.scene3d.watchAccent(this.main); return; }
+    this.viewBox.replaceChildren(h('div', { class: 'd3load', attrs: { role: 'status', 'aria-label': t('web_3d_loading') } }, h('span', { class: 'spin' })));
+    if (this.scene3dLoading) return;
+    this.scene3dLoading = true;
+    void import('./scene3d.ts').then(({ Scene3D }) => {
+      this.scene3dLoading = false;
+      if (this.dead) return; // cancion cerrada mientras cargaba
+      this.scene3d = new Scene3D(this.p, { onEnabled: (on) => this.tabs.get('3d')!.classList.toggle('on3d', on) });
+      if (this.view === '3d') this.show3D();
+    });
   }
 
   /** Panel derecho (mix.html): balance, filtro, eco con division, reverb con sala (player_modal_sheet_dialog). */

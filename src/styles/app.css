@@ -291,3 +291,60 @@ input[type=range].sl.bi::-webkit-slider-runnable-track { background: linear-grad
   .btns { gap: 12px; }
   .pbar { padding: 0 20px; gap: 16px; }
 }
+
+/* ---------- 3D (escena) ---------- */
+.seg2 button.on3d::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); } /* 3D encendido */
+.seg2 button.on3d[aria-selected=true]::after { background: var(--on-accent); }
+.view.v3d { overflow: hidden; padding: 0 40px 24px; position: relative; }
+.d3 { position: relative; height: 100%; border-radius: var(--r-card); overflow: hidden; background: #000; }
+.d3c, .d3c canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.d3c canvas { touch-action: none; cursor: grab; }
+.d3c canvas:active { cursor: grabbing; }
+.d3veil { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 240ms cubic-bezier(.4,0,1,1); }
+.d3veil.on { opacity: .35; transition-timing-function: cubic-bezier(0,0,.2,1); }
+.d3load { position: absolute; inset: 0; display: grid; place-items: center; background: #000; transition: opacity 300ms; z-index: 3; }
+.d3load .spin { width: 28px; height: 28px; border-width: 3px; }
+.d3load.out { opacity: 0; pointer-events: none; }
+.d3chrome { position: absolute; inset: 0; pointer-events: none; display: grid; grid-template-rows: auto 1fr auto; padding: 14px 16px; }
+.d3chrome > * > * { pointer-events: auto; }
+.d3chrome .sp, .d3chrome .d3side, .d3chrome .d3tip { pointer-events: none; }
+.d3head { display: flex; align-items: center; gap: 10px; }
+.d3head b { font-weight: 400; font-size: 16px; text-shadow: 0 1px 3px #000; }
+.d3head .sp, .d3bottom .sp { flex: 1; }
+.d3i { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); font-size: 13px; font-weight: 700; line-height: 1; background: rgba(0,0,0,.4); }
+.d3side { justify-self: end; align-self: center; display: flex; align-items: center; gap: 8px; }
+.d3side input.vsl { pointer-events: auto; writing-mode: vertical-lr; direction: rtl; width: 22px; height: min(260px, 40vh); }
+.d3side input.vsl::-webkit-slider-runnable-track { width: 4px; height: 100%; background: linear-gradient(0deg, var(--accent) var(--p), var(--track) var(--p)); }
+.d3side input.vsl::-webkit-slider-thumb { margin-top: 0; margin-left: -7px; }
+.d3side input.vsl:disabled { opacity: .35; cursor: default; }
+.d3tip { padding: 4px 10px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 13px; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 150ms; }
+.d3tip.show { opacity: 1; }
+.d3bottom { display: flex; align-items: flex-end; gap: 12px; }
+.d3legend { list-style: none; font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.7); text-shadow: 0 1px 3px #000; }
+.d3btns { display: grid; gap: 8px; }
+.d3btn { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; }
+.d3btn svg { width: 24px; height: 24px; }
+.d3btn:disabled { opacity: .35; cursor: default; }
+.d3btn[hidden] { display: none; }
+.d3panel { width: 340px; padding: 12px 14px; border-radius: var(--r-float); background: rgba(20,20,20,.86); backdrop-filter: blur(8px); display: grid; gap: 10px; }
+.d3panel.off { opacity: .35; }
+.d3panel[hidden] { display: none; }
+.d3panel .seg button { font-size: 12px; }
+.drow { display: flex; align-items: center; gap: 10px; }
+.drow .sl { flex: 1; }
+.drow .fxv { min-width: 84px; text-align: right; }
+.dwho img, .dcell img { width: 28px; height: 28px; }
+dialog.dance { width: min(480px, calc(100% - 32px)); }
+.dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.dcell { display: grid; border-radius: 14px; background: var(--surface-2); overflow: hidden; }
+.dtile { aspect-ratio: 1; display: grid; place-items: center; opacity: .45; }
+.dtile[aria-pressed=true] { opacity: 1; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 14px; }
+.dtile img { width: 44px; height: 44px; }
+.dswing { height: 32px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-muted); }
+.dswing[aria-pressed=true] { color: var(--accent); }
+.dchk { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 14px; }
+.dchk input { accent-color: var(--accent); width: 18px; height: 18px; }
+dialog.dance .btn { width: 100%; }
+dialog.dance .btn:disabled { opacity: .4; }
+.mix.locked .stem input, .mix.locked .stem .s, .mix.locked .stem .rs { opacity: .35; pointer-events: none; }
+.note3d { color: var(--text-muted); font-size: 13px; padding: 4px 0 10px; }

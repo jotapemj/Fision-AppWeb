@@ -104,6 +104,17 @@ EMSCRIPTEN_KEEPALIVE void fe_set_tempo(int id, float t) { gEngine->setTempo(id, 
 EMSCRIPTEN_KEEPALIVE void fe_set_pitch(int id, float semi) { gEngine->setPitch(id, semi); }
 EMSCRIPTEN_KEEPALIVE void fe_set_volume(int id, float l, float r) { gEngine->setVolume(id, l, r); }
 EMSCRIPTEN_KEEPALIVE void fe_set_solo_muted(int id, int m) { gEngine->setTrackSoloMuted(id, m != 0); }
+// HRTF KEMAR (FHR1/FHR2) desde el FS virtual; propagado a todas las pistas
+// HrtfBank exige gestor no nulo; el shim lo ignora y abre la ruta del FS
+static char gAssetMgrTag;
+EMSCRIPTEN_KEEPALIVE int fe_init_hrtf(const char* path) {
+    return gEngine->initHrtfFromAssets(reinterpret_cast<AAssetManager*>(&gAssetMgrTag), path) ? 1 : 0;
+}
+// Audio 3D por pista: azimut (rad, 0 frente, +pi/2 derecha), distancia (m), elevacion (grados)
+EMSCRIPTEN_KEEPALIVE void fe_set_3d_enabled(int id, int on) { gEngine->setTrack3DEnabled(id, on != 0); }
+EMSCRIPTEN_KEEPALIVE void fe_set_3d_position(int id, float az, float dist, float elevDeg) { gEngine->setTrack3DPosition(id, az, dist, elevDeg); }
+EMSCRIPTEN_KEEPALIVE void fe_set_3d_omni(int id, int on) { gEngine->setTrack3DOmnipresent(id, on != 0); }
+EMSCRIPTEN_KEEPALIVE void fe_set_3d_muted(int id, int on) { gEngine->setTrack3DMuted(id, on != 0); }
 // FX por pista (no se guardan): filtro -1..1, eco 0..1 con retardo en ms de fuente, envio a reverb 0..1 + sala 0..2
 EMSCRIPTEN_KEEPALIVE void fe_set_filter(int id, float a) { gEngine->setTrackFilter(id, a); }
 EMSCRIPTEN_KEEPALIVE void fe_set_echo(int id, float a, float delayMs) { gEngine->setTrackEcho(id, a, delayMs); }
