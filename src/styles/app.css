@@ -505,3 +505,19 @@ dialog.lydlg { width: min(400px, calc(100% - 32px)); }
 .lylang span:nth-child(2) { flex: 1; }
 .lylang .ck { color: var(--accent); width: 16px; }
 .lyopts .btn.ghost { height: 30px; }
+
+/* Export (export_wizard_dialog): filas de opcion, casillas, carpeta */
+dialog.expdlg { width: min(460px, calc(100% - 32px)); }
+.expdlg .shd { justify-content: flex-start; gap: 8px; }
+.expdlg .shd h2 { flex: 1; }
+.expdlg .shd .xbtn[hidden] + h2 { margin-left: 0; }
+.expbody { display: grid; gap: 8px; padding-top: 6px; }
+.expopt { text-align: left; padding: 13px 14px; border-radius: 20px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); font-size: 15px; }
+.expopt:hover, .expopt:focus-visible { border-color: var(--accent); background: var(--accent-12); }
+.expx { display: grid; gap: 6px; margin-top: 4px; }
+.expchk { display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 4px 2px; }
+.expchk input { width: 18px; height: 18px; accent-color: var(--accent); }
+.expdir { margin: 6px 0 0; overflow-wrap: anywhere; }
+.linkb { color: var(--accent); font-size: 13px; text-decoration: underline; }
+.fxtop .expb { margin-left: auto; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 13px; color: var(--text-soft); }
+.fxtop .expb:hover { background: var(--press); }

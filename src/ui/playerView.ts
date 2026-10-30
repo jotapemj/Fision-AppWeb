@@ -44,6 +44,8 @@ export interface PlayerHooks {
   onView?(v: View): void;
   /** Reprocesar en el server (solo canciones del server). */
   onReprocess?(): void;
+  /** Exportar la mezcla / separadas (null) o una pista. */
+  onExport?(stem: string | null): void;
   /** Pedir / cancelar transcripcion de letra. */
   lyrics?: LyricsActions;
 }
@@ -316,10 +318,16 @@ export class PlayerView {
     rev.addEventListener('input', () => { p.setFx(s.stem, { reverb: +rev.value / 100 }); sync(); });
     const clear = h('button', { class: 'btn ghost', textContent: t('fx_clear') });
     clear.onclick = () => { const z = newFx(); p.setFx(s.stem, { filter: 0, echo: 0, reverb: 0, echoDivision: z.echoDivision, room: z.room }); this.renderView(); };
+    // Exportar esta pista (ic_export del bottom sheet de Android; "Exportar" en mix.html)
+    const exp = h('button', { class: 'expb', attrs: { 'aria-label': t('export_stem_button_desc') } });
+    exp.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 19h14" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>';
+    exp.append(t('drawer_item_export'));
+    exp.hidden = !this.hooks.onExport;
+    exp.onclick = () => this.hooks.onExport?.(s.stem);
     const sec = (title: string, v: HTMLElement, ...kids: HTMLElement[]) => h('div', { class: 'fxs' }, h('div', { class: 'fxh' }, h('b', { textContent: title }), v), ...kids);
     const lr = (a: string, el: HTMLElement, b: string) => h('div', { class: 'lr' }, h('small', { textContent: a }), el, h('small', { textContent: b }));
     const panel = h('aside', { class: 'fxpanel', attrs: { 'aria-label': `${t('fx_title')}: ${name}` } },
-      h('div', { class: 'fxtop' }, img(iconOf(s.stem, v2), 's', ''), h('b', { textContent: name })),
+      h('div', { class: 'fxtop' }, img(iconOf(s.stem, v2), 's', ''), h('b', { textContent: name }), exp),
       sec(t('pan_title'), panV, lr(t('pan_l'), pan, t('pan_r'))),
       sec(t('fx_filter'), filV, lr('LP', fil, 'HP')),
       sec(t('fx_echo'), echoV, echo, choose(divLabels, s.fx.echoDivision, (i) => { p.setFx(s.stem, { echoDivision: i }); }, t('fx_echo'))),
@@ -397,6 +405,11 @@ export class PlayerView {
         const rp = h('button', { class: 'menuitem', textContent: t('drawer_item_reprocess') });
         rp.onclick = () => { pop.remove(); anchor.setAttribute('aria-expanded', 'false'); this.hooks.onReprocess!(); };
         pop.append(rp);
+      }
+      if (this.hooks.onExport) {
+        const ex = h('button', { class: 'menuitem', textContent: t('drawer_item_export') });
+        ex.onclick = () => { pop.remove(); anchor.setAttribute('aria-expanded', 'false'); this.hooks.onExport!(null); };
+        pop.append(ex);
       }
       if (this.hooks.hasBasicChords) {
         const g = h('div', { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': t('chords_dialog_title') } });

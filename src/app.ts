@@ -3,6 +3,7 @@ import { Api, ApiError, type LibraryEntry, type LiveJob, type Playlist, type Pla
 import { adjacent, errorKey, isValidId, mosaicHashes } from './library/playlists.ts';
 import { openPlaylistEditor } from './ui/playlistEditor.ts';
 import { openImport, pickAudio } from './ui/importDialog.ts';
+import { openExport } from './ui/exportDialog.ts';
 import { RETRYABLE } from './library/importConfig.ts';
 import { Engine } from './engine/engine.ts';
 import { t } from './i18n/i18n.ts';
@@ -418,6 +419,7 @@ export class App {
         nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
         onView: (v) => this.nebula?.setOrbitBlobsVisible(v !== '3d'),
         onReprocess: () => this.reprocessCurrent(),
+        onExport: (stem) => openExport({ player, entry: e, load: (want) => this.store!.load(e.hash, want) }, stem),
         chordNotation: () => ({ shift: this.settings.get('chordTranspose') ? player.pitch : 0, latin: this.settings.get('chordLatin'), flat: this.settings.get('chordFlat') }),
         formatChord: (c) => formatChord(c, this.settings.get('chordTranspose') ? player.pitch : 0, this.settings.get('chordLatin'), this.settings.get('chordFlat')),
         hasBasicChords: hasBasic,

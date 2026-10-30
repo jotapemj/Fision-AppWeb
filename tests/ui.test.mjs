@@ -606,6 +606,43 @@ test('letra: sin letra se elige idioma y se pide; el job de letra no ocupa la fi
   return `Auto -> ${lyr.posts[0]}, ${lyr.polls} sondeos, letra visible`;
 });
 
+test('exportar: mezcla WAV con metronomo a la carpeta elegida; pista con eco (cola) desde el panel', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  // Carpeta "elegida" = una carpeta de OPFS (el selector real no se automatiza)
+  await p.eval(`window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle('exp-test', { create: true })`);
+  const files = `(async () => { const d = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('exp-test')).getDirectoryHandle('Prueba - Subida');
+    const out = []; for await (const [n, h] of d.entries()) { const f = await h.getFile(); const b = new Uint8Array(await f.slice(0, 12).arrayBuffer()); out.push([n, f.size, String.fromCharCode(...b.subarray(0, 4)), String.fromCharCode(...b.subarray(4, 8))]); } return out; })()`;
+  const opt = (i) => p.eval(`document.querySelectorAll('dialog.expdlg .expopt')[${i}].click()`);
+  await p.eval(`document.querySelector('.top .ib').click()`);
+  await p.eval(`[...document.querySelectorAll('.menu-pop .menuitem')].find((b) => /Exportar|Export/.test(b.textContent)).click()`);
+  await p.waitFor(`document.querySelector('dialog.expdlg .expopt')`, 3000);
+  await opt(0); await opt(0); // mezcla, volumen por defecto
+  await p.waitFor(`document.querySelector('dialog.expdlg .expchk input')`, 3000);
+  const checks = await p.eval(`[...document.querySelectorAll('dialog.expdlg .expchk')].map((l) => l.textContent).join('|')`);
+  await p.eval(`document.querySelector('dialog.expdlg .expchk input').click()`); // metronomo
+  await opt(0); // WAV
+  await p.waitFor(`!document.querySelector('dialog.expdlg') && /completa|complete/i.test(document.querySelector('.toast')?.textContent ?? '')`, 20000);
+  const mix = (await p.eval(files)).find((f) => f[0].includes('_mix_'));
+  // 20 s a 48 kHz, estereo PCM16
+  expect(/metr/i.test(checks) && mix && /^Prueba - Subida_mix_\d{8}_\d{6}\.wav$/.test(mix[0]) && mix[1] === 44 + 20 * 48000 * 4 && mix[2] === 'RIFF', `mezcla: ${JSON.stringify(mix)}, casillas ${checks}`);
+  // Pista con eco desde el panel: casilla de efectos marcada y cola tras los 20 s
+  await p.eval(`[...document.querySelectorAll('.stem .nm')].find(b => /Voz|Vocals/.test(b.textContent)).click()`);
+  await p.waitFor(`document.querySelector('.fxtop .expb')`, 3000);
+  await p.eval(`(() => { const r = document.querySelectorAll('.fxpanel input')[2]; r.value = '60'; r.dispatchEvent(new Event('input')); })()`);
+  await p.eval(`document.querySelector('.fxtop .expb').click()`);
+  await p.waitFor(`document.querySelector('dialog.expdlg .expopt')`, 3000);
+  const fxOn = await p.eval(`[...document.querySelectorAll('dialog.expdlg .expchk')].some((l) => /efect|effect/i.test(l.textContent) && l.querySelector('input').checked)`);
+  const m4a = await p.eval(`!document.querySelectorAll('dialog.expdlg .expopt')[1].hidden`);
+  await opt(m4a ? 1 : 0);
+  await p.waitFor(`!document.querySelector('dialog.expdlg')`, 30000);
+  const one = (await p.eval(files)).find((f) => f[0].includes('_vocals_'));
+  const ok = m4a ? one?.[3] === 'ftyp' && one[1] > 50000 : one?.[1] > 44 + 20 * 48000 * 4;
+  expect(fxOn && ok, `pista: ${JSON.stringify(one)}, efectos marcados ${fxOn}, m4a ${m4a}`);
+  await p.eval(`(() => { const r = document.querySelectorAll('.fxpanel input')[2]; r.value = '0'; r.dispatchEvent(new Event('input')); })()`);
+  return `mezcla ${mix[0]} (${(mix[1] / 1048576).toFixed(1)} MB); pista ${one[0]} (${(one[1] / 1024).toFixed(0)} KB${m4a ? ', M4A' : ''})`;
+});
+
 test('borrar: en cola se saca de la cola; descargada borra la copia (y para si suena); nube con 409 y luego borrada', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page, del = c.fake.del;

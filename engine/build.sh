@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compila el motor a WASM.
 #   bash engine/build.sh        -> web (public/engine) y node (engine/build/node)
-#   bash engine/build.sh web|node
+#   bash engine/build.sh web|node|export
 # EMSDK = raiz de emsdk (por defecto C:/emsdk o ~/emsdk).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -49,9 +49,24 @@ build_node() {
   ls -la "$HERE/build/node"
 }
 
+# Export offline: modulo aparte sin hilos (Worker en web, Node en las pruebas)
+EXP=(-std=c++17 -O3 -msimd128 -I"$HERE/shim" -I"$HERE/src" -I"$HERE/vendor"
+  "$HERE/export_api.cpp" "$HERE/src/WavReader.cpp"
+  -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createFisionExport -sFORCE_FILESYSTEM=1
+  -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sEXPORTED_FUNCTIONS=_malloc,_free
+  -sEXPORTED_RUNTIME_METHODS=FS,stringToNewUTF8,HEAPF32)
+
+build_export() {
+  mkdir -p "$ROOT/public/engine" "$HERE/build/node"
+  "$EMXX" "${EXP[@]}" -sENVIRONMENT=worker -o "$ROOT/public/engine/fision_export.mjs"
+  "$EMXX" "${EXP[@]}" -sENVIRONMENT=node -o "$HERE/build/node/fision_export.mjs"
+  ls -la "$ROOT/public/engine/fision_export.wasm" "$HERE/build/node/fision_export.wasm"
+}
+
 case "${1:-all}" in
   web) build_web ;;
   node) build_node ;;
-  all) build_web; build_node ;;
-  *) echo "Uso: build.sh [web|node|all]" >&2; exit 2 ;;
+  export) build_export ;;
+  all) build_web; build_node; build_export ;;
+  *) echo "Uso: build.sh [web|node|export|all]" >&2; exit 2 ;;
 esac
