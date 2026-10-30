@@ -21,8 +21,11 @@ export class Nebula {
   private orbitK = 1;      // 0 = blobs en orbita ocultos (vista 3D): queda el ancla
   private orbitTo = 1;
   private still = matchMedia('(prefers-reduced-motion: reduce)');
+  private speed: number;
 
-  constructor() {
+  /** `speed` multiplica el giro de las orbitas (el centro sin cancion va a 0.5). */
+  constructor(speed = 1) {
+    this.speed = speed;
     this.el.className = 'nebula';
     this.el.setAttribute('aria-hidden', 'true');
     document.addEventListener('visibilitychange', () => this.sync());
@@ -54,7 +57,7 @@ export class Nebula {
     this.last = now;
     this.pulse = decayPulse(this.pulse, dt);
     this.orbitK = this.orbitTo > this.orbitK ? Math.min(this.orbitTo, this.orbitK + dt / 0.5) : Math.max(this.orbitTo, this.orbitK - dt / 0.5);
-    this.draw(this.still.matches ? 0 : (now - this.t0) / 1000);
+    this.draw(this.still.matches ? 0 : (now - this.t0) / 1000 * this.speed);
   };
 
   private draw(t: number) {

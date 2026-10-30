@@ -431,6 +431,42 @@ dialog.pled { width: min(560px, calc(100% - 32px)); }
 .plrm:hover { background: var(--press); color: var(--text); }
 .plerr { min-height: 20px; margin-top: 10px; color: #f87171; font-size: 13px; }
 .plfoot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-.plfoot .btn { min-width: 110px; padding: 0 18px; }
+.plfoot .btn { min-width: 110px; padding: 0 18px; height: 42px; }
 .plfoot .btn:disabled { opacity: .5; }
 .toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 50; padding: 12px 18px; border-radius: 12px; background: #2a2a2a; color: var(--text); font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+
+/* ---------- Anadir / reprocesar ---------- */
+.addb { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border-radius: 15px; background: var(--surface-2); color: var(--text-soft); font-size: 13px; }
+.addb:hover { background: var(--surface-3); }
+.menu-pop .menuitem { width: 100%; text-align: left; padding: 10px 4px 4px; font-size: 14px; color: var(--text-soft); }
+.menu-pop .menuitem:hover { color: var(--text); }
+dialog.imp { width: min(600px, calc(100% - 32px)); }
+.imhero { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: var(--r-card); background: var(--surface-2); margin: 6px 0 4px; }
+.imcv { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: var(--surface-3); flex: none; }
+.imcv img { width: 100%; height: 100%; object-fit: cover; }
+.imtx { flex: 1; min-width: 0; display: grid; line-height: 1.3; }
+.imtx b { font-weight: 400; font-size: 16px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.imtx span { font-size: 13px; color: var(--text-muted); }
+.imtx small { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+dialog.imp > .seg { margin-bottom: 12px; }
+.imtiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.imcell { display: grid; border-radius: 14px; background: var(--surface-2); overflow: hidden; }
+.imtile { display: grid; justify-items: center; gap: 6px; padding: 14px 6px 10px; opacity: .45; font-size: 13px; }
+.imtile img { width: 40px; height: 40px; }
+.imtile.on { opacity: 1; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 14px; }
+.imtile[aria-disabled=true] { cursor: default; }
+.imvar { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.imvar button { padding: 7px 4px; font-size: 11.5px; color: var(--text-muted); }
+.imvar button[aria-pressed=true] { color: var(--accent); }
+.imrest { margin-top: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); font-size: 13px; color: var(--text-soft); }
+.imwarn { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(245,158,11,.12); color: #fbbf24; font-size: 13px; }
+.imload { margin-top: 12px; font-size: 13px; color: var(--text-muted); }
+.improg { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; }
+.improg progress { width: 100%; height: 6px; accent-color: var(--accent); }
+
+/* ---------- Centro sin cancion: nebulosa relajada + marca ---------- */
+.main.idle { display: grid; place-items: center; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.main.idle .idleneb { position: absolute; inset: 0; grid-column: auto; grid-row: auto; }
+.idlec { position: relative; display: grid; justify-items: center; gap: 18px; }
+.idlec .hint { padding: 0; font-size: 14px; color: rgba(255,255,255,.6); }
+.app:has(> .main.idle) > .nebula { opacity: 0; } /* la de fondo no se suma a la del centro */

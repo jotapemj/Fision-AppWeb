@@ -8,7 +8,7 @@ export type RowState =
   | { kind: 'queued'; position: number | null }
   | { kind: 'running' }
   | { kind: 'waiting_gpu' }
-  | { kind: 'error' };
+  | { kind: 'error'; code?: string };
 
 export interface Row { entry: LibraryEntry; state: RowState }
 
@@ -19,6 +19,7 @@ export interface LibraryInput {
   downloaded: Set<string>;
   downloading: Map<string, number>; // hash -> 0..100
   jobs: LiveJob[];
+  errors?: Map<string, string>; // hash -> error_code del ultimo job (en memoria, como Android)
 }
 
 function stateOf(e: LibraryEntry, inp: LibraryInput): RowState {
@@ -31,7 +32,7 @@ function stateOf(e: LibraryEntry, inp: LibraryInput): RowState {
   if (job?.state === 'waiting_gpu') return { kind: 'waiting_gpu' };
   if (inp.downloaded.has(e.hash)) return { kind: 'downloaded' };
   if (e.state === 'processing') return { kind: 'running' };
-  if (e.state === 'error' || e.state === 'cancelled') return { kind: 'error' };
+  if (e.state === 'error' || e.state === 'cancelled') return { kind: 'error', code: inp.errors?.get(e.hash) };
   return { kind: 'cloud' };
 }
 

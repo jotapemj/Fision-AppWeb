@@ -39,7 +39,11 @@
   "web_3d_unavailable": "This browser has no WebGL: the 3D scene cannot be shown.",
   "web_3d_locked": "3D audio is on: volume and balance do not apply.",
   "web_chords_vocab": "In this song · {1} chords",
-  "web_chords_loading": "Loading chord shapes"
+  "web_chords_loading": "Loading chord shapes",
+  "web_upload_failed_status": "Upload failed ({1})",
+  "web_upload_cancel": "Cancel upload",
+  "web_upload_progress": "{1} of {2}",
+  "web_upload_sent": "Song sent to the server"
  },
  "es": {
   "web_search": "Buscar",
@@ -81,6 +85,10 @@
   "web_3d_unavailable": "Este navegador no tiene WebGL: la escena 3D no puede mostrarse.",
   "web_3d_locked": "Audio 3D activo: el volumen y el balance no cuentan.",
   "web_chords_vocab": "En esta canción · {1} acordes",
-  "web_chords_loading": "Cargando las posiciones"
+  "web_chords_loading": "Cargando las posiciones",
+  "web_upload_failed_status": "Error al subir ({1})",
+  "web_upload_cancel": "Cancelar subida",
+  "web_upload_progress": "{1} de {2}",
+  "web_upload_sent": "Canción enviada al servidor"
  }
 }

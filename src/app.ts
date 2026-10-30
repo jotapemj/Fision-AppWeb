@@ -2,6 +2,8 @@
 import { Api, ApiError, type LibraryEntry, type LiveJob, type Playlist, type PlaylistSummary, type Session } from './api/client.ts';
 import { adjacent, errorKey, isValidId, mosaicHashes } from './library/playlists.ts';
 import { openPlaylistEditor } from './ui/playlistEditor.ts';
+import { openImport, pickAudio } from './ui/importDialog.ts';
+import { RETRYABLE } from './library/importConfig.ts';
 import { Engine } from './engine/engine.ts';
 import { t } from './i18n/i18n.ts';
 import { buildRows, type Row } from './library/library.ts';
@@ -18,6 +20,7 @@ import { idleBar, PlayerView } from './ui/playerView.ts';
 import { Curtain } from './ui/curtain.ts';
 import { Sidebar } from './ui/sidebar.ts';
 import { Nebula } from './ui/nebula.ts';
+import { IdleMain } from './ui/idleMain.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
 import { ACCENTS, type SettingsStore } from './settings.ts';
 import { openSettings } from './ui/settingsView.ts';
@@ -55,6 +58,10 @@ export class App {
   private plCovers = new Map<string, Promise<string | null>>(); // clave id:updated_at
   private online = false;
   private queue: string[] | null = null; // PlayQueue: playlist desde la que suena, o null = biblioteca
+  private inflight = new Map<string, string>(); // hash -> job_id de lo que procesa el server
+  private jobErrors = new Map<string, string>(); // hash -> error_code (en memoria)
+  private gpu: Promise<boolean | null> | null = null;
+  private idle: IdleMain | null = null; // centro sin cancion
 
   constructor(root: HTMLElement, settings: SettingsStore) {
     this.root = root;
@@ -72,6 +79,7 @@ export class App {
 
   private showLogin(notice = '') {
     this.stopSong();
+    this.idle?.destroy(); this.idle = null;
     this.nebula?.destroy();
     clearTimeout(this.pollTimer);
     this.shell = this.sidebar = null;
@@ -90,6 +98,7 @@ export class App {
       onEditPlaylist: (p) => this.editPlaylist(p),
       onDeletePlaylist: (p) => void this.deletePlaylist(p),
       playlistCover: (p) => this.playlistCover(p),
+      onAdd: () => void this.addSong(),
       onSettings: () => openSettings(this.settings, { user: s.user, server: location.host, webVersion: pkg.version,
         serverInfo: () => this.api.serverInfo().catch(() => null), onLogout: () => { this.api.logout(); this.showLogin(); } }),
       cover: (hash) => this.cover(hash),
@@ -104,7 +113,12 @@ export class App {
     void this.refreshLibrary().then(() => this.syncPlaylists());
   }
 
-  private hintMain(text: string) { return h('section', { class: 'main' }, h('div'), h('div'), h('p', { class: 'hint', textContent: text })); }
+  /** Centro sin cancion: nebulosa relajada + marca (una sola viva a la vez). */
+  private hintMain(text: string) {
+    this.idle?.destroy();
+    this.idle = new IdleMain(text, ACCENTS[this.settings.get('accentId')]);
+    return this.idle.el;
+  }
 
   private async refreshLibrary() {
     try {
@@ -112,6 +126,7 @@ export class App {
       this.entries = entries; this.jobs = jobs; this.downloaded = new Set(local);
       this.online = true;
       this.render();
+      void this.settleJobs();
     } catch (e) { this.online = false; if (!(e instanceof ApiError && e.status === 401)) console.warn('library', e); }
     // Con jobs vivos, sondear hasta que acaben (luego la entrada pasa a ready)
     clearTimeout(this.pollTimer);
@@ -119,8 +134,70 @@ export class App {
   }
 
   private render() {
-    this.rows = buildRows({ entries: this.entries, downloaded: this.downloaded, downloading: this.downloading, jobs: this.jobs }, this.settings.get('sortAsc'));
+    this.rows = buildRows({ entries: this.entries, downloaded: this.downloaded, downloading: this.downloading, jobs: this.jobs, errors: this.jobErrors }, this.settings.get('sortAsc'));
     this.sidebar?.update(this.rows, this.current?.entry.hash ?? null, this.current?.player.playing ?? false);
+  }
+
+  /** Lo que estaba en vuelo y ya no: listo = descargar siempre (aunque hubiera copia: reproceso);
+   *  error = su error_code, y si se puede reintentar, el dialogo. */
+  private async settleJobs() {
+    const live = new Set(this.jobs.map((j) => j.hash));
+    for (const j of this.jobs) { this.inflight.set(j.hash, j.job_id); this.jobErrors.delete(j.hash); }
+    for (const [hash, jobId] of [...this.inflight]) {
+      if (live.has(hash)) continue;
+      const e = this.entries.find((x) => x.hash === hash);
+      if (!e || e.state === 'processing') continue; // aun no se ve el final
+      this.inflight.delete(hash);
+      let code: string | undefined;
+      try { const st = await this.api.job(jobId); if (st.state === 'error' || st.state === 'cancelled') code = st.error_code || undefined; } catch { /* job ya purgado */ }
+      if (code) {
+        this.jobErrors.set(hash, code);
+        this.render();
+        if (RETRYABLE.includes(code)) this.retryDialog(e, code);
+      } else if (e.state === 'ready') void this.download(e);
+    }
+  }
+
+  /** gpu_busy / timeout: Reintentar = reprocesar con el config guardado (no se resube). */
+  private retryDialog(e: LibraryEntry, code: string) {
+    const retry = h('button', { class: 'btn', textContent: t('gpu_timeout_retry') });
+    const cancel = h('button', { class: 'btn ghost', textContent: t('gpu_timeout_cancel') });
+    const dlg = h('dialog', { class: 'settings', attrs: { 'aria-label': e.title || e.filename } },
+      h('div', { class: 'shd' }, h('h2', { textContent: e.title || e.filename })),
+      h('p', { class: 'muted', textContent: t(code === 'gpu_busy' ? 'gpu_timeout_body' : 'job_timeout_body') }),
+      h('div', { class: 'plfoot' }, cancel, retry));
+    cancel.onclick = () => dlg.close();
+    retry.onclick = async () => {
+      dlg.close();
+      try { this.onSubmitted(await this.api.reprocess(e.hash, e.config ?? {})); }
+      catch (err) { toast(t(err instanceof ApiError && err.status === 409 ? 'reprocess_busy' : err instanceof ApiError && err.status === 429 ? 'err_job_limit' : 'reprocess_failed')); }
+    };
+    dlg.addEventListener('close', () => dlg.remove());
+    document.body.append(dlg);
+    dlg.showModal();
+  }
+
+  private serverGpu(): Promise<boolean | null> {
+    // Sin dato del server = cpu (ServerInfoManager.hasGpu = false)
+    return (this.gpu ??= this.api.serverInfo().then((i) => !!i.gpu).catch(() => false));
+  }
+
+  private async addSong() {
+    const f = await pickAudio();
+    if (f) openImport({ kind: 'upload', file: f }, { api: this.api, gpu: this.serverGpu(), onSubmitted: (r) => this.onSubmitted(r) });
+  }
+
+  private reprocessCurrent() {
+    const e = this.current?.entry;
+    if (!e) return;
+    if (this.inflight.has(e.hash) || this.jobs.some((j) => j.hash === e.hash)) { toast(t('reprocess_busy')); return; }
+    void this.cover(e.hash).then((cover) => openImport({ kind: 'reprocess', entry: e, cover }, { api: this.api, gpu: this.serverGpu(), onSubmitted: (r) => this.onSubmitted(r) }));
+  }
+
+  private onSubmitted(r: { hash: string; job_id?: string }) {
+    this.jobErrors.delete(r.hash);
+    if (r.job_id) this.inflight.set(r.hash, r.job_id);
+    void this.refreshLibrary();
   }
 
   /** PlaylistRepository.sync: lista + detalle solo de las que cambiaron; sin red, quedan las que habia. */
@@ -193,6 +270,7 @@ export class App {
   private pick(r: Row, queue: string[] | null = null) {
     // Abrir desde una playlist fija su orden; desde la biblioteca vuelve a la biblioteca
     if (r.state.kind === 'downloaded') this.queue = queue;
+    if (r.state.kind === 'error' && r.state.code && RETRYABLE.includes(r.state.code)) { this.retryDialog(r.entry, r.state.code); return; }
     if (r.state.kind === 'downloaded') this.open(r.entry);
     else if (r.state.kind === 'cloud') this.download(r.entry); // como Android: tocar en la nube = descargar
   }
@@ -270,6 +348,7 @@ export class App {
         onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
         nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
         onView: (v) => this.nebula?.setOrbitBlobsVisible(v !== '3d'),
+        onReprocess: () => this.reprocessCurrent(),
         chordNotation: () => ({ shift: this.settings.get('chordTranspose') ? player.pitch : 0, latin: this.settings.get('chordLatin'), flat: this.settings.get('chordFlat') }),
         formatChord: (c) => formatChord(c, this.settings.get('chordTranspose') ? player.pitch : 0, this.settings.get('chordLatin'), this.settings.get('chordFlat')),
         hasBasicChords: hasBasic,
@@ -278,6 +357,7 @@ export class App {
       });
       this.current = { entry: e, player, view };
       this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, view.main, view.bar, curtain.el);
+      this.idle?.destroy(); this.idle = null;
       await this.applySongColors(); // como Android: revelar con la paleta ya puesta
       this.render();
       // Acordes avanzados o basicos (por cancion); la letra los lleva encima
@@ -302,7 +382,7 @@ export class App {
   private onSetting(k: string) {
     const cur = this.current;
     if (k === 'nebula') this.nebula?.setEnabled(this.settings.get('nebula'));
-    if (k === 'accentId' || k === 'songColors') this.applySongColors();
+    if (k === 'accentId' || k === 'songColors') { this.applySongColors(); this.idle?.setAccent(ACCENTS[this.settings.get('accentId')]); }
     if (k === 'sortAsc') this.render();
     if (k === 'autoplayNext' && cur) cur.player.autoplayNext = this.settings.get('autoplayNext');
     if ((k === 'chordLatin' || k === 'chordFlat' || k === 'chordTranspose') && cur) cur.view.reformatChords();

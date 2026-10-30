@@ -7,6 +7,7 @@ import wordmark from '../assets/icons/wordmark.svg';
 import { CoverWave } from './coverWave.ts';
 import type { Playlist, PlaylistSummary } from '../api/client.ts';
 import { playlistRows } from '../library/playlists.ts';
+import { jobErrorKey } from '../library/importConfig.ts';
 
 export interface SidebarHooks {
   /** `queue` = canciones de la playlist abierta (contexto de prev/next) o null = biblioteca. */
@@ -19,6 +20,7 @@ export interface SidebarHooks {
   /** 1 url = portada propia; varias = mosaico; vacio = sin nada. */
   playlistCover(p: PlaylistSummary): Promise<string[]>;
   onSettings(): void;
+  onAdd(): void;
   cover(hash: string): Promise<string | null>;
 }
 
@@ -26,7 +28,6 @@ const SEARCH_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden=
 const CLOUD_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 18h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="#919191" stroke-width="1.7"/></svg>';
 const svg = (markup: string) => { const s = h('span', { class: 'st' }); s.innerHTML = markup; return s; };
 
-const JOB_ERR = 'cloud_state_error';
 
 export class Sidebar {
   readonly el: HTMLElement;
@@ -64,8 +65,11 @@ export class Sidebar {
       h('span', { class: 'who' }, h('b', { textContent: user }), h('span', { textContent: server })),
       h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }));
     me.lastElementChild!.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
+    const addBtn = h('button', { class: 'addb', attrs: { 'aria-label': t('import_title') }, onclick: () => hooks.onAdd() });
+    addBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 18h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 15.5v-5M9.6 12.6 12 10.2l2.4 2.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    addBtn.append(t('b_add'));
     this.plHead.hidden = true;
-    this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision')), find, h('div', {}, bar, this.plHead), this.list, plSec, me);
+    this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision'), addBtn), find, h('div', {}, bar, this.plHead), this.list, plSec, me);
   }
 
   update(rows: Row[], current: string | null, playing: boolean) {
@@ -176,7 +180,7 @@ export class Sidebar {
       case 'queued': veil = h('span', { class: 'veil' }, h('span', { class: 'spin' })); sub = s.position ? t('cloud_state_queued_pos', s.position) : t('cloud_state_queued'); break;
       case 'running': veil = h('span', { class: 'veil' }, h('span', { class: 'spin' })); sub = t('cloud_state_running'); break;
       case 'waiting_gpu': veil = h('span', { class: 'veil' }, h('span', { class: 'spin gpu' })); sub = t('cloud_state_waiting_gpu'); break;
-      case 'error': veil = h('span', { class: 'veil' }); sub = t(JOB_ERR); bad = true; break;
+      case 'error': veil = h('span', { class: 'veil' }); sub = t(jobErrorKey(s.code)); bad = true; break;
       case 'downloaded': break;
     }
     if (cur) veil = h('span', { class: 'veil' }, h('span', { class: `eq${this.playing ? '' : ' paused'}` }, h('i'), h('i'), h('i')));

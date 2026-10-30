@@ -10,6 +10,7 @@ export interface LibraryEntry {
   artist: string;
   cover_url: string | null;
   state: 'ready' | 'processing' | 'error' | 'cancelled';
+  config?: Record<string, unknown>; // config_json vigente (para reprocesar o reintentar)
   created_at: string;
   updated_at: string;
 }
@@ -26,10 +27,17 @@ export interface LiveJob {
 export interface PlaylistSummary { id: string; title: string; count: number; has_cover: boolean; created_at: string; updated_at: string }
 export interface Playlist extends PlaylistSummary { songs: string[] }
 
+/** Respuesta de POST /jobs, /library/{h}/reprocess y /library/{h}/lyrics. */
+export interface JobSubmit { hash: string; job_id?: string; state: string; cached?: boolean }
+/** GET /jobs/{id}: error_code estable; error es texto libre en ingles (solo respaldo). */
+export interface JobStatus { job_id: string; hash: string; state: LiveJob['state']; position: number | null; error?: string; error_code?: string }
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+  /** Campos extra del cuerpo de error (p. ej. job_id en 409 job_running). */
+  readonly body: Record<string, unknown>;
+  constructor(status: number, code: string, body: Record<string, unknown> = {}) { super(code); this.status = status; this.code = code; this.body = body; }
 }
 
 export interface TokenStore { get(): string | null; set(t: string | null): void }
@@ -69,7 +77,43 @@ export class Api {
 
   async library(): Promise<LibraryEntry[]> { return this.json(await this.authed('/library')); }
 
-  async serverInfo(): Promise<{ version?: string; gpu_name?: string }> { return this.json(await this.authed('/server/info')); }
+  async serverInfo(): Promise<{ version?: string; gpu?: boolean; gpu_name?: string }> { return this.json(await this.authed('/server/info')); }
+
+  async job(id: string): Promise<JobStatus> { return this.json(await this.authed(`/jobs/${id}`)); }
+  async cancelJob(id: string): Promise<void> { await this.authed(`/jobs/${id}`, { method: 'DELETE' }, [404]); }
+
+  /** Reprocesar el audio guardado en el server con otra configuracion (form, sin subir nada). */
+  async reprocess(hash: string, config: unknown): Promise<JobSubmit> {
+    const body = new URLSearchParams({ config_json: JSON.stringify(config) });
+    return this.json(await this.authed(`/library/${hash}/reprocess`, { method: 'POST', body }));
+  }
+
+  /** POST /jobs multipart (file + config_json) con progreso de subida. fetch no da progreso de
+   *  subida: XMLHttpRequest. `signal` cancela. Mismo trato de 401 y errores que el resto. */
+  uploadJob(file: Blob, filename: string, config: unknown, onProgress?: (sent: number, total: number) => void, signal?: AbortSignal): Promise<JobSubmit> {
+    return new Promise((resolve, reject) => {
+      const token = this.store.get();
+      if (!token) { reject(new ApiError(401, 'unauthorized')); return; }
+      const form = new FormData();
+      form.append('file', file, filename);
+      form.append('config_json', JSON.stringify(config));
+      const x = new XMLHttpRequest();
+      x.open('POST', this.base + '/jobs');
+      x.setRequestHeader('Authorization', `Bearer ${token}`);
+      x.upload.onprogress = (e) => onProgress?.(e.loaded, e.lengthComputable ? e.total : file.size);
+      x.onerror = () => reject(new ApiError(0, 'network'));
+      x.onabort = () => reject(new ApiError(0, 'aborted'));
+      x.onload = () => {
+        let j: Record<string, unknown> = {};
+        try { j = JSON.parse(x.responseText); } catch { /* sin JSON */ }
+        if (x.status === 401) { this.store.set(null); this.onUnauthorized?.(); reject(new ApiError(401, 'unauthorized')); return; }
+        if (x.status < 200 || x.status >= 300) { reject(new ApiError(x.status, typeof j.code === 'string' ? j.code : `http_${x.status}`, j)); return; }
+        resolve(j as unknown as JobSubmit);
+      };
+      signal?.addEventListener('abort', () => x.abort());
+      x.send(form);
+    });
+  }
 
   /** Jobs vivos de la cuenta (cola, procesando, esperando GPU). */
   async jobs(): Promise<LiveJob[]> { return this.json(await this.authed('/jobs')); }
@@ -149,7 +193,7 @@ export class Api {
       this.onUnauthorized?.();
       throw new ApiError(401, 'unauthorized');
     }
-    if (!r.ok && !okStatus.includes(r.status)) throw new ApiError(r.status, await errorCode(r));
+    if (!r.ok && !okStatus.includes(r.status)) { const [code, body] = await errorBody(r); throw new ApiError(r.status, code, body); }
     return r;
   }
 
@@ -161,7 +205,8 @@ export class Api {
 
 const jsonBody = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-async function errorCode(r: Response): Promise<string> {
-  try { const j = await r.json(); if (typeof j?.code === 'string') return j.code; } catch { /* sin JSON */ }
-  return `http_${r.status}`;
+async function errorBody(r: Response): Promise<[string, Record<string, unknown>]> {
+  try { const j = await r.json(); if (j && typeof j === 'object') return [typeof j.code === 'string' ? j.code : `http_${r.status}`, j]; } catch { /* sin JSON */ }
+  return [`http_${r.status}`, {}];
 }
+async function errorCode(r: Response): Promise<string> { return (await errorBody(r))[0]; }

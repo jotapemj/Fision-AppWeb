@@ -1,6 +1,7 @@
 // UI de extremo a extremo: server falso + Vite + Chrome sin ventana. Se mide el pixel.
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from './lib/harness.mjs';
@@ -9,7 +10,7 @@ import { makeZip, sineWav, bandsPng } from './lib/zipWriter.mjs';
 import { decodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const H1 = '1'.repeat(64), H2 = '2'.repeat(64), H3 = '3'.repeat(64);
+const H1 = '1'.repeat(64), H2 = '2'.repeat(64), H3 = '3'.repeat(64), H4 = '4'.repeat(64);
 
 const wd = (start, end, text) => ({ start, end, text });
 const LYRICS = { language: 'es', segments: [
@@ -32,6 +33,7 @@ async function fakeServer() {
   ]);
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const pl = { list: [], calls: [] }; // playlists en memoria
+  const up = { jobs: null, calls: [], zips: [], newReady: false, config: {} }; // subidas y reprocesos
   const srv = http.createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
@@ -39,8 +41,28 @@ async function fakeServer() {
     if (req.url === '/login') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
     if (req.headers.authorization !== 'Bearer tok') return json(401, { detail: 'Not authenticated' });
     if (req.url === '/auth/refresh') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
-    if (req.url === '/library') return json(200, [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', 'processing', '2026-10-01')]);
-    if (req.url === '/jobs') return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]);
+    if (req.url === '/library') {
+      const lib = [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', 'processing', '2026-10-01')];
+      if (up.newReady !== false) lib.push({ ...entry(H4, 'Subida', up.newReady === true ? 'ready' : 'processing', '2026-10-04'), config: up.config });
+      return json(200, lib);
+    }
+    if (req.url === '/jobs' && req.method === 'GET') {
+      // Un job subido se ve en vuelo una vez y luego acaba
+      const extra = up.jobs ? [up.jobs] : [];
+      if (up.jobs) { up.jobs = null; up.newReady = 'pending'; }
+      else if (up.newReady === 'pending') up.newReady = true;
+      return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }, ...extra]);
+    }
+    if (req.url === '/server/info') return json(200, { version: '2.1.0', gpu: false });
+    if (req.url === '/jobs' && req.method === 'POST') {
+      const cfg = (body.match(/name="config_json"\r\n\r\n([^\r]*)/) || [])[1];
+      up.calls.push({ type: req.headers['content-type'], cfg, name: (body.match(/filename="([^"]+)"/) || [])[1] });
+      up.config = JSON.parse(cfg || '{}');
+      up.jobs = { job_id: 'jnew', hash: H4, filename: 'x', state: 'queued', position: 2 };
+      return json(200, { hash: H4, job_id: 'jnew', state: 'queued', cached: false });
+    }
+    if (req.url === `/library/${H1}/reprocess`) { up.calls.push({ reprocess: decodeURIComponent(body.replace(/\+/g, ' ')) }); return json(200, { hash: H1, job_id: 'jr', state: 'queued' }); }
+    if (req.url.startsWith('/jobs/')) return json(200, { job_id: req.url.slice(6), hash: req.url.includes('jr') ? H1 : H4, state: 'done', position: null, error: '', error_code: '' });
     if (req.url === `/library/${H1}/lyrics`) return json(200, LYRICS);
     if (req.url.startsWith('/playlists')) {
       pl.calls.push(`${req.method} ${req.url}${body ? ' ' + body : ''}`);
@@ -54,7 +76,9 @@ async function fakeServer() {
       if (one && req.method === 'DELETE') { pl.list = pl.list.filter((x) => x !== one); res.writeHead(204); return res.end(); }
       if (m) return json(404, { detail: 'Playlist not found' });
     }
+    if (req.url === `/library/${H4}/zip`) { up.zips.push(H4); res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length }); return res.end(zip); }
     if (req.url === `/library/${H1}/zip`) {
+      up.zips.push(H1);
       // Lento a proposito: 5 trozos cada 300 ms, para ver la ola de descarga
       res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length });
       const n = 5, step = Math.ceil(zip.length / n);
@@ -64,7 +88,7 @@ async function fakeServer() {
     json(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${srv.address().port}`, pl, close: () => srv.close() };
+  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, close: () => srv.close() };
 }
 
 // Medidas dentro de la pagina: solapes, recortes, contraste calculado
@@ -139,6 +163,15 @@ test('login, estados de la lista, descarga y apertura', async () => {
     expect(rows.find((r) => r[0] === 'Cancion rota')[2], 'error marcado');
     const good = `[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena'))`;
     expect(await p.eval(`${good}.classList.contains('cld')`), 'buena empieza en la nube');
+    // Centro sin cancion: nebulosa girando (color) y la marca en blanco en el medio
+    await new Promise((r) => setTimeout(r, 600));
+    const idle = await p.eval(`(() => {
+      const n = document.querySelector('.main.idle .idleneb'), m = document.querySelector('.main.idle .idlemark');
+      if (!n || !m) return null;
+      const px = (c, f) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let k = 0; for (let i = 0; i < d.length; i += 4) if (f(d[i], d[i + 1], d[i + 2], d[i + 3])) k++; return k / (d.length / 4); };
+      return { color: px(n, (r, g, b, a) => a > 0 && Math.max(r, g, b) > 20), white: px(m, (r, g, b, a) => a > 200 && r > 240 && g > 240 && b > 240) };
+    })()`);
+    expect(idle && idle.color > 0.3 && idle.white > 0.05, `centro sin cancion: ${JSON.stringify(idle)}`);
     // Sin descargadas no hay filtro: solo el total (un hidden pisado por CSS lo dejaba visible)
     const bar = await p.eval(`(() => { const f = document.querySelector('.flt'), n = document.querySelector('.bar2 .count'); return { flt: f.getClientRects().length > 0, count: n.getClientRects().length > 0 }; })()`);
     expect(!bar.flt && bar.count, `cabecera sin descargadas: filtro ${bar.flt ? 'visible' : 'oculto'}, total ${bar.count ? 'visible' : 'oculto'}`);
@@ -165,7 +198,8 @@ test('login, estados de la lista, descarga y apertura', async () => {
     const names = await p.eval(`[...document.querySelectorAll('.stem .nm')].map(e => e.textContent).join()`);
     const tempo = await p.eval(`[...document.querySelectorAll('.act b')].map(b => b.textContent).join(' / ')`);
     expect(tempo.includes('120 BPM'), `BPM de beats.txt: ${tempo}`);
-    return `ola ${(wave * 100).toFixed(0)} % pintada, telon con arco (${cur.white}/64), stems: ${names}; ajustes: ${tempo}`;
+    expect(!(await p.eval(`!!document.querySelector('.main.idle')`)), 'el centro vacio sigue con cancion abierta');
+    return `centro vacio ${(idle.color * 100).toFixed(0)} % color + marca ${(idle.white * 100).toFixed(0)} %, ola ${(wave * 100).toFixed(0)} % pintada, telon con arco (${cur.white}/64), stems: ${names}; ajustes: ${tempo}`;
   } catch (e) { await c.close(); ctx = { skip: 'skip — fallo previo' }; throw e; }
 });
 
@@ -473,6 +507,66 @@ test('playlists: vacia, crear con el editor (solo las de la nube), abrirla, volv
   const toastText = await p.eval(`document.querySelector('.toast')?.textContent ?? ''`);
   expect(back === 3 && calls.some((x) => x.startsWith('DELETE /playlists/abcdef012345')) && toastText, `vuelta ${back} filas, aviso "${toastText}"`);
   return `creada y abierta; se ofrece solo ${offer}; borrada ("${toastText}")`;
+});
+
+test('anadir: comprueba antes de subir, sube con config; al acabar el job se descarga; reprocesar', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, up = c.fake.up;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fision-up-'));
+  const btnSend = `document.querySelector('dialog.imp .plfoot .btn:not(.ghost)')`;
+  try {
+    const short = path.join(tmp, 'corta.wav'), good = path.join(tmp, 'subida.wav');
+    fs.writeFileSync(short, sineWav(440, 5)); fs.writeFileSync(good, sineWav(440, 20));
+    const choose = async (file) => {
+      await p.waitFor(`document.querySelector('input.pick-audio')`, 3000);
+      const doc = await p.send('DOM.getDocument', {});
+      const q = await p.send('DOM.querySelector', { nodeId: doc.result.root.nodeId, selector: 'input.pick-audio' });
+      await p.send('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [file] });
+    };
+    // Sin ventana el selector se cancelaria solo: se intercepta y se rellena el input
+    await p.send('Page.enable');
+    await p.send('Page.setInterceptFileChooserDialog', { enabled: true });
+    await p.eval(`document.querySelector('.addb').click()`);
+    await choose(short);
+    try { await p.waitFor(`document.querySelector('dialog.imp') && !${btnSend}.disabled`, 5000); }
+    catch { throw new Error(`dialogo: ${await p.eval(`JSON.stringify({ dlg: !!document.querySelector('dialog.imp'), input: !!document.querySelector('input.pick-audio'), files: document.querySelector('input.pick-audio')?.files?.length, load: document.querySelector('.imload')?.hidden })`)}`); }
+    const warn = await p.eval(`!document.querySelector('.imwarn').hidden`);
+    await p.waitFor(`/0:05/.test(document.querySelector('.imtx small').textContent)`, 5000);
+    // Corta: no se sube nada
+    await p.eval(`${btnSend}.click()`);
+    const shortErr = await p.eval(`document.querySelector('dialog.imp .plerr').textContent`);
+    expect(warn && /15/.test(shortErr) && up.calls.length === 0, `sin GPU avisa ${warn}; corta: "${shortErr}", subidas ${up.calls.length}`);
+    // Cambiar de cancion y pasar a personalizada tocando guitarra
+    await p.eval(`document.querySelector('.imhero .btn.ghost').click()`);
+    await choose(good);
+    await p.waitFor(`/0:20/.test(document.querySelector('.imtx small').textContent)`, 5000);
+    await p.eval(`document.querySelectorAll('.imtile')[1].click()`);
+    const custom = await p.eval(`document.querySelectorAll('dialog.imp .seg button')[2].getAttribute('aria-checked')`);
+    await p.eval(`${btnSend}.click()`);
+    await p.waitFor(`!document.querySelector('dialog.imp')`, 10000);
+    const sent = up.calls[0];
+    expect(custom === 'true' && sent && /^multipart\/form-data/.test(sent.type) && sent.name === 'subida.wav', `subida: ${JSON.stringify(sent)}`);
+    const cfg = JSON.parse(sent.cfg);
+    expect(cfg.device === 'cpu' && cfg.chords === 'btc' && cfg.sep.mode === 'personalized' && cfg.sep.stems.guitar.enabled && cfg.sep.stems.bass.enabled, `config: ${sent.cfg}`);
+    // El job acaba (sondeo de 4 s): la cancion nueva se descarga sola
+    await p.waitFor(`[...document.querySelectorAll('.dr')].some((r) => r.textContent.includes('Subida') && !r.classList.contains('cld') && !r.querySelector('.spin'))`, 20000);
+    expect(up.zips.includes(H4), `zips pedidos: ${up.zips.join()}`);
+    // Reprocesar la que suena desde el menu: form con el config, y se vuelve a bajar
+    await p.eval(`[...document.querySelectorAll('.dr')].find((r) => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.top .t b')?.textContent === 'Cancion buena' && !document.querySelector('canvas.curtain-c')`, 10000);
+    const before = up.zips.filter((z) => z === H1).length;
+    await p.eval(`document.querySelector('.top .ib').click()`);
+    await p.eval(`document.querySelector('.menu-pop .menuitem').click()`);
+    await p.waitFor(`document.querySelector('dialog.imp') && !${btnSend}.disabled`, 5000);
+    await p.eval(`${btnSend}.click()`);
+    await p.waitFor(`!document.querySelector('dialog.imp')`, 5000);
+    const rp = up.calls.find((x) => x.reprocess)?.reprocess ?? '';
+    for (let i = 0; i < 80 && up.zips.filter((z) => z === H1).length === before; i++) await new Promise((r) => setTimeout(r, 250));
+    const after = up.zips.filter((z) => z === H1).length;
+    expect(rp.startsWith('config_json={"sep"') && after > before, `reproceso: "${rp}", zips H1 ${before} -> ${after}`);
+    await p.send('Page.setInterceptFileChooserDialog', { enabled: false });
+    return `corta rechazada, subida ${sent.name} (${cfg.sep.mode}, ${cfg.device}), descargada al acabar; reproceso y nueva descarga`;
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 test('sin excepciones en la pagina', async () => {

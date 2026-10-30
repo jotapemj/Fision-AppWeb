@@ -42,6 +42,8 @@ export interface PlayerHooks {
   onPitch?(): void;
   /** Vista elegida (la nebulosa oculta sus blobs en 3D). */
   onView?(v: View): void;
+  /** Reprocesar en el server (solo canciones del server). */
+  onReprocess?(): void;
 }
 
 const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="13" width="5" height="3" rx="1" fill="currentColor"/><rect x="9.5" y="7" width="5" height="3" rx="1" fill="currentColor"/><rect x="15.5" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
@@ -388,6 +390,11 @@ export class PlayerView {
       const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(neb.get()), 'aria-label': t('drawer_switch_nebula') } });
       sw.onclick = () => { neb.set(!neb.get()); sw.setAttribute('aria-checked', String(neb.get())); };
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('drawer_switch_nebula') }), sw));
+      if (this.hooks.onReprocess) {
+        const rp = h('button', { class: 'menuitem', textContent: t('drawer_item_reprocess') });
+        rp.onclick = () => { pop.remove(); anchor.setAttribute('aria-expanded', 'false'); this.hooks.onReprocess!(); };
+        pop.append(rp);
+      }
       if (this.hooks.hasBasicChords) {
         const g = h('div', { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': t('chords_dialog_title') } });
         [t('chords_basic'), t('chords_advanced')].forEach((label, i) => {
