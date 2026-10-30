@@ -124,6 +124,12 @@ export class Api {
     return r.status === 404 ? null : r.json();
   }
 
+  /** Transcripcion Whisper sobre vocals.flac; null = idioma automatico. 409 = voces aun no listas. */
+  async requestLyrics(hash: string, language: string | null): Promise<JobSubmit> {
+    return this.json(await this.authed(`/library/${hash}/lyrics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language }) }));
+  }
+  async deleteLyrics(hash: string): Promise<void> { await this.authed(`/library/${hash}/lyrics`, { method: 'DELETE' }, [404]); }
+
   async zip(hash: string, onProgress?: (done: number, total: number) => void): Promise<Uint8Array> {
     const r = await this.authed(`/library/${hash}/zip`);
     const total = Number(r.headers.get('content-length') || 0);

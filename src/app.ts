@@ -30,6 +30,11 @@ import pkg from '../package.json' with { type: 'json' };
 import { capture, idbParamsStore, restore, type ParamsStore } from './player/songParams.ts';
 
 const JOB_POLL_MS = 4000;
+const LYRICS_POLL_MS = 2500; // LyricsManager
+const LYRICS_JOBS = 'fision.lyricsJobs'; // job_id -> hash de las transcripciones pedidas aqui
+
+// GET /jobs no dice el tipo: los jobs de letra se reconocen por su id (sobreviven a recargar)
+function loadLyricsJobs(): Map<string, string> { try { return new Map(Object.entries(JSON.parse(localStorage.getItem(LYRICS_JOBS) ?? '{}'))); } catch { return new Map(); } }
 
 export class App {
   private api = new Api();
@@ -62,6 +67,8 @@ export class App {
   private jobErrors = new Map<string, string>(); // hash -> error_code (en memoria)
   private gpu: Promise<boolean | null> | null = null;
   private idle: IdleMain | null = null; // centro sin cancion
+  private lyricsJobs = loadLyricsJobs();
+  private lyricsTimer = 0;
 
   constructor(root: HTMLElement, settings: SettingsStore) {
     this.root = root;
@@ -123,7 +130,8 @@ export class App {
   private async refreshLibrary() {
     try {
       const [entries, jobs, local] = await Promise.all([this.api.library(), this.api.jobs(), this.store!.list()]);
-      this.entries = entries; this.jobs = jobs; this.downloaded = new Set(local);
+      // Los jobs de letra no ocupan la fila (la cancion se sigue pudiendo abrir) ni piden zip al acabar
+      this.entries = entries; this.jobs = jobs.filter((j) => !this.lyricsJobs.has(j.job_id)); this.downloaded = new Set(local);
       this.online = true;
       this.render();
       void this.settleJobs();
@@ -342,7 +350,16 @@ export class App {
       if (!hasBasic) player.chordsBasic = false;
       const save = () => { clearTimeout(this.saveTimer); this.flushSave = null; this.params.put(key, capture(player)); };
       player.onChange = () => { clearTimeout(this.saveTimer); this.flushSave = save; this.saveTimer = window.setTimeout(save, 400); };
+      let setLyr: (st: LyricsState) => void = () => {};
+      let lastContent: LyricsState | null = null;
+      const durSec = rep.durationMs / 1000;
       const view = new PlayerView(player, e, await this.cover(e.hash), {
+        lyrics: {
+          request: (lang, again) => void this.requestLyrics(e, lang, again, durSec, (st) => { if (st.kind === 'content') lastContent = st; setLyr(st); }),
+          cancelJob: () => void this.cancelLyrics(e, setLyr),
+          back: () => setLyr(lastContent ?? { kind: 'picker' }),
+          reprocess: () => setLyr({ kind: 'picker', reprocess: true }),
+        },
         onPrev: () => this.step(-1), onNext: () => this.step(1),
         onEnded: () => this.step(1), onPlayState: () => this.render(),
         onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
@@ -368,7 +385,14 @@ export class App {
         view.setLyrics(lyrics.kind === 'content' ? { ...lyrics, chords: chordsOverWords(lyrics.rows, cells) } : lyrics);
       };
       applyChords();
-      this.loadLyrics(e, rep.durationMs / 1000).then((st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); });
+      setLyr = (st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); };
+      this.loadLyrics(e, durSec).then((st) => {
+        if (st.kind === 'content') lastContent = st;
+        // Sin letra pero con su job en marcha: seguir esperandolo
+        const live = [...this.lyricsJobs].find(([, hsh]) => hsh === e.hash);
+        if (st.kind !== 'content' && live) { setLyr({ kind: 'processing' }); this.pollLyrics(e, live[0], durSec, (x) => { if (x.kind === 'content') lastContent = x; setLyr(x); }); return; }
+        setLyr(st);
+      });
       // Al empezar el fundido arranca la musica (abrir = reproducir, como Android)
       curtain.finish(() => { void view.toggle(); }, () => {});
     } catch (err) {
@@ -440,7 +464,67 @@ export class App {
       if (f) try { json = JSON.parse(new TextDecoder().decode(f.data)); } catch { json = null; }
     }
     const rows = json ? buildLyricRows(json, durationSec) : [];
-    return rows.some((r) => r.type === 'text') ? { kind: 'content', rows } : { kind: 'none' };
+    return rows.some((r) => r.type === 'text') ? { kind: 'content', rows } : { kind: 'picker' };
+  }
+
+  private saveLyricsJobs() { try { localStorage.setItem(LYRICS_JOBS, JSON.stringify(Object.fromEntries(this.lyricsJobs))); } catch { /* sin storage */ } }
+
+  /** POST /library/{h}/lyrics (al reprocesar, antes DELETE de la vieja) y a esperar el job. */
+  private async requestLyrics(e: LibraryEntry, lang: string | null, again: boolean, durSec: number, set: (st: LyricsState) => void) {
+    set({ kind: 'processing' });
+    try {
+      if (again) await this.api.deleteLyrics(e.hash);
+      const r = await this.api.requestLyrics(e.hash, lang);
+      if (!r.job_id) throw new ApiError(0, 'no_job');
+      this.lyricsJobs.set(r.job_id, e.hash); this.saveLyricsJobs();
+      this.pollLyrics(e, r.job_id, durSec, set);
+    } catch (err) {
+      // 409: voces aun no listas o job ya activo -> aviso y a elegir otra vez
+      if (err instanceof ApiError && err.status === 409) { toast(t('lyrics_no_vocals')); set({ kind: 'picker' }); return; }
+      if (err instanceof ApiError && err.status === 429) { toast(t('err_job_limit')); set({ kind: 'picker' }); return; }
+      set({ kind: 'error' });
+    }
+  }
+
+  private pollLyrics(e: LibraryEntry, jobId: string, durSec: number, set: (st: LyricsState) => void) {
+    clearTimeout(this.lyricsTimer);
+    const tick = async () => {
+      if (this.current?.entry.hash !== e.hash) return; // otra cancion: se retoma al volver
+      let st;
+      try { st = await this.api.job(jobId); }
+      catch (err) {
+        if (err instanceof ApiError && err.status === 404) { this.forgetLyricsJob(jobId); set(await this.loadLyrics(e, durSec)); return; }
+        this.lyricsTimer = window.setTimeout(tick, LYRICS_POLL_MS); return;
+      }
+      if (st.state === 'done') {
+        this.forgetLyricsJob(jobId);
+        const got = await this.loadLyrics(e, durSec);
+        set(got.kind === 'content' ? got : { kind: 'error' });
+        return;
+      }
+      if (st.state === 'error' || st.state === 'cancelled') {
+        this.forgetLyricsJob(jobId);
+        const c = st.error_code;
+        // timeout / GPU ocupada / sin voces: aviso y vuelta a elegir; el resto, pantalla de error
+        if (c === 'timeout') { toast(t('lyrics_timeout')); set({ kind: 'picker' }); }
+        else if (c === 'gpu_busy') { toast(t('job_err_gpu_busy')); set({ kind: 'picker' }); }
+        else if (c === 'vocals_missing') { toast(t('lyrics_no_vocals')); set({ kind: 'picker' }); }
+        else if (c === 'cancelled') set({ kind: 'picker' });
+        else set({ kind: 'error' });
+        return;
+      }
+      this.lyricsTimer = window.setTimeout(tick, LYRICS_POLL_MS);
+    };
+    this.lyricsTimer = window.setTimeout(tick, LYRICS_POLL_MS);
+  }
+
+  private forgetLyricsJob(id: string) { this.lyricsJobs.delete(id); this.saveLyricsJobs(); }
+
+  private async cancelLyrics(e: LibraryEntry, set: (st: LyricsState) => void) {
+    clearTimeout(this.lyricsTimer);
+    const live = [...this.lyricsJobs].find(([, hsh]) => hsh === e.hash);
+    if (live) { try { await this.api.cancelJob(live[0]); } catch { /* ya no estaba */ } this.forgetLyricsJob(live[0]); }
+    set({ kind: 'picker' });
   }
 
   /** Anterior / siguiente entre las descargadas, en el orden de la lista. */

@@ -33,7 +33,7 @@ async function fakeServer() {
   ]);
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const pl = { list: [], calls: [] }; // playlists en memoria
-  const up = { jobs: null, calls: [], zips: [], newReady: false, config: {} }; // subidas y reprocesos
+  const up = { jobs: null, calls: [], zips: [], newReady: false, config: {}, lyr: { posts: [], polls: 0, ready: false } }; // subidas, reprocesos, letra
   const srv = http.createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
@@ -51,6 +51,7 @@ async function fakeServer() {
       const extra = up.jobs ? [up.jobs] : [];
       if (up.jobs) { up.jobs = null; up.newReady = 'pending'; }
       else if (up.newReady === 'pending') up.newReady = true;
+      if (up.lyr.posts.length && !up.lyr.ready) extra.push({ job_id: 'jl', hash: H4, filename: 'x', state: 'running', position: 0 });
       return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }, ...extra]);
     }
     if (req.url === '/server/info') return json(200, { version: '2.1.0', gpu: false });
@@ -62,8 +63,11 @@ async function fakeServer() {
       return json(200, { hash: H4, job_id: 'jnew', state: 'queued', cached: false });
     }
     if (req.url === `/library/${H1}/reprocess`) { up.calls.push({ reprocess: decodeURIComponent(body.replace(/\+/g, ' ')) }); return json(200, { hash: H1, job_id: 'jr', state: 'queued' }); }
-    if (req.url.startsWith('/jobs/')) return json(200, { job_id: req.url.slice(6), hash: req.url.includes('jr') ? H1 : H4, state: 'done', position: null, error: '', error_code: '' });
+    if (req.url.startsWith('/jobs/') && req.url !== '/jobs/jl') return json(200, { job_id: req.url.slice(6), hash: req.url.includes('jr') ? H1 : H4, state: 'done', position: null, error: '', error_code: '' });
     if (req.url === `/library/${H1}/lyrics`) return json(200, LYRICS);
+    if (req.url === `/library/${H4}/lyrics` && req.method === 'POST') { up.lyr.posts.push(body); return json(200, { hash: H4, job_id: 'jl', state: 'queued' }); }
+    if (req.url === `/library/${H4}/lyrics`) return up.lyr.ready ? json(200, LYRICS) : json(404, { detail: 'No lyrics', code: 'lyrics_missing' });
+    if (req.url === '/jobs/jl') { if (++up.lyr.polls >= 2) up.lyr.ready = true; return json(200, { job_id: 'jl', hash: H4, state: up.lyr.ready ? 'done' : 'running', position: 0 }); }
     if (req.url.startsWith('/playlists')) {
       pl.calls.push(`${req.method} ${req.url}${body ? ' ' + body : ''}`);
       const m = req.url.match(/^\/playlists\/([0-9a-f]{12})$/), one = m && pl.list.find((x) => x.id === m[1]);
@@ -567,6 +571,31 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     await p.send('Page.setInterceptFileChooserDialog', { enabled: false });
     return `corta rechazada, subida ${sent.name} (${cfg.sep.mode}, ${cfg.device}), descargada al acabar; reproceso y nueva descarga`;
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('letra: sin letra se elige idioma y se pide; el job de letra no ocupa la fila; al acabar se ve', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, lyr = c.fake.up.lyr;
+  const row = `[...document.querySelectorAll('.dr')].find((r) => r.textContent.includes('Subida'))`;
+  await p.eval(`${row}.click()`);
+  await p.waitFor(`document.querySelector('.top .t b')?.textContent === 'Subida' && !document.querySelector('canvas.curtain-c')`, 10000);
+  await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
+  await p.waitFor(`document.querySelector('.lystate .lycard')`, 5000);
+  const auto = await p.eval(`document.querySelector('.lycard b').textContent`);
+  await p.eval(`document.querySelector('.lycard').click()`);
+  await p.waitFor(`document.querySelectorAll('dialog.lydlg .lylang').length === 28`, 3000);
+  await p.eval(`[...document.querySelectorAll('.lylang')].find((b) => /Español|Spanish/.test(b.textContent)).click()`);
+  await p.eval(`document.querySelector('.lystate .btn:not(.ghost)').click()`);
+  await p.waitFor(`document.querySelector('.lystate[role=status]')`, 3000);
+  expect(/Auto/.test(auto) && lyr.posts[0] === '{"language":"es"}', `idioma: ${auto} -> POST ${lyr.posts[0]}`);
+  // Con el job de letra en marcha la fila no pasa a "procesando"
+  await new Promise((r) => setTimeout(r, 500));
+  const busyRow = await p.eval(`!!${row}.querySelector('.spin')`);
+  try { await p.waitFor(`document.querySelectorAll('.lyrics .cl').length > 0`, 15000); }
+  catch { throw new Error(`sin letra: "${await p.eval(`document.querySelector('.view')?.textContent?.slice(0, 120)`)}", sondeos ${lyr.polls}, posts ${lyr.posts.length}`); }
+  expect(!busyRow, 'la fila se marco como procesando por el job de letra');
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+  return `Auto -> ${lyr.posts[0]}, ${lyr.polls} sondeos, letra visible`;
 });
 
 test('sin excepciones en la pagina', async () => {

@@ -1,7 +1,8 @@
 // Vista Letra: linea activa centrada, karaoke por palabra, tocar = seek (maqueta player.html).
 import { t } from '../i18n/i18n.ts';
 import { activeRow, hasWords, wordProgress, type LyricRow } from '../player/lyrics.ts';
-import { h } from './dom.ts';
+import { h, img } from './dom.ts';
+import { LYRICS_LANGS, type LyricsLang } from '../player/lyricsLangs.ts';
 
 const KARAOKE_PREF = 'fision.lyrics_karaoke_mode'; // lyrics_karaoke_mode, default false
 
@@ -9,7 +10,20 @@ function loadKaraoke(): boolean { try { return localStorage.getItem(KARAOKE_PREF
 function saveKaraoke(on: boolean) { try { localStorage.setItem(KARAOKE_PREF, on ? '1' : '0'); } catch { /* sin storage */ } }
 
 /** chords: "fila:palabra" -> acorde (acordes sobre la letra, solo web). */
-export type LyricsState = { kind: 'loading' } | { kind: 'none' } | { kind: 'content'; rows: LyricRow[]; chords?: Map<string, string>; fmt?: (c: string | null) => string };
+export type LyricsState = { kind: 'loading' } | { kind: 'none' }
+  | { kind: 'picker'; reprocess?: boolean } // sin letra (o reprocesar): elegir idioma y pedirla
+  | { kind: 'processing' }                  // job de Whisper en marcha
+  | { kind: 'error' }
+  | { kind: 'content'; rows: LyricRow[]; chords?: Map<string, string>; fmt?: (c: string | null) => string };
+
+/** Acciones de la transcripcion (las pone la app; sin ellas no se ofrece pedir letra). */
+export interface LyricsActions {
+  request(lang: string | null, reprocess: boolean): void;
+  cancelJob(): void;
+  /** Volver de reprocesar sin pedir nada (a la letra que habia). */
+  back(): void;
+  reprocess(): void;
+}
 
 export class LyricsView {
   private scroller = h('div', { class: 'lyrics' });
@@ -21,6 +35,7 @@ export class LyricsView {
   private active = -2;
   private karaoke = loadKaraoke();
   private onSeek: (sec: number) => void;
+  actions: LyricsActions | null = null;
 
   constructor(state: LyricsState, onSeek: (sec: number) => void) {
     this.onSeek = onSeek;
@@ -29,6 +44,11 @@ export class LyricsView {
 
   set(state: LyricsState) {
     this.active = -2;
+    if (state.kind === 'picker' || state.kind === 'processing' || state.kind === 'error') {
+      this.rows = []; this.lines = []; this.words = [];
+      this.el.replaceChildren(state.kind === 'picker' ? this.picker(!!state.reprocess) : this.processing(state.kind === 'error'));
+      return;
+    }
     if (state.kind !== 'content') {
       this.rows = []; this.lines = []; this.words = [];
       this.el.replaceChildren(this.scroller);
@@ -41,7 +61,12 @@ export class LyricsView {
     const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(this.karaoke && karaokeOk), 'aria-label': t('lyrics_karaoke_mode') }, disabled: !karaokeOk,
       title: karaokeOk ? '' : t('lyrics_karaoke_unavailable') });
     sw.onclick = () => { this.karaoke = !this.karaoke; saveKaraoke(this.karaoke); sw.setAttribute('aria-checked', String(this.karaoke)); this.scroller.classList.toggle('kar', this.karaoke); this.active = -2; };
-    const opts = h('label', { class: 'lyopts' }, t('lyrics_karaoke_mode'), sw);
+    const opts = h('div', { class: 'lyopts' }, h('label', {}, t('lyrics_karaoke_mode'), sw));
+    if (this.actions) {
+      const rp = h('button', { class: 'btn ghost', textContent: t('lyrics_reprocess') });
+      rp.onclick = () => this.actions?.reprocess();
+      opts.append(rp);
+    }
     this.lines = []; this.words = [];
     const chords = state.chords ?? new Map<string, string>();
     const fmt = state.fmt ?? ((c: string | null) => c ?? '');
@@ -70,6 +95,50 @@ export class LyricsView {
     this.scroller.classList.toggle('kar', this.karaoke && karaokeOk);
     this.scroller.replaceChildren(list);
     this.el.replaceChildren(opts, this.scroller);
+  }
+
+  /** PICKER: "Procesar letra" + tarjeta de idioma (Auto al empezar) + Confirmar; Cancelar al reprocesar. */
+  private picker(reprocess: boolean): HTMLElement {
+    let lang: LyricsLang = LYRICS_LANGS[0];
+    const flagEl = h('span', { class: 'lyflag' }), name = h('b');
+    const paint = () => { flagEl.replaceChildren(img(lang.flag, '', '')); flagEl.classList.toggle('auto', lang.code === null); name.textContent = t(lang.key); };
+    const card = h('button', { class: 'lycard', attrs: { 'aria-haspopup': 'dialog' } }, flagEl, h('span', { class: 'lyct' }, h('small', { textContent: t('lyrics_card_title') }), name), h('span', { class: 'chev', textContent: '▾', attrs: { 'aria-hidden': 'true' } }));
+    card.onclick = () => this.langDialog(lang, (l) => { lang = l; paint(); });
+    const ok = h('button', { class: 'btn', textContent: t('lyrics_confirm') });
+    ok.onclick = () => this.actions?.request(lang.code, reprocess);
+    const cancel = h('button', { class: 'btn ghost lyred', textContent: t('lyrics_cancel'), hidden: !reprocess });
+    cancel.onclick = () => this.actions?.back();
+    paint();
+    if (!this.actions) return h('div', { class: 'lystate' }, h('p', { class: 'soon', textContent: t('web_no_lyrics') }));
+    return h('div', { class: 'lystate' }, h('h2', { textContent: t('lyrics_title_process') }), card, ok, cancel);
+  }
+
+  /** SKELETON / ERROR: "Procesando letra" con barras y Cancelar (pide confirmacion); el error vuelve a elegir. */
+  private processing(error: boolean): HTMLElement {
+    const cancel = h('button', { class: 'btn ghost lyred', textContent: t(error ? 'lyrics_reprocess' : 'lyrics_cancel') });
+    cancel.onclick = () => {
+      if (error) { this.set({ kind: 'picker' }); return; }
+      if (confirm(t('lyrics_cancel_dialog_title'))) this.actions?.cancelJob();
+    };
+    const skel = h('div', { class: 'skel mini', attrs: { 'aria-busy': 'true' } }, h('i'), h('i'), h('i'), h('i'), h('i'), h('i'));
+    return h('div', { class: 'lystate', attrs: { role: 'status' } }, h('h2', { textContent: t(error ? 'lyrics_error' : 'lyrics_processing') }), error ? '' : skel, cancel);
+  }
+
+  private langDialog(cur: LyricsLang, pick: (l: LyricsLang) => void) {
+    const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+    const list = h('div', { class: 'lylangs', attrs: { role: 'listbox', 'aria-label': t('lyrics_card_title') } }, ...LYRICS_LANGS.map((l) => {
+      const b = h('button', { class: 'lylang', attrs: { role: 'option', 'aria-selected': String(l === cur) } },
+        h('span', { class: `lyflag${l.code === null ? ' auto' : ''}` }, img(l.flag, '', '')), h('span', { textContent: t(l.key) }), h('span', { class: 'ck', textContent: l === cur ? '✓' : '' }));
+      b.onclick = () => { pick(l); dlg.close(); };
+      return b;
+    }));
+    const dlg = h('dialog', { class: 'settings lydlg', attrs: { 'aria-label': t('lyrics_card_title') } }, h('div', { class: 'shd' }, h('h2', { textContent: t('lyrics_card_title') }), close), list);
+    close.onclick = () => dlg.close();
+    dlg.addEventListener('close', () => dlg.remove());
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+    document.body.append(dlg);
+    dlg.showModal();
+    (list.querySelector('[aria-selected=true]') as HTMLElement | null)?.focus();
   }
 
   /** t = reloj de letra (s). Llamar en cada frame con la vista visible. */

@@ -4,7 +4,7 @@ import { t } from '../i18n/i18n.ts';
 import { BPM_MAX, BPM_MIN, ECHO_BEATS, ECHO_LABELS, FX_FALLBACK_BPM, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, filterCutoffHz, fxActive, newFx, type MetroSpeed, type Player, type StemState } from '../player/player.ts';
 import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
-import { LyricsView, type LyricsState } from './lyricsView.ts';
+import { LyricsView, type LyricsActions, type LyricsState } from './lyricsView.ts';
 import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
 import { currentBeat, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
 import { ChordStrip } from './chordStrip.ts';
@@ -44,6 +44,8 @@ export interface PlayerHooks {
   onView?(v: View): void;
   /** Reprocesar en el server (solo canciones del server). */
   onReprocess?(): void;
+  /** Pedir / cancelar transcripcion de letra. */
+  lyrics?: LyricsActions;
 }
 
 const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="13" width="5" height="3" rx="1" fill="currentColor"/><rect x="9.5" y="7" width="5" height="3" rx="1" fill="currentColor"/><rect x="15.5" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
@@ -98,6 +100,7 @@ export class PlayerView {
     this.p = p; this.hooks = hooks;
     this.card = { cover, title: song.title || song.filename, artist: song.artist ?? '' };
     this.lyrics = new LyricsView({ kind: 'loading' }, (sec) => p.seek(sec * 1000));
+    this.lyrics.actions = hooks.lyrics ?? null;
     const top = h('div', { class: 'top' },
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
       h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })),
