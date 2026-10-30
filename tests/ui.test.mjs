@@ -31,8 +31,10 @@ async function fakeServer() {
     { name: 'artcover.png', data: bandsPng(64, 64, [[[200, 30, 120], 0.6], [[30, 40, 160], 0.4]]) },
   ]);
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
+  const pl = { list: [], calls: [] }; // playlists en memoria
   const srv = http.createServer(async (req, res) => {
-    for await (const _ of req);
+    let body = '';
+    for await (const c of req) body += c;
     const json = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
     if (req.url === '/login') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
     if (req.headers.authorization !== 'Bearer tok') return json(401, { detail: 'Not authenticated' });
@@ -40,6 +42,18 @@ async function fakeServer() {
     if (req.url === '/library') return json(200, [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', 'processing', '2026-10-01')]);
     if (req.url === '/jobs') return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]);
     if (req.url === `/library/${H1}/lyrics`) return json(200, LYRICS);
+    if (req.url.startsWith('/playlists')) {
+      pl.calls.push(`${req.method} ${req.url}${body ? ' ' + body : ''}`);
+      const m = req.url.match(/^\/playlists\/([0-9a-f]{12})$/), one = m && pl.list.find((x) => x.id === m[1]);
+      if (req.url === '/playlists' && req.method === 'GET') return json(200, pl.list.map(({ songs, ...rest }) => rest));
+      if (req.url === '/playlists' && req.method === 'POST') {
+        const j = JSON.parse(body), p = { id: 'abcdef012345', title: j.title, songs: j.songs, count: j.songs.length, has_cover: false, created_at: 'c', updated_at: 'u1' };
+        pl.list.push(p); return json(201, p);
+      }
+      if (one && req.method === 'GET') return json(200, one);
+      if (one && req.method === 'DELETE') { pl.list = pl.list.filter((x) => x !== one); res.writeHead(204); return res.end(); }
+      if (m) return json(404, { detail: 'Playlist not found' });
+    }
     if (req.url === `/library/${H1}/zip`) {
       // Lento a proposito: 5 trozos cada 300 ms, para ver la ola de descarga
       res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length });
@@ -50,7 +64,7 @@ async function fakeServer() {
     json(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${srv.address().port}`, close: () => srv.close() };
+  return { url: `http://127.0.0.1:${srv.address().port}`, pl, close: () => srv.close() };
 }
 
 // Medidas dentro de la pagina: solapes, recortes, contraste calculado
@@ -108,7 +122,7 @@ async function setup() {
   const vite = await createServer({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), logLevel: 'silent', server: { port, strictPort: true } });
   await vite.listen();
   const page = await launch();
-  ctx = { page, url: `http://localhost:${port}/app/`, close: async () => { await page.close(); await vite.close(); api.close(); } };
+  ctx = { page, fake: api, url: `http://localhost:${port}/app/`, close: async () => { await page.close(); await vite.close(); api.close(); } };
   return ctx;
 }
 
@@ -424,6 +438,41 @@ test('3D: escena pintada, luces con el interruptor, arrastre, omni, mute, baile 
   await p.eval(`document.querySelector('.d3head .switch').click()`); // deja el 3D como estaba
   expect(locked, 'mezcla sin bloquear en 3D');
   return `pintado ${(on.lit * 100).toFixed(0)} %, brillo ${off.mean.toFixed(0)} -> ${on.mean.toFixed(0)}, tele ${tv.white} px de texto, dollhouse, arrastre, omni, mute, baile, reset y mezcla bloqueada`;
+});
+
+test('playlists: vacia, crear con el editor (solo las de la nube), abrirla, volver y borrar', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, calls = c.fake.pl.calls;
+  await p.waitFor(`document.querySelector('.plsec .empty')`, 5000);
+  await p.eval(`document.querySelector('.pladd').click()`);
+  await p.waitFor(`document.querySelector('dialog.pled')`, 3000);
+  // Sin titulo no se envia nada
+  const before = calls.length;
+  await p.eval(`document.querySelector('.plfoot .btn:not(.ghost)').click()`);
+  const noTitle = await p.eval(`document.querySelector('.plerr').textContent`);
+  expect(noTitle && calls.length === before, `sin titulo: "${noTitle}", peticiones ${calls.length - before}`);
+  await p.eval(`(() => { const i = document.querySelector('dialog.pled input.field'); i.value = 'Ensayo'; i.dispatchEvent(new Event('input')); })()`);
+  await p.eval(`[...document.querySelectorAll('dialog.pled .btn.ghost')].find((b) => b.getAttribute('aria-expanded') !== null).click()`);
+  const offer = await p.eval(`[...document.querySelectorAll('.plpk b')].map((b) => b.textContent).join(',')`);
+  expect(offer === 'Cancion buena', `se ofrecen: ${offer}`); // ni la rota ni la de la cola
+  await p.eval(`document.querySelector('.plpk').click()`);
+  await p.eval(`document.querySelector('.plfoot .btn:not(.ghost)').click()`);
+  await p.waitFor(`!document.querySelector('dialog.pled') && document.querySelector('.plhead:not([hidden])')`, 5000);
+  const post = calls.find((x) => x.startsWith('POST /playlists'));
+  expect(post && JSON.parse(post.slice(post.indexOf('{'))).songs.length === 1, `POST: ${post}`);
+  const opened = await p.eval(`({ head: document.querySelector('.plhead .plt b').textContent, rows: [...document.querySelectorAll('.list .dr b')].map((b) => b.textContent).join(','), side: document.querySelector('.plr .pc').textContent })`);
+  expect(opened.head === 'Ensayo' && opened.rows === 'Cancion buena' && opened.side === '1', JSON.stringify(opened));
+  await p.eval(`document.querySelector('.plback').click()`);
+  const back = await p.eval(`document.querySelectorAll('.list .dr').length`);
+  // Borrar desde el menu de la playlist
+  await p.eval(`document.querySelector('.plr').click()`);
+  await p.waitFor(`document.querySelector('.plhead:not([hidden]) .plopt')`, 3000);
+  await p.eval(`window.confirm = () => true; document.querySelector('.plopt').click()`);
+  await p.eval(`document.querySelector('.plhead .menu .danger').click()`);
+  await p.waitFor(`document.querySelector('.plsec .empty') && document.querySelector('.plhead').hidden`, 5000);
+  const toastText = await p.eval(`document.querySelector('.toast')?.textContent ?? ''`);
+  expect(back === 3 && calls.some((x) => x.startsWith('DELETE /playlists/abcdef012345')) && toastText, `vuelta ${back} filas, aviso "${toastText}"`);
+  return `creada y abierta; se ofrece solo ${offer}; borrada ("${toastText}")`;
 });
 
 test('sin excepciones en la pagina', async () => {

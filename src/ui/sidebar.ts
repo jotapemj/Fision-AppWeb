@@ -1,12 +1,23 @@
-// Lateral de escritorio: marca, buscador, filtro, canciones y cuenta (maqueta player.html).
+// Lateral de escritorio: marca, buscador, filtro, canciones, playlists y cuenta (maqueta player.html).
+// Abrir una playlist cambia la lista por sus canciones (PlaylistActivity) con una cabecera para volver.
 import { t } from '../i18n/i18n.ts';
 import { applyFilter, counts, search, type Filter, type Row } from '../library/library.ts';
 import { dismissable, h, img } from './dom.ts';
 import wordmark from '../assets/icons/wordmark.svg';
 import { CoverWave } from './coverWave.ts';
+import type { Playlist, PlaylistSummary } from '../api/client.ts';
+import { playlistRows } from '../library/playlists.ts';
 
 export interface SidebarHooks {
-  onPick(row: Row): void;
+  /** `queue` = canciones de la playlist abierta (contexto de prev/next) o null = biblioteca. */
+  onPick(row: Row, queue: string[] | null): void;
+  onOpenPlaylist(id: string): void;
+  onClosePlaylist(): void;
+  onNewPlaylist(): void;
+  onEditPlaylist(p: Playlist): void;
+  onDeletePlaylist(p: Playlist): void;
+  /** 1 url = portada propia; varias = mosaico; vacio = sin nada. */
+  playlistCover(p: PlaylistSummary): Promise<string[]>;
   onSettings(): void;
   cover(hash: string): Promise<string | null>;
 }
@@ -29,6 +40,13 @@ export class Sidebar {
   private playing = false;
   private hooks: SidebarHooks;
   private waves = new Map<string, CoverWave>(); // una por descarga: conserva el nivel entre repintados
+  private plList = h('div', { class: 'pls', attrs: { role: 'list' } });
+  private plAdd = h('button', { class: 'pladd', textContent: '+', attrs: { 'aria-label': t('playlist_new'), title: t('playlist_new') } });
+  private playlists: PlaylistSummary[] = [];
+  private canEdit = false;
+  private open: Playlist | null = null;
+  private bar: HTMLElement;
+  private plHead = h('div', { class: 'plhead' });
 
   constructor(user: string, server: string, hooks: SidebarHooks) {
     this.hooks = hooks;
@@ -38,13 +56,16 @@ export class Sidebar {
     find.innerHTML = SEARCH_SVG;
     find.append(input);
     this.flt.onclick = () => this.openFilterMenu();
-    const bar = h('div', { class: 'bar2' }, h('span', { class: 't', textContent: t('tab_songs') }), this.flt, this.count);
+    const bar = this.bar = h('div', { class: 'bar2' }, h('span', { class: 't', textContent: t('tab_songs') }), this.flt, this.count);
+    this.plAdd.onclick = () => hooks.onNewPlaylist();
+    const plSec = h('section', { class: 'plsec', attrs: { 'aria-label': t('tab_playlists') } }, h('div', { class: 'plbar' }, h('span', { textContent: t('tab_playlists') }), this.plAdd), this.plList);
     const me = h('div', { class: 'me' },
       h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } }),
       h('span', { class: 'who' }, h('b', { textContent: user }), h('span', { textContent: server })),
       h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }));
     me.lastElementChild!.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
-    this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision')), find, bar, this.list, me);
+    this.plHead.hidden = true;
+    this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision')), find, h('div', {}, bar, this.plHead), this.list, plSec, me);
   }
 
   update(rows: Row[], current: string | null, playing: boolean) {
@@ -52,7 +73,67 @@ export class Sidebar {
     this.render();
   }
 
+  /** Playlists del server; sin server alcanzable no se crea ni se edita (canEdit). */
+  setPlaylists(list: PlaylistSummary[], canEdit: boolean) {
+    this.playlists = list; this.canEdit = canEdit;
+    this.plAdd.disabled = !canEdit;
+    if (this.open && !list.some((p) => p.id === this.open!.id)) this.open = null;
+    this.renderPlaylists();
+    this.render();
+  }
+
+  /** Abre (o cierra con null) una playlist en la lista. */
+  showPlaylist(p: Playlist | null) {
+    this.open = p;
+    this.renderPlaylists();
+    this.render();
+  }
+
+  get openPlaylist() { return this.open; }
+
+  private renderPlaylists() {
+    if (!this.playlists.length) { this.plList.replaceChildren(h('p', { class: 'empty', textContent: t('playlists_empty_title') })); return; }
+    this.plList.replaceChildren(...this.playlists.map((p) => {
+      const cv = h('span', { class: 'pcv' });
+      this.hooks.playlistCover(p).then((urls) => {
+        cv.classList.toggle('mosaic', urls.length > 1);
+        cv.replaceChildren(...urls.map((u) => img(u, '', '')));
+      });
+      const b = h('button', { class: `plr${this.open?.id === p.id ? ' cur' : ''}`, attrs: { role: 'listitem', ...(this.open?.id === p.id ? { 'aria-current': 'true' } : {}) } },
+        cv, h('span', { class: 'pt', textContent: p.title }), h('span', { class: 'pc', textContent: String(p.count) }));
+      b.onclick = () => (this.open?.id === p.id ? this.hooks.onClosePlaylist() : this.hooks.onOpenPlaylist(p.id));
+      return b;
+    }));
+  }
+
+  /** Cabecera de la playlist abierta: volver, titulo con su cuenta y opciones. */
+  private renderPlHead(p: Playlist) {
+    const back = h('button', { class: 'ib plback', textContent: '←', attrs: { 'aria-label': t('playlist_back') } });
+    back.onclick = () => this.hooks.onClosePlaylist();
+    const opts = h('button', { class: 'ib plopt', textContent: '⋯', attrs: { 'aria-label': t('playlist_options'), 'aria-haspopup': 'menu' } });
+    opts.disabled = !this.canEdit;
+    opts.onclick = () => {
+      if (opts.getAttribute('aria-expanded') === 'true') return;
+      const menu = h('div', { class: 'menu', attrs: { role: 'menu' } },
+        h('button', { textContent: t('playlist_edit_title'), attrs: { role: 'menuitem' }, onclick: () => { close(); this.hooks.onEditPlaylist(p); } }),
+        h('button', { class: 'danger', textContent: t('playlist_delete'), attrs: { role: 'menuitem' }, onclick: () => { close(); this.hooks.onDeletePlaylist(p); } }));
+      opts.setAttribute('aria-expanded', 'true');
+      this.plHead.append(menu);
+      const close = dismissable(menu, () => opts.setAttribute('aria-expanded', 'false'), [opts]);
+      (menu.querySelector('button') as HTMLButtonElement).focus();
+    };
+    this.plHead.replaceChildren(back, h('span', { class: 'plt' }, h('b', { textContent: p.title }), h('span', { textContent: t('playlist_song_count', p.songs.length) })), opts);
+  }
+
   private render() {
+    const op = this.open;
+    this.bar.hidden = !!op; this.plHead.hidden = !op;
+    if (op) {
+      this.renderPlHead(op);
+      const shown = search(playlistRows(op, this.rows), this.q);
+      this.list.replaceChildren(...(shown.length ? shown.map((r) => this.rowEl(r, op.songs)) : [h('p', { class: 'empty', textContent: op.songs.length ? t('no_results') : t('playlist_empty_songs') })]));
+      return;
+    }
     const c = counts(this.rows);
     if (!c.showFilter) this.filter = 'all';
     const label = { all: 'library_filter_all', downloaded: 'library_filter_downloaded', cloud: 'library_filter_cloud' }[this.filter];
@@ -69,10 +150,10 @@ export class Sidebar {
       this.list.replaceChildren(h('p', { class: 'empty', textContent: this.rows.length ? t('no_results') : t('songs_empty_title') }));
       return;
     }
-    this.list.replaceChildren(...shown.map((r) => this.rowEl(r)));
+    this.list.replaceChildren(...shown.map((r) => this.rowEl(r, null)));
   }
 
-  private rowEl(r: Row): HTMLElement {
+  private rowEl(r: Row, queue: string[] | null): HTMLElement {
     const { entry: e, state: s } = r;
     const cur = e.hash === this.current;
     const cv = h('span', { class: 'cv' });
@@ -102,7 +183,7 @@ export class Sidebar {
     if (veil) cv.append(veil);
     const btn = h('button', { class: `dr${cur ? ' cur' : ''}${s.kind === 'cloud' || s.kind === 'downloading' ? ' cld' : ''}`, attrs: { role: 'listitem', ...(cur ? { 'aria-current': 'true' } : {}) } },
       cv, h('span', { class: 'tx' }, h('b', { textContent: e.title || e.filename }), h('span', { class: bad ? 'bad' : '', textContent: sub })), side);
-    btn.onclick = () => this.hooks.onPick(r);
+    btn.onclick = () => this.hooks.onPick(r, queue);
     return btn;
   }
 

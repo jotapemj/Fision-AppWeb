@@ -1,5 +1,7 @@
 // Orquesta sesion, biblioteca, descargas y reproductor.
-import { Api, ApiError, type LibraryEntry, type LiveJob, type Session } from './api/client.ts';
+import { Api, ApiError, type LibraryEntry, type LiveJob, type Playlist, type PlaylistSummary, type Session } from './api/client.ts';
+import { adjacent, errorKey, isValidId, mosaicHashes } from './library/playlists.ts';
+import { openPlaylistEditor } from './ui/playlistEditor.ts';
 import { Engine } from './engine/engine.ts';
 import { t } from './i18n/i18n.ts';
 import { buildRows, type Row } from './library/library.ts';
@@ -10,7 +12,7 @@ import { isMetronome, stemOf } from './player/stems.ts';
 import { buildRows as buildLyricRows } from './player/lyrics.ts';
 import type { LyricsState } from './ui/lyricsView.ts';
 import { buildBeatCells, chordsOverWords, parseChords, parseTimes } from './player/chords.ts';
-import { h } from './ui/dom.ts';
+import { h, toast } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
 import { Curtain } from './ui/curtain.ts';
@@ -48,6 +50,11 @@ export class App {
   private params: ParamsStore = idbParamsStore();
   private saveTimer = 0;
   private flushSave: (() => void) | null = null;
+  private playlists: PlaylistSummary[] = [];
+  private plDetail = new Map<string, Playlist>(); // detalle por id, se rehace si cambia updated_at
+  private plCovers = new Map<string, Promise<string | null>>(); // clave id:updated_at
+  private online = false;
+  private queue: string[] | null = null; // PlayQueue: playlist desde la que suena, o null = biblioteca
 
   constructor(root: HTMLElement, settings: SettingsStore) {
     this.root = root;
@@ -76,7 +83,13 @@ export class App {
     this.store = new SongStore(s.user);
     this.covers.clear();
     this.sidebar = new Sidebar(s.user, location.host, {
-      onPick: (r) => this.pick(r),
+      onPick: (r, queue) => this.pick(r, queue),
+      onOpenPlaylist: (id) => void this.openPlaylist(id),
+      onClosePlaylist: () => this.sidebar?.showPlaylist(null),
+      onNewPlaylist: () => this.editPlaylist(null),
+      onEditPlaylist: (p) => this.editPlaylist(p),
+      onDeletePlaylist: (p) => void this.deletePlaylist(p),
+      playlistCover: (p) => this.playlistCover(p),
       onSettings: () => openSettings(this.settings, { user: s.user, server: location.host, webVersion: pkg.version,
         serverInfo: () => this.api.serverInfo().catch(() => null), onLogout: () => { this.api.logout(); this.showLogin(); } }),
       cover: (hash) => this.cover(hash),
@@ -87,7 +100,8 @@ export class App {
     this.nebula.setEnabled(this.settings.get('nebula'));
     this.shell = h('div', { class: 'app' }, this.nebula.el, this.sidebar.el, this.hintMain(t('web_pick_song')), idleBar());
     this.root.replaceChildren(this.shell);
-    this.refreshLibrary();
+    // Playlists al entrar (y tras cada cambio), no en cada sondeo de jobs
+    void this.refreshLibrary().then(() => this.syncPlaylists());
   }
 
   private hintMain(text: string) { return h('section', { class: 'main' }, h('div'), h('div'), h('p', { class: 'hint', textContent: text })); }
@@ -96,8 +110,9 @@ export class App {
     try {
       const [entries, jobs, local] = await Promise.all([this.api.library(), this.api.jobs(), this.store!.list()]);
       this.entries = entries; this.jobs = jobs; this.downloaded = new Set(local);
+      this.online = true;
       this.render();
-    } catch (e) { if (!(e instanceof ApiError && e.status === 401)) console.warn('library', e); }
+    } catch (e) { this.online = false; if (!(e instanceof ApiError && e.status === 401)) console.warn('library', e); }
     // Con jobs vivos, sondear hasta que acaben (luego la entrada pasa a ready)
     clearTimeout(this.pollTimer);
     if (this.jobs.length) this.pollTimer = window.setTimeout(() => this.refreshLibrary(), JOB_POLL_MS);
@@ -108,7 +123,76 @@ export class App {
     this.sidebar?.update(this.rows, this.current?.entry.hash ?? null, this.current?.player.playing ?? false);
   }
 
-  private pick(r: Row) {
+  /** PlaylistRepository.sync: lista + detalle solo de las que cambiaron; sin red, quedan las que habia. */
+  private async syncPlaylists() {
+    try {
+      const list = (await this.api.playlists()).filter((p) => isValidId(p.id));
+      for (const p of list) {
+        const d = this.plDetail.get(p.id);
+        if (!d || d.updated_at !== p.updated_at) this.plDetail.set(p.id, await this.api.playlist(p.id));
+      }
+      for (const id of [...this.plDetail.keys()]) if (!list.some((p) => p.id === id)) this.plDetail.delete(id);
+      this.playlists = list;
+    } catch (e) { if (e instanceof ApiError && e.status === 401) return; }
+    this.sidebar?.setPlaylists(this.playlists, this.online);
+    // La abierta se refresca con su detalle nuevo
+    const open = this.sidebar?.openPlaylist;
+    if (open) this.sidebar!.showPlaylist(this.plDetail.get(open.id) ?? null);
+  }
+
+  private async openPlaylist(id: string) {
+    let d = this.plDetail.get(id);
+    try { d = await this.api.playlist(id); this.plDetail.set(id, d); }
+    catch (e) {
+      if (e instanceof ApiError && e.status === 404) { toast(t('playlist_err_gone')); this.plDetail.delete(id); void this.syncPlaylists(); return; }
+    }
+    if (d) this.sidebar?.showPlaylist(d);
+  }
+
+  private editPlaylist(p: Playlist | null) {
+    const open = async () => openPlaylistEditor(p, {
+      api: this.api, rows: this.rows, cover: (hsh) => this.cover(hsh),
+      playlistCover: p ? await this.ownCover(p) : null,
+      onSaved: async (id) => {
+        this.plDetail.delete(id);
+        await this.syncPlaylists();
+        await this.openPlaylist(id);
+      },
+    });
+    void open();
+  }
+
+  private async deletePlaylist(p: Playlist) {
+    if (!confirm(t('playlist_delete_confirm', p.title))) return;
+    try {
+      await this.api.deletePlaylist(p.id);
+      toast(t('playlist_deleted'));
+      if (this.queue === p.songs) this.queue = null;
+      this.sidebar?.showPlaylist(null);
+    } catch (e) { if (e instanceof ApiError) toast(t(...errorKey(e.status, e.code))); }
+    void this.syncPlaylists();
+  }
+
+  /** Portada propia (con ?v=updated_at) o null. */
+  private ownCover(p: PlaylistSummary): Promise<string | null> {
+    if (!p.has_cover) return Promise.resolve(null);
+    const k = `${p.id}:${p.updated_at}`;
+    let c = this.plCovers.get(k);
+    if (!c) { c = this.api.playlistCover(p.id, p.updated_at).then((b) => (b ? URL.createObjectURL(b) : null)).catch(() => null); this.plCovers.set(k, c); }
+    return c;
+  }
+
+  /** Sin portada propia: mosaico de las primeras canciones (PlaylistCovers). */
+  private async playlistCover(p: PlaylistSummary): Promise<string[]> {
+    const own = await this.ownCover(p);
+    if (own) return [own];
+    const songs = this.plDetail.get(p.id)?.songs ?? [];
+    return (await Promise.all(mosaicHashes(songs).map((hsh) => this.cover(hsh)))).filter((u): u is string => !!u);
+  }
+
+  private pick(r: Row, queue: string[] | null = null) {
+    // Abrir desde una playlist fija su orden; desde la biblioteca vuelve a la biblioteca
+    if (r.state.kind === 'downloaded') this.queue = queue;
     if (r.state.kind === 'downloaded') this.open(r.entry);
     else if (r.state.kind === 'cloud') this.download(r.entry); // como Android: tocar en la nube = descargar
   }
@@ -281,10 +365,10 @@ export class App {
 
   /** Anterior / siguiente entre las descargadas, en el orden de la lista. */
   private step(dir: 1 | -1) {
-    const list = this.rows.filter((r) => r.state.kind === 'downloaded');
-    const i = list.findIndex((r) => r.entry.hash === this.current?.entry.hash);
-    const next = list[i + dir];
-    if (next) this.open(next.entry);
+    if (!this.current) return;
+    const next = adjacent(this.current.entry.hash, dir, this.rows, this.queue);
+    const e = next ? this.entries.find((x) => x.hash === next) : null;
+    if (e) this.open(e);
   }
 
   private stopSong() {

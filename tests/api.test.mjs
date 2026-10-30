@@ -23,6 +23,20 @@ async function fakeServer() {
     if (req.url === '/library/h1/lyrics') return send(404, { detail: 'No lyrics', code: 'lyrics_missing' });
     if (req.url === '/library/h1/zip') { res.writeHead(200, { 'Content-Length': 5 }); return res.end(Buffer.from([1, 2, 3, 4, 5])); }
     if (req.url === '/library/boom') return send(500, { detail: 'internal stuff', code: 'internal' });
+    // Playlists: una en memoria; las reglas del server en la medida justa
+    if (req.url === '/playlists' && req.method === 'POST') {
+      const j = JSON.parse(body);
+      if (new Set(j.songs).size !== j.songs.length) return send(400, { detail: 'Song repeated in the playlist', code: 'song_duplicate' });
+      state.pl = { id: 'a1b2c3d4e5f6', title: j.title, songs: j.songs, count: j.songs.length, has_cover: false, created_at: 'x', updated_at: 'u1' };
+      state.plBody = body; state.plType = req.headers['content-type'];
+      return send(201, state.pl);
+    }
+    if (req.url === '/playlists') return send(200, state.pl ? [{ ...state.pl, songs: undefined }] : []);
+    if (req.url === '/playlists/a1b2c3d4e5f6' && req.method === 'PUT') { Object.assign(state.pl, JSON.parse(body), { updated_at: 'u2' }); return send(200, state.pl); }
+    if (req.url === '/playlists/a1b2c3d4e5f6' && req.method === 'DELETE') { state.pl = null; res.writeHead(204); return res.end(); }
+    if (req.url === '/playlists/a1b2c3d4e5f6/cover' && req.method === 'PUT') { state.coverType = req.headers['content-type']; state.coverLen = body.length; return send(200, {}); }
+    if (req.url.startsWith('/playlists/a1b2c3d4e5f6/cover?v=')) return send(404, { detail: 'No cover' });
+    if (req.url === '/playlists/gone000000000') return send(404, { detail: 'Playlist not found' });
     send(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
@@ -97,5 +111,28 @@ test('letra 404 = null; zip con progreso', async () => {
     const z = await api.zip('h1', (d, t) => prog.push(`${d}/${t}`));
     expect(z.length === 5 && z[4] === 5, `zip ${z}`);
     expect(prog.at(-1) === '5/5', `progreso ${prog}`);
+  } finally { s.close(); }
+});
+
+test('playlists: crear, listar sin canciones, reordenar con PUT, portada multipart, borrar; errores por code', async () => {
+  const s = await fakeServer();
+  try {
+    const api = new Api(s.base, memStore());
+    await api.login('demo', 'pw');
+    const pl = await api.createPlaylist('Ensayo', ['h1', 'h2']);
+    expect(pl.id === 'a1b2c3d4e5f6' && s.state.plType === 'application/json' && JSON.parse(s.state.plBody).songs.join() === 'h1,h2', `crear: ${s.state.plBody}`);
+    const list = await api.playlists();
+    expect(list.length === 1 && list[0].songs === undefined, 'la lista no trae canciones');
+    const up = await api.updatePlaylist(pl.id, 'Ensayo', ['h2', 'h1']);
+    expect(up.songs.join() === 'h2,h1' && up.updated_at === 'u2', 'reordenar');
+    await api.putPlaylistCover(pl.id, new Blob([new Uint8Array(10)], { type: 'image/jpeg' }));
+    expect(/^multipart\/form-data/.test(s.state.coverType), `portada: ${s.state.coverType}`);
+    expect((await api.playlistCover(pl.id, 'u2')) === null, 'sin portada = null');
+    const dup = await codeOf(api.createPlaylist('X', ['h1', 'h1']));
+    const gone = await codeOf(api.playlist('gone000000000'));
+    expect(dup === '400:song_duplicate' && gone.startsWith('404:'), `${dup} / ${gone}`);
+    await api.deletePlaylist(pl.id);
+    expect((await api.playlists()).length === 0, 'borrada');
+    return `${dup}, ${gone}`;
   } finally { s.close(); }
 });

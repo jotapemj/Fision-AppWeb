@@ -39,3 +39,11 @@ export function dismissable(el: HTMLElement, onClose: () => void, ignore: HTMLEl
   setTimeout(() => { document.addEventListener('pointerdown', click, true); document.addEventListener('keydown', key); });
   return close;
 }
+
+/** Aviso breve abajo (Snackbar): uno a la vez, se va solo. */
+export function toast(text: string, ms = 3200) {
+  document.querySelector('.toast')?.remove();
+  const el = h('div', { class: 'toast', textContent: text, attrs: { role: 'status' } });
+  document.body.append(el);
+  setTimeout(() => el.remove(), ms);
+}

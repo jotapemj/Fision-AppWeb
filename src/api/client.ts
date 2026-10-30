@@ -22,6 +22,10 @@ export interface LiveJob {
   position: number | null;
 }
 
+/** Playlist del server (resumen en la lista; con `songs` = hashes en orden en el detalle). */
+export interface PlaylistSummary { id: string; title: string; count: number; has_cover: boolean; created_at: string; updated_at: string }
+export interface Playlist extends PlaylistSummary { songs: string[] }
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -102,6 +106,26 @@ export class Api {
     return r.status === 404 ? null : r.blob();
   }
 
+  // --- playlists (el server manda; PUT sustituye titulo y canciones) ---
+
+  async playlists(): Promise<PlaylistSummary[]> { return this.json(await this.authed('/playlists')); }
+  async playlist(id: string): Promise<Playlist> { return this.json(await this.authed(`/playlists/${id}`)); }
+  async createPlaylist(title: string, songs: string[]): Promise<Playlist> { return this.json(await this.authed('/playlists', jsonBody('POST', { title, songs }))); }
+  async updatePlaylist(id: string, title: string, songs: string[]): Promise<Playlist> { return this.json(await this.authed(`/playlists/${id}`, jsonBody('PUT', { title, songs }))); }
+  async deletePlaylist(id: string): Promise<void> { await this.authed(`/playlists/${id}`, { method: 'DELETE' }); }
+
+  /** Portada; `v` = updated_at para no servir una vieja de cache. */
+  async playlistCover(id: string, v: string): Promise<Blob | null> {
+    const r = await this.authed(`/playlists/${id}/cover?v=${encodeURIComponent(v)}`, {}, [404]);
+    return r.status === 404 ? null : r.blob();
+  }
+  async putPlaylistCover(id: string, img: Blob): Promise<void> {
+    const f = new FormData();
+    f.append('file', img, 'cover.jpg');
+    await this.authed(`/playlists/${id}/cover`, { method: 'PUT', body: f });
+  }
+  async deletePlaylistCover(id: string): Promise<void> { await this.authed(`/playlists/${id}/cover`, { method: 'DELETE' }, [404]); }
+
   // --- interno ---
 
   private saveSession(j: { token: string; user: string; expires_at: string }): Session {
@@ -134,6 +158,8 @@ export class Api {
     return r.json() as Promise<T>;
   }
 }
+
+const jsonBody = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 async function errorCode(r: Response): Promise<string> {
   try { const j = await r.json(); if (typeof j?.code === 'string') return j.code; } catch { /* sin JSON */ }
