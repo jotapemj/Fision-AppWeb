@@ -6,7 +6,7 @@ import { openImport, pickAudio } from './ui/importDialog.ts';
 import { RETRYABLE } from './library/importConfig.ts';
 import { Engine } from './engine/engine.ts';
 import { t } from './i18n/i18n.ts';
-import { buildRows, type Row } from './library/library.ts';
+import { buildRows, deleteKind, type Row } from './library/library.ts';
 import { SongStore } from './lib/songStore.ts';
 import { listZip, readZipEntry } from './lib/zip.ts';
 import { Player, parseBeats, parseBpm } from './player/player.ts';
@@ -18,7 +18,7 @@ import { h, toast } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
 import { Curtain } from './ui/curtain.ts';
-import { Sidebar } from './ui/sidebar.ts';
+import { Sidebar, type RowMenuItem } from './ui/sidebar.ts';
 import { Nebula } from './ui/nebula.ts';
 import { IdleMain } from './ui/idleMain.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
@@ -109,6 +109,7 @@ export class App {
       onSettings: () => openSettings(this.settings, { user: s.user, server: location.host, webVersion: pkg.version,
         serverInfo: () => this.api.serverInfo().catch(() => null), onLogout: () => { this.api.logout(); this.showLogin(); } }),
       cover: (hash) => this.cover(hash),
+      rowMenu: (r) => this.rowMenu(r),
     });
     this.nebula?.destroy();
     this.nebula = new Nebula();
@@ -273,6 +274,57 @@ export class App {
     if (own) return [own];
     const songs = this.plDetail.get(p.id)?.songs ?? [];
     return (await Promise.all(mosaicHashes(songs).map((hsh) => this.cover(hsh)))).filter((u): u is string => !!u);
+  }
+
+  /** Hoja de opciones (MainActivity.showBottomDialog): Reintentar si fallo un reproceso con copia; Borrar segun estado. */
+  private rowMenu(r: Row): RowMenuItem[] {
+    const e = r.entry, items: RowMenuItem[] = [];
+    const code = this.jobErrors.get(e.hash);
+    if (r.state.kind === 'downloaded' && code && RETRYABLE.includes(code)) items.push({ label: t('song_option_retry_job'), run: () => this.retryDialog(e, code) });
+    const kind = deleteKind(r.state);
+    const label = kind === 'queue' ? 'cloud_cancel_queue' : kind === 'cloud' ? 'cloud_delete_cloud' : 'b_delete';
+    items.push({ label: t(label), danger: true, disabled: !kind || (kind !== 'local' && !this.online), run: () => void this.deleteSong(r) });
+    return items;
+  }
+
+  private async deleteSong(r: Row) {
+    const e = r.entry, kind = deleteKind(r.state), title = e.title || e.filename;
+    if (!kind) return;
+    if (kind === 'queue') {
+      if (!confirm(t('cloud_cancel_queue_confirm'))) return;
+      const job = this.jobs.find((j) => j.hash === e.hash);
+      if (job) { try { await this.api.cancelJob(job.job_id); } catch { /* ya no estaba */ } }
+      this.inflight.delete(e.hash);
+      void this.refreshLibrary();
+      return;
+    }
+    if (kind === 'local') {
+      if (!confirm(t('delete_confirm', title))) return;
+      // La que suena: se para y el centro vuelve a la pantalla sin cancion
+      if (this.current?.entry.hash === e.hash) {
+        this.stopSong();
+        this.shell?.replaceChildren(this.nebula!.el, this.sidebar!.el, this.hintMain(t('web_pick_song')), idleBar());
+        this.nebula?.setOrbitBlobsVisible(true);
+        void this.applySongColors();
+      }
+      await this.store!.remove(e.hash).catch((err) => console.warn('remove', err));
+      await this.params.del(`${this.user}:${e.hash}`); // como Android: la fila de Room se va con la carpeta
+      this.downloaded.delete(e.hash);
+      this.covers.delete(e.hash); this.paletteCache.delete(e.hash);
+      this.render();
+      return;
+    }
+    if (!confirm(t('cloud_delete_cloud_confirm'))) return;
+    try { await this.api.deleteSong(e.hash); }
+    catch (err) {
+      if (err instanceof ApiError && err.status === 409) toast(t('cloud_delete_busy'));
+      else if (!(err instanceof ApiError && err.status === 401)) toast(t('login_err_network'));
+      return;
+    }
+    this.entries = this.entries.filter((x) => x.hash !== e.hash);
+    this.jobErrors.delete(e.hash); this.inflight.delete(e.hash); this.covers.delete(e.hash);
+    this.render();
+    void this.syncPlaylists(); // el server la quita de sus playlists: cambian las cuentas
   }
 
   private pick(r: Row, queue: string[] | null = null) {

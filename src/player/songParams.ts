@@ -53,7 +53,7 @@ export function restore(p: Player, saved: unknown) {
 }
 
 /** Almacen clave/valor (IndexedDB en el navegador; en memoria en las pruebas). */
-export interface ParamsStore { get(key: string): Promise<unknown>; put(key: string, v: SongParams): Promise<void> }
+export interface ParamsStore { get(key: string): Promise<unknown>; put(key: string, v: SongParams): Promise<void>; del(key: string): Promise<void> }
 
 export function idbParamsStore(dbName = 'fision', store = 'songParams'): ParamsStore {
   let dbp: Promise<IDBDatabase> | null = null;
@@ -70,5 +70,6 @@ export function idbParamsStore(dbName = 'fision', store = 'songParams'): ParamsS
   return {
     get: (key) => tx('readonly', (s) => s.get(key)).catch(() => null),
     put: async (key, v) => { await tx('readwrite', (s) => s.put(v, key)).catch(() => undefined); },
+    del: async (key) => { await tx('readwrite', (s) => s.delete(key)).catch(() => undefined); },
   };
 }

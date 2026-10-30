@@ -33,6 +33,7 @@ async function fakeServer() {
   ]);
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const pl = { list: [], calls: [] }; // playlists en memoria
+  const del = { calls: [], queueGone: false, gone: false, busy: true }; // borrados
   const up = { jobs: null, calls: [], zips: [], newReady: false, config: {}, lyr: { posts: [], polls: 0, ready: false } }; // subidas, reprocesos, letra
   const srv = http.createServer(async (req, res) => {
     let body = '';
@@ -41,8 +42,15 @@ async function fakeServer() {
     if (req.url === '/login') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
     if (req.headers.authorization !== 'Bearer tok') return json(401, { detail: 'Not authenticated' });
     if (req.url === '/auth/refresh') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
+    if (req.method === 'DELETE' && req.url === '/jobs/j') { del.calls.push('DELETE /jobs/j'); del.queueGone = true; return json(200, { job_id: 'j', state: 'cancelled' }); }
+    if (req.method === 'DELETE' && req.url === `/library/${H2}`) {
+      del.calls.push(`DELETE H2${del.busy ? ' 409' : ''}`);
+      if (del.busy) { del.busy = false; return json(409, { detail: 'busy', code: 'job_running' }); }
+      del.gone = true; return json(200, { hash: H2, deleted: true });
+    }
     if (req.url === '/library') {
-      const lib = [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', 'processing', '2026-10-01')];
+      const lib = [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', del.queueGone ? 'cancelled' : 'processing', '2026-10-01')]
+        .filter((x) => !(del.gone && x.hash === H2));
       if (up.newReady !== false) lib.push({ ...entry(H4, 'Subida', up.newReady === true ? 'ready' : 'processing', '2026-10-04'), config: up.config });
       return json(200, lib);
     }
@@ -52,7 +60,7 @@ async function fakeServer() {
       if (up.jobs) { up.jobs = null; up.newReady = 'pending'; }
       else if (up.newReady === 'pending') up.newReady = true;
       if (up.lyr.posts.length && !up.lyr.ready) extra.push({ job_id: 'jl', hash: H4, filename: 'x', state: 'running', position: 0 });
-      return json(200, [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }, ...extra]);
+      return json(200, [...(del.queueGone ? [] : [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]), ...extra]);
     }
     if (req.url === '/server/info') return json(200, { version: '2.1.0', gpu: false });
     if (req.url === '/jobs' && req.method === 'POST') {
@@ -92,7 +100,7 @@ async function fakeServer() {
     json(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, close: () => srv.close() };
+  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, del, close: () => srv.close() };
 }
 
 // Medidas dentro de la pagina: solapes, recortes, contraste calculado
@@ -596,6 +604,39 @@ test('letra: sin letra se elige idioma y se pide; el job de letra no ocupa la fi
   expect(!busyRow, 'la fila se marco como procesando por el job de letra');
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
   return `Auto -> ${lyr.posts[0]}, ${lyr.polls} sondeos, letra visible`;
+});
+
+test('borrar: en cola se saca de la cola; descargada borra la copia (y para si suena); nube con 409 y luego borrada', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, del = c.fake.del;
+  const row = (t) => `[...document.querySelectorAll('.drw')].find((r) => r.querySelector('.dr').textContent.includes('${t}'))`;
+  const menu = async (t) => {
+    await p.eval(`${row(t)}.querySelector('.more').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu')`, 3000);
+    return p.eval(`[...document.querySelectorAll('.menu.rowmenu button')].map((b) => b.textContent + (b.disabled ? ' (off)' : ''))`);
+  };
+  const pickItem = (label) => p.eval(`window.confirm = () => true; [...document.querySelectorAll('.menu.rowmenu button')].find((b) => b.textContent === '${label}').click()`);
+  // El menu cabe en la ventana (fijo, no lo recorta la lista)
+  const queueItems = await menu('Cancion en cola');
+  const box = await p.eval(`(() => { const r = document.querySelector('.menu.rowmenu').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0; })()`);
+  await pickItem(queueItems[0]);
+  await p.waitFor(`!${row('Cancion en cola')}.querySelector('.spin')`, 10000);
+  expect(box && /cola|queue/i.test(queueItems[0]) && del.calls[0] === 'DELETE /jobs/j', `cola: ${queueItems} -> ${del.calls}, en ventana ${box}`);
+  // La que suena (Subida, descargada): borra la copia, para y vuelve el centro vacio; queda en la nube
+  const localItems = await menu('Subida');
+  await pickItem(localItems.at(-1));
+  await p.waitFor(`document.querySelector('.main.idle') && ${row('Subida')}.querySelector('.dr').classList.contains('cld')`, 5000);
+  expect(/Borrar canción|Delete song/.test(localItems.at(-1)) && del.calls.length === 1, `local: ${localItems}, llamadas ${del.calls}`);
+  // Solo en el server: el 1er intento da 409 (aviso y se queda), el 2o la quita de la lista
+  const cloudItems = await menu('Cancion rota');
+  await pickItem(cloudItems.at(-1));
+  await p.waitFor(`/procesándose|processing/.test(document.querySelector('.toast')?.textContent ?? '')`, 5000);
+  const stays = await p.eval(`!!${row('Cancion rota')}`);
+  await menu('Cancion rota');
+  await pickItem(cloudItems.at(-1));
+  await p.waitFor(`!${row('Cancion rota')}`, 5000);
+  expect(/nube|cloud/i.test(cloudItems.at(-1)) && stays && del.calls.join() === 'DELETE /jobs/j,DELETE H2 409,DELETE H2', `nube: ${cloudItems} -> ${del.calls}, tras 409 sigue ${stays}`);
+  return `cola cancelada, copia local borrada con la cancion sonando, nube 409 -> borrada`;
 });
 
 test('sin excepciones en la pagina', async () => {

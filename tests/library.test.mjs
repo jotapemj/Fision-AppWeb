@@ -1,6 +1,6 @@
 // Estado de filas, orden, busqueda y filtro de la biblioteca.
 import { test, expect } from './lib/harness.mjs';
-import { buildRows, search, applyFilter, counts } from '../src/library/library.ts';
+import { buildRows, search, applyFilter, counts, deleteKind } from '../src/library/library.ts';
 
 const e = (hash, title, artist, created_at, state = 'ready') => ({ hash, title, artist, created_at, state, filename: '', cover_url: null, updated_at: created_at });
 const entries = [
@@ -34,4 +34,10 @@ test('filtro y cuando se muestra', () => {
   const c = counts(rows);
   expect(c.showFilter && c.downloaded === 1 && c.cloud === 2, JSON.stringify(c));
   expect(applyFilter(rows, 'cloud').map((r) => r.entry.hash).sort().join() === 'a,c', 'nube incluye descargando');
+});
+
+test('borrar segun estado (showBottomDialog): cola, copia, nube; procesando o bajando no', () => {
+  const k = (kind) => deleteKind({ kind });
+  const got = ['queued', 'downloaded', 'cloud', 'error', 'running', 'waiting_gpu', 'downloading'].map(k).join();
+  expect(got === 'queue,local,cloud,cloud,,,', got);
 });

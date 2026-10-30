@@ -9,6 +9,9 @@ import type { Playlist, PlaylistSummary } from '../api/client.ts';
 import { playlistRows } from '../library/playlists.ts';
 import { jobErrorKey } from '../library/importConfig.ts';
 
+/** Opcion del menu ⋯ de una fila. */
+export interface RowMenuItem { label: string; danger?: boolean; disabled?: boolean; run(): void }
+
 export interface SidebarHooks {
   /** `queue` = canciones de la playlist abierta (contexto de prev/next) o null = biblioteca. */
   onPick(row: Row, queue: string[] | null): void;
@@ -22,6 +25,8 @@ export interface SidebarHooks {
   onSettings(): void;
   onAdd(): void;
   cover(hash: string): Promise<string | null>;
+  /** Opciones de la fila (hoja de opciones de Android). */
+  rowMenu(row: Row): RowMenuItem[];
 }
 
 const SEARCH_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" stroke="#9e9e9e" stroke-width="2" fill="none"/><path d="M15.5 15.5 21 21" stroke="#9e9e9e" stroke-width="2"/></svg>';
@@ -185,10 +190,31 @@ export class Sidebar {
     }
     if (cur) veil = h('span', { class: 'veil' }, h('span', { class: `eq${this.playing ? '' : ' paused'}` }, h('i'), h('i'), h('i')));
     if (veil) cv.append(veil);
-    const btn = h('button', { class: `dr${cur ? ' cur' : ''}${s.kind === 'cloud' || s.kind === 'downloading' ? ' cld' : ''}`, attrs: { role: 'listitem', ...(cur ? { 'aria-current': 'true' } : {}) } },
+    const btn = h('button', { class: `dr${cur ? ' cur' : ''}${s.kind === 'cloud' || s.kind === 'downloading' ? ' cld' : ''}`, attrs: cur ? { 'aria-current': 'true' } : {} },
       cv, h('span', { class: 'tx' }, h('b', { textContent: e.title || e.filename }), h('span', { class: bad ? 'bad' : '', textContent: sub })), side);
     btn.onclick = () => this.hooks.onPick(r, queue);
-    return btn;
+    // ⋯ al pasar (maqueta): fuera del boton de la fila (no se anidan botones)
+    const more = h('button', { class: 'more', attrs: { 'aria-label': t('web_song_options', e.title || e.filename), 'aria-haspopup': 'menu' } }, h('i'), h('i'), h('i'));
+    more.onclick = () => this.openRowMenu(r, more);
+    return h('div', { class: 'drw', attrs: { role: 'listitem' } }, btn, more);
+  }
+
+  /** Menu fijo junto al ⋯ (la lista hace scroll y recortaria uno absoluto); sube si no cabe abajo. */
+  private openRowMenu(r: Row, more: HTMLElement) {
+    if (more.getAttribute('aria-expanded') === 'true') return;
+    const menu = h('div', { class: 'menu rowmenu', attrs: { role: 'menu' } }, ...this.hooks.rowMenu(r).map((it) => {
+      const b = h('button', { class: it.danger ? 'danger' : '', textContent: it.label, attrs: { role: 'menuitem' } });
+      b.disabled = !!it.disabled;
+      b.onclick = () => { close(); it.run(); };
+      return b;
+    }));
+    more.setAttribute('aria-expanded', 'true');
+    this.el.append(menu);
+    const a = more.getBoundingClientRect(), m = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, a.right - m.width)}px`;
+    menu.style.top = `${a.bottom + 4 + m.height > innerHeight - 8 ? a.top - 4 - m.height : a.bottom + 4}px`;
+    const close = dismissable(menu, () => more.setAttribute('aria-expanded', 'false'), [more]);
+    (menu.querySelector('button:not(:disabled)') as HTMLButtonElement | null)?.focus();
   }
 
   private openFilterMenu() {

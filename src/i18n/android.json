@@ -247,7 +247,15 @@
   "lyrics_lang_ta": "Tamil",
   "lyrics_lang_ca": "Catalan",
   "lyrics_lang_uk": "Ukrainian",
-  "lyrics_lang_pl": "Polish"
+  "lyrics_lang_pl": "Polish",
+  "b_delete": "Delete song",
+  "delete_confirm": "Delete {1}?",
+  "cloud_delete_cloud": "Delete from cloud",
+  "cloud_delete_cloud_confirm": "Delete this song from the server too?",
+  "cloud_delete_busy": "The song is still processing. Try again later",
+  "cloud_cancel_queue": "Cancel (queue)",
+  "cloud_cancel_queue_confirm": "Remove this song from the queue?",
+  "song_option_retry_job": "Retry processing"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -499,7 +507,15 @@
   "lyrics_lang_ta": "Tamil",
   "lyrics_lang_ca": "Catalán",
   "lyrics_lang_uk": "Ucraniano",
-  "lyrics_lang_pl": "Polaco"
+  "lyrics_lang_pl": "Polaco",
+  "b_delete": "Borrar canción",
+  "delete_confirm": "¿Eliminar {1}?",
+  "cloud_delete_cloud": "Borrar de la nube",
+  "cloud_delete_cloud_confirm": "¿Borrar también esta canción del servidor?",
+  "cloud_delete_busy": "La canción sigue procesándose. Inténtalo luego",
+  "cloud_cancel_queue": "Cancelar (cola)",
+  "cloud_cancel_queue_confirm": "¿Quitar esta canción de la cola?",
+  "song_option_retry_job": "Reintentar procesado"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -750,7 +766,15 @@
   "lyrics_lang_ta": "Tàmil",
   "lyrics_lang_ca": "Català",
   "lyrics_lang_uk": "Ucraïnès",
-  "lyrics_lang_pl": "Polonès"
+  "lyrics_lang_pl": "Polonès",
+  "b_delete": "Suprimir la cançó",
+  "delete_confirm": "Vols eliminar {1}?",
+  "cloud_delete_cloud": "Esborrar del núvol",
+  "cloud_delete_cloud_confirm": "Vols esborrar la cançó també del servidor?",
+  "cloud_delete_busy": "La cançó encara es processa. Torna-ho a provar més tard",
+  "cloud_cancel_queue": "Cancel·lar (cua)",
+  "cloud_cancel_queue_confirm": "Treure aquesta cançó de la cua?",
+  "song_option_retry_job": "Reintenta el processament"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -1004,7 +1028,15 @@
   "lyrics_lang_ta": "Тамільська",
   "lyrics_lang_ca": "Каталонська",
   "lyrics_lang_uk": "Українська",
-  "lyrics_lang_pl": "Польська"
+  "lyrics_lang_pl": "Польська",
+  "b_delete": "Видалити пісню",
+  "delete_confirm": "Видалити {1}?",
+  "cloud_delete_cloud": "Видалити з хмари",
+  "cloud_delete_cloud_confirm": "Також видалити пісню із сервера?",
+  "cloud_delete_busy": "Пісня ще обробляється. Спробуйте пізніше",
+  "cloud_cancel_queue": "Скасувати (черга)",
+  "cloud_cancel_queue_confirm": "Прибрати цю пісню з черги?",
+  "song_option_retry_job": "Повторити обробку"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -1250,7 +1282,15 @@
   "lyrics_lang_ta": "Tâmil",
   "lyrics_lang_ca": "Catalão",
   "lyrics_lang_uk": "Ucraniano",
-  "lyrics_lang_pl": "Polonês"
+  "lyrics_lang_pl": "Polonês",
+  "b_delete": "Excluir música",
+  "delete_confirm": "Excluir {1}?",
+  "cloud_delete_cloud": "Excluir da nuvem",
+  "cloud_delete_cloud_confirm": "Excluir esta música também do servidor?",
+  "cloud_delete_busy": "A música ainda está sendo processada. Tente mais tarde",
+  "cloud_cancel_queue": "Cancelar (fila)",
+  "cloud_cancel_queue_confirm": "Remover esta música da fila?",
+  "song_option_retry_job": "Tentar processar de novo"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -1496,7 +1536,15 @@
   "lyrics_lang_ta": "Tamoul",
   "lyrics_lang_ca": "Catalan",
   "lyrics_lang_uk": "Ukrainien",
-  "lyrics_lang_pl": "Polonais"
+  "lyrics_lang_pl": "Polonais",
+  "b_delete": "Supprimer le morceau",
+  "delete_confirm": "Supprimer {1} ?",
+  "cloud_delete_cloud": "Supprimer du cloud",
+  "cloud_delete_cloud_confirm": "Supprimer aussi ce morceau du serveur ?",
+  "cloud_delete_busy": "Le morceau est encore en traitement. Réessayez plus tard",
+  "cloud_cancel_queue": "Annuler (file d'attente)",
+  "cloud_cancel_queue_confirm": "Retirer ce morceau de la file d'attente ?",
+  "song_option_retry_job": "Relancer le traitement"
  },
  "de": {
   "tab_songs": "Songs",
@@ -1738,7 +1786,15 @@
   "lyrics_lang_ta": "Tamil",
   "lyrics_lang_ca": "Katalanisch",
   "lyrics_lang_uk": "Ukrainisch",
-  "lyrics_lang_pl": "Polnisch"
+  "lyrics_lang_pl": "Polnisch",
+  "b_delete": "Song löschen",
+  "delete_confirm": "{1} löschen?",
+  "cloud_delete_cloud": "Aus der Cloud löschen",
+  "cloud_delete_cloud_confirm": "Diesen Song auch vom Server löschen?",
+  "cloud_delete_busy": "Der Song wird noch verarbeitet. Versuche es später erneut",
+  "cloud_cancel_queue": "Abbrechen (Warteschlange)",
+  "cloud_cancel_queue_confirm": "Diesen Song aus der Warteschlange entfernen?",
+  "song_option_retry_job": "Verarbeitung wiederholen"
  },
  "it": {
   "tab_songs": "Brani",
@@ -1984,7 +2040,15 @@
   "lyrics_lang_ta": "Tamil",
   "lyrics_lang_ca": "Catalano",
   "lyrics_lang_uk": "Ucraino",
-  "lyrics_lang_pl": "Polacco"
+  "lyrics_lang_pl": "Polacco",
+  "b_delete": "Elimina brano",
+  "delete_confirm": "Eliminare {1}?",
+  "cloud_delete_cloud": "Elimina dal cloud",
+  "cloud_delete_cloud_confirm": "Eliminare questo brano anche dal server?",
+  "cloud_delete_busy": "Il brano è ancora in elaborazione. Riprova più tardi",
+  "cloud_cancel_queue": "Annulla (coda)",
+  "cloud_cancel_queue_confirm": "Rimuovere questo brano dalla coda?",
+  "song_option_retry_job": "Riprova l’elaborazione"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -2232,7 +2296,15 @@
   "lyrics_lang_ta": "Тамильский",
   "lyrics_lang_ca": "Каталанский",
   "lyrics_lang_uk": "Украинский",
-  "lyrics_lang_pl": "Польский"
+  "lyrics_lang_pl": "Польский",
+  "b_delete": "Удалить песню",
+  "delete_confirm": "Удалить {1}?",
+  "cloud_delete_cloud": "Удалить из облака",
+  "cloud_delete_cloud_confirm": "Удалить эту песню и с сервера?",
+  "cloud_delete_busy": "Песня ещё обрабатывается. Попробуйте позже",
+  "cloud_cancel_queue": "Отменить (очередь)",
+  "cloud_cancel_queue_confirm": "Убрать эту песню из очереди?",
+  "song_option_retry_job": "Повторить обработку"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -2474,6 +2546,14 @@
   "lyrics_lang_ta": "泰米尔语",
   "lyrics_lang_ca": "加泰罗尼亚语",
   "lyrics_lang_uk": "乌克兰语",
-  "lyrics_lang_pl": "波兰语"
+  "lyrics_lang_pl": "波兰语",
+  "b_delete": "删除歌曲",
+  "delete_confirm": "删除“{1}”？",
+  "cloud_delete_cloud": "从云端删除",
+  "cloud_delete_cloud_confirm": "同时从服务器删除这首歌曲？",
+  "cloud_delete_busy": "这首歌仍在处理中，请稍后再试",
+  "cloud_cancel_queue": "取消（排队）",
+  "cloud_cancel_queue_confirm": "将这首歌曲移出队列？",
+  "song_option_retry_job": "重试处理"
  }
 }

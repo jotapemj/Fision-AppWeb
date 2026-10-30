@@ -128,6 +128,8 @@ export class Api {
   async requestLyrics(hash: string, language: string | null): Promise<JobSubmit> {
     return this.json(await this.authed(`/library/${hash}/lyrics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language }) }));
   }
+  /** Borra la cancion del server (y de sus playlists); 409 = no pudo parar su job en 60 s. */
+  async deleteSong(hash: string): Promise<void> { await this.authed(`/library/${hash}`, { method: 'DELETE' }, [404]); }
   async deleteLyrics(hash: string): Promise<void> { await this.authed(`/library/${hash}/lyrics`, { method: 'DELETE' }, [404]); }
 
   async zip(hash: string, onProgress?: (done: number, total: number) => void): Promise<Uint8Array> {

@@ -81,6 +81,17 @@ input[type=range].sl::-moz-range-thumb { width: 18px; height: 18px; border: 0; b
 .dr.cur .tx b { color: var(--accent); }
 .dr .tx span.bad { color: #f87171; }
 .dr .st { flex: none; display: grid; place-items: center; width: 20px; }
+/* ⋯ de la fila: se ve al pasar o con foco; tapa el icono de estado */
+.drw { position: relative; }
+.drw .more { position: absolute; right: 6px; top: 50%; translate: 0 -50%; width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 3px; opacity: 0; }
+.drw .more i { width: 3px; height: 3px; border-radius: 50%; background: #ddd; }
+.drw:hover .more, .drw .more:focus-visible, .drw .more[aria-expanded=true] { opacity: 1; }
+.drw .more:hover { background: var(--press); }
+.drw:hover .dr .st, .drw:has(.more:focus-visible) .dr .st { visibility: hidden; }
+.drw:hover .dr { background: var(--hover); }
+.menu.rowmenu { position: fixed; right: auto; z-index: 30; }
+.menu button:disabled { opacity: .4; cursor: default; }
+.menu button:disabled:hover { background: none; }
 .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; animation: spin 0.9s linear infinite; }
 .spin.gpu { border-top-color: #FFC107; }
 @keyframes spin { to { transform: rotate(360deg); } }

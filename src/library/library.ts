@@ -58,6 +58,17 @@ export function search(rows: Row[], q: string): Row[] {
 
 export const isCloud = (s: RowState) => s.kind === 'cloud' || s.kind === 'downloading';
 
+/** Que hace "Borrar" segun el estado (MainActivity.showBottomDialog / runDelete):
+ *  en cola = sacarla de la cola; con copia = borrar la copia (sigue en la nube); solo en el server =
+ *  DELETE /library/{h}; procesando o bajando = bloqueado (null). */
+export type DeleteKind = 'queue' | 'local' | 'cloud';
+export function deleteKind(s: RowState): DeleteKind | null {
+  if (s.kind === 'queued') return 'queue';
+  if (s.kind === 'downloaded') return 'local';
+  if (s.kind === 'cloud' || s.kind === 'error') return 'cloud';
+  return null;
+}
+
 export function applyFilter(rows: Row[], f: Filter): Row[] {
   if (f === 'downloaded') return rows.filter((r) => r.state.kind === 'downloaded');
   if (f === 'cloud') return rows.filter((r) => isCloud(r.state));

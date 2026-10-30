@@ -240,5 +240,13 @@
  "lyrics_lang_ta",
  "lyrics_lang_ca",
  "lyrics_lang_uk",
- "lyrics_lang_pl"
+ "lyrics_lang_pl",
+ "b_delete",
+ "delete_confirm",
+ "cloud_delete_cloud",
+ "cloud_delete_cloud_confirm",
+ "cloud_delete_busy",
+ "cloud_cancel_queue",
+ "cloud_cancel_queue_confirm",
+ "song_option_retry_job"
 ]
