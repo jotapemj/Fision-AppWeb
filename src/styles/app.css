@@ -23,6 +23,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 ::selection { background: var(--accent); color: var(--on-accent); }
 img { display: block; }
+[hidden] { display: none !important; } /* una clase con display no debe pisar hidden */
 .ic { width: 24px; height: 24px; }
 
 /* ---------- Slider (input range): pista 4 px, relleno de acento hasta --p ---------- */
@@ -198,9 +199,40 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .strip .c.ghost.now { color: rgba(4,20,15,.6); }
 .strip .bar { flex: none; width: 2px; height: 50px; border-radius: 1px; background: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .strip-track { transition: none; } }
-.bigch { display: flex; align-items: baseline; gap: 48px; padding: 48px 8px; font-family: "MusGlyphs", serif; }
-.bigch b { font-weight: 400; font-size: 160px; line-height: 1; color: var(--accent); }
-.bigch span { font-size: 80px; color: rgba(255,255,255,.45); }
+/* Diagramas (chords.html): selectores + actual/siguiente a la izquierda, vocabulario a la derecha */
+.view.chv { overflow: hidden; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.cdg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px); gap: 32px; padding-top: 18px; min-height: 0; }
+.cdmain { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px; min-width: 0; min-height: 0; overflow: hidden; }
+.cdsel { display: flex; flex-wrap: wrap; gap: 12px; }
+.cdsel .seg { width: auto; }
+.cdsel .seg.hide { visibility: hidden; }
+.cdstage { display: grid; grid-template-columns: 1fr .62fr; gap: 24px; align-items: start; touch-action: pan-y; user-select: none; min-height: 340px; }
+.cdstage.piano { grid-template-columns: 1fr; grid-template-rows: auto auto; touch-action: pan-x; }
+.cdcard { display: grid; gap: 8px; min-width: 0; }
+.cdcard.nxt { opacity: .42; cursor: pointer; }
+.cdname { display: flex; align-items: baseline; gap: 12px; }
+.cdname b { font: 400 76px/1 "MusGlyphs", serif; color: var(--accent); }
+.cdname b.lat { font-family: var(--font); font-size: 60px; }
+.cdcard.nxt .cdname b { font-size: 48px; color: #fff; }
+.cdcard.nxt .cdname b.lat { font-size: 38px; }
+.cdbass { font-size: 14px; color: var(--text-muted); }
+.cddia { width: 100%; height: 300px; }
+.cdstage.piano .cddia { height: 170px; }
+.cdstage.piano .cdcard.nxt .cddia { height: 110px; }
+.cdstage.piano .cdcard.nxt .cdname b { font-size: 40px; }
+.cdcard.nxt .cddia { height: 200px; }
+.cdside { border-left: 1px solid var(--line); padding-left: 24px; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #333 transparent; padding-bottom: 16px; }
+.cdvh { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
+.cdvocab { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+.cdmini { display: grid; justify-items: center; gap: 4px; padding: 10px 6px; border-radius: 12px; }
+.cdmini:hover { background: var(--hover); }
+.cdmini.on { background: var(--accent-12); box-shadow: inset 0 0 0 1px var(--accent); }
+.cdmini b { font: 400 22px/1 "MusGlyphs", serif; color: var(--text-soft); }
+.cdmini b.lat { font-family: var(--font); font-size: 17px; }
+.cdmini.on b { color: var(--accent); }
+.cdmini canvas { width: 76px; height: 86px; }
+.cdg.piano .cdvocab { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.cdg.piano .cdmini canvas { width: 128px; height: 56px; }
 /* Letra con acordes encima: palabra de dos pisos */
 .withch .cl:not(.ins) { display: flex; flex-wrap: wrap; column-gap: 12px; }
 .withch .wd { display: inline-grid; }
@@ -274,7 +306,7 @@ input[type=range].sl.bi::-webkit-slider-runnable-track { background: linear-grad
 .pop .row { display: flex; gap: 8px; }
 .seg { display: flex; padding: 3px; gap: 2px; border-radius: 18px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.3); }
 .seg[hidden] { display: none; }
-.seg button { flex: 1; height: 30px; border-radius: 15px; font-size: 13px; color: var(--text-soft); }
+.seg button { flex: 1; height: 30px; padding: 0 12px; white-space: nowrap; border-radius: 15px; font-size: 13px; color: var(--text-soft); }
 .seg button[aria-checked=true] { background: #fff; color: #000; }
 .seg button:not([aria-checked=true]):hover { background: var(--press); }
 .switch { width: 44px; height: 24px; border-radius: 12px; background: #4a4a4a; position: relative; transition: background .15s; }

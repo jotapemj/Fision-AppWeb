@@ -125,6 +125,9 @@ test('login, estados de la lista, descarga y apertura', async () => {
     expect(rows.find((r) => r[0] === 'Cancion rota')[2], 'error marcado');
     const good = `[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena'))`;
     expect(await p.eval(`${good}.classList.contains('cld')`), 'buena empieza en la nube');
+    // Sin descargadas no hay filtro: solo el total (un hidden pisado por CSS lo dejaba visible)
+    const bar = await p.eval(`(() => { const f = document.querySelector('.flt'), n = document.querySelector('.bar2 .count'); return { flt: f.getClientRects().length > 0, count: n.getClientRects().length > 0 }; })()`);
+    expect(!bar.flt && bar.count, `cabecera sin descargadas: filtro ${bar.flt ? 'visible' : 'oculto'}, total ${bar.count ? 'visible' : 'oculto'}`);
     await p.eval(`${good}.click()`);
     // Ola sobre la portada mientras baja: canvas con pixeles pintados
     await p.waitFor(`${good}.querySelector('canvas.wave')`, 5000);
@@ -204,6 +207,34 @@ test('acordes: tira por beat, ahora/luego y acorde sobre la palabra', async () =
   expect(over.includes('G>segunda') && over.includes('C>primera'), `acordes sobre palabras: ${over}`);
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
   return `ahora/luego ${nowNext}; ${over}`;
+});
+
+test('diagramas: guitarra pintada, vocabulario, piano sin zonas, clic = seek y se recuerda', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
+  await p.eval(`document.querySelectorAll('.cdsel .seg')[0].querySelectorAll('button')[1].click()`); // guitarra
+  // Blanco del diagrama actual: con forma (dedos) pinta mucho mas que la rejilla vacia
+  const lit = `(() => { const cv = document.querySelector('.cdcard.cur canvas'); const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++; return n; })()`;
+  await p.waitFor(`${lit} > 2000`, 8000);
+  const g = await p.eval(lit);
+  const vocab = await p.eval(`[...document.querySelectorAll('.cdmini b')].map((b) => b.textContent).join(',')`);
+  expect(vocab === 'C,G,Am', `vocabulario: ${vocab}`);
+  const zoneShown = (await p.eval(`getComputedStyle(document.querySelectorAll('.cdsel .seg')[1]).visibility`)) === 'visible';
+  // Piano: teclas con nombre, sin selector de zona
+  await p.eval(`document.querySelectorAll('.cdsel .seg')[0].querySelectorAll('button')[0].click()`);
+  await new Promise((r) => setTimeout(r, 200));
+  const pianoZone = await p.eval(`getComputedStyle(document.querySelectorAll('.cdsel .seg')[1]).visibility`);
+  const pianoLit = await p.eval(lit);
+  expect(zoneShown && pianoZone === 'hidden' && pianoLit > 300, `zona con guitarra ${zoneShown}, con piano ${pianoZone}; piano ${pianoLit} px`);
+  // Clic en Am del vocabulario: la cancion salta a su beat (12 s) y Am pasa a actual
+  await p.eval(`[...document.querySelectorAll('.cdmini')].find((b) => b.textContent.startsWith('Am')).click()`);
+  await p.waitFor(`document.querySelector('.cdcard.cur .cdname b')?.textContent === 'Am'`, 4000);
+  const pref = await p.eval(`localStorage.getItem('fision.chordInstrument')`);
+  await p.eval(`document.querySelectorAll('.cdsel .seg')[0].querySelectorAll('button')[1].click()`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+  expect(pref === 'piano', `instrumento guardado: ${pref}`);
+  return `guitarra ${g} px blancos, vocabulario ${vocab}, piano ${pianoLit} px, seek a Am`;
 });
 
 test('fondo animado: apagado por defecto; encendido pinta color y no tapa clics', async () => {

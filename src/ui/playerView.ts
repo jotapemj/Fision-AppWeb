@@ -8,6 +8,7 @@ import { LyricsView, type LyricsState } from './lyricsView.ts';
 import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
 import { currentBeat, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
 import { ChordStrip } from './chordStrip.ts';
+import { ChordDiagrams } from './chordDiagrams.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
 import icChords from '../assets/icons/ic_chord_carousel.svg';
@@ -33,6 +34,8 @@ export interface PlayerHooks {
   nebula: { get(): boolean; set(on: boolean): void };
   /** Formato de acorde con los ajustes (latino, bemoles, transporte con el tono). */
   formatChord(c: string | null): string;
+  /** Transporte (trasponer con el tono), cifrado latino y bemoles: para diagramas y nombres de nota. */
+  chordNotation(): { shift: number; latin: boolean; flat: boolean };
   /** Hay chords_basic.txt: se ofrece Basicos / Avanzado. */
   hasBasicChords: boolean;
   onChordsBasic(basic: boolean): void;
@@ -65,13 +68,12 @@ export class PlayerView {
   private view: View = loadView();
   private lyrics: LyricsView;
   private beats: { cells: BeatCell[]; beatsPerBar: number } | null = null;
-  private chords: { cells: BeatCell[]; beatsPerBar: number; strip: ChordStrip } | null = null;
+  private chords: { cells: BeatCell[]; beatsPerBar: number; strip: ChordStrip; diagrams: ChordDiagrams } | null = null;
   private beat = -2;
   private chordBeat = -2;
   private nowCh = h('b', { class: 'ch' });
   private nextCh = h('b', { class: 'ch nx' });
   private nowNext = h('span', { class: 'now-ch', hidden: true });
-  private big = h('div', { class: 'bigch' });
   private viewBox = h('div', { class: 'view' });
   private tabs = new Map<View, HTMLButtonElement>();
   private seekEl: HTMLInputElement;
@@ -156,14 +158,17 @@ export class PlayerView {
 
   /** Los ajustes de acordes cambiaron (o el tono, si se transporta): repintar acordes. */
   reformatChords() {
-    if (this.beats) this.setChords(this.beats.cells, this.beats.beatsPerBar);
+    if (this.beats) this.setChords(this.beats.cells, this.beats.beatsPerBar); // rehace tira y diagramas
     this.setLyrics(this.lyricsState);
   }
 
   setChords(cells: BeatCell[], beatsPerBar: number) {
     this.beats = cells.length ? { cells, beatsPerBar } : null;
     if (!cells.some((c) => c.chord)) return;
-    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000), (c) => this.hooks.formatChord(c)) };
+    this.chords?.diagrams.destroy();
+    const diagrams = new ChordDiagrams(cells, { notation: () => this.hooks.chordNotation(), format: (c) => this.hooks.formatChord(c),
+      seekBeat: (b) => this.p.seek((cells[b]?.time ?? 0) * 1000) });
+    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000), (c) => this.hooks.formatChord(c)), diagrams };
     this.nowNext.hidden = false;
     this.chordBeat = -2;
     if (this.view === 'chords') this.renderView();
@@ -209,7 +214,7 @@ export class PlayerView {
         const fmt = (c: string | null) => this.hooks.formatChord(c);
         const now = fmt(soundingChord(this.chords.cells, b)), next = fmt(nextChord(this.chords.cells, b));
         this.nowCh.textContent = now || '–'; this.nextCh.textContent = next || '–';
-        this.big.replaceChildren(h('b', { textContent: now || '–' }), h('span', { textContent: next }));
+        this.chords.diagrams.setBeat(b);
       }
     }
     this.raf = requestAnimationFrame(this.loop);
@@ -229,7 +234,8 @@ export class PlayerView {
     if (this.view !== '3d') this.scene3d?.watchAccent(this.main); // sigue al acento aunque no se vea
     if (this.view === 'chords' && this.chords) {
       const meta = h('p', { class: 'chmeta', textContent: `${this.p.bpm ? Math.round(this.p.bpm) + ' BPM · ' : ''}${this.chords.beatsPerBar}/4` });
-      this.viewBox.replaceChildren(meta, this.chords.strip.el, this.big);
+      this.viewBox.className = 'view chv';
+      this.viewBox.replaceChildren(meta, this.chords.strip.el, this.chords.diagrams.el);
       this.chordBeat = -2; // repintar la tira al volver
       this.chords.strip.invalidate();
       return;

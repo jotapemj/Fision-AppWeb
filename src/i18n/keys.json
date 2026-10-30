@@ -121,5 +121,11 @@
  "dance_swing",
  "dance_randomize_swing",
  "dance_tab_swing",
- "dance_value_speed"
+ "dance_value_speed",
+ "chord_diagram_piano",
+ "chord_diagram_guitar",
+ "chord_diagram_ukulele",
+ "chord_diagram_zone_open",
+ "chord_diagram_zone_auto",
+ "chord_diagram_bass"
 ]

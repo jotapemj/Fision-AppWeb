@@ -37,7 +37,9 @@
   "web_3d_stop_dance": "Stop the dance",
   "web_3d_loading": "Loading the 3D scene",
   "web_3d_unavailable": "This browser has no WebGL: the 3D scene cannot be shown.",
-  "web_3d_locked": "3D audio is on: volume and balance do not apply."
+  "web_3d_locked": "3D audio is on: volume and balance do not apply.",
+  "web_chords_vocab": "In this song · {1} chords",
+  "web_chords_loading": "Loading chord shapes"
  },
  "es": {
   "web_search": "Buscar",
@@ -77,6 +79,8 @@
   "web_3d_stop_dance": "Parar el baile",
   "web_3d_loading": "Cargando la escena 3D",
   "web_3d_unavailable": "Este navegador no tiene WebGL: la escena 3D no puede mostrarse.",
-  "web_3d_locked": "Audio 3D activo: el volumen y el balance no cuentan."
+  "web_3d_locked": "Audio 3D activo: el volumen y el balance no cuentan.",
+  "web_chords_vocab": "En esta canción · {1} acordes",
+  "web_chords_loading": "Cargando las posiciones"
  }
 }

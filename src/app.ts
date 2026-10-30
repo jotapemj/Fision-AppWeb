@@ -186,6 +186,7 @@ export class App {
         onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
         nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
         onView: (v) => this.nebula?.setOrbitBlobsVisible(v !== '3d'),
+        chordNotation: () => ({ shift: this.settings.get('chordTranspose') ? player.pitch : 0, latin: this.settings.get('chordLatin'), flat: this.settings.get('chordFlat') }),
         formatChord: (c) => formatChord(c, this.settings.get('chordTranspose') ? player.pitch : 0, this.settings.get('chordLatin'), this.settings.get('chordFlat')),
         hasBasicChords: hasBasic,
         onChordsBasic: (basic) => { player.setChordsBasic(basic); applyChords(); },

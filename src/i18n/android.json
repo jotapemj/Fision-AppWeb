@@ -125,7 +125,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Randomize swing",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} turns/s"
+  "dance_value_speed": "{1} turns/s",
+  "chord_diagram_piano": "Piano",
+  "chord_diagram_guitar": "Guitar",
+  "chord_diagram_ukulele": "Ukulele",
+  "chord_diagram_zone_open": "Open",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Bass: {1}"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -254,7 +260,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Swing aleatorio",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} vueltas/s"
+  "dance_value_speed": "{1} vueltas/s",
+  "chord_diagram_piano": "Piano",
+  "chord_diagram_guitar": "Guitarra",
+  "chord_diagram_ukulele": "Ukelele",
+  "chord_diagram_zone_open": "Abierta",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Bajo: {1}"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -382,7 +394,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Swing aleatori",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} voltes/s"
+  "dance_value_speed": "{1} voltes/s",
+  "chord_diagram_piano": "Piano",
+  "chord_diagram_guitar": "Guitarra",
+  "chord_diagram_ukulele": "Ukulele",
+  "chord_diagram_zone_open": "Oberta",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Baix: {1}"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -512,7 +530,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Випадковий swing",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} об/с"
+  "dance_value_speed": "{1} об/с",
+  "chord_diagram_piano": "Піаніно",
+  "chord_diagram_guitar": "Гітара",
+  "chord_diagram_ukulele": "Укулеле",
+  "chord_diagram_zone_open": "Відкриті",
+  "chord_diagram_zone_auto": "Авто",
+  "chord_diagram_bass": "Бас: {1}"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -635,7 +659,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Swing aleatório",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} voltas/s"
+  "dance_value_speed": "{1} voltas/s",
+  "chord_diagram_piano": "Piano",
+  "chord_diagram_guitar": "Violão",
+  "chord_diagram_ukulele": "Ukulele",
+  "chord_diagram_zone_open": "Aberto",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Baixo: {1}"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -758,7 +788,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Swing aléatoire",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} tours/s"
+  "dance_value_speed": "{1} tours/s",
+  "chord_diagram_piano": "Piano",
+  "chord_diagram_guitar": "Guitare",
+  "chord_diagram_ukulele": "Ukulélé",
+  "chord_diagram_zone_open": "Ouvert",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Basse : {1}"
  },
  "de": {
   "tab_songs": "Songs",
@@ -878,7 +914,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Zufälliger Swing",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} U/s"
+  "dance_value_speed": "{1} U/s",
+  "chord_diagram_piano": "Klavier",
+  "chord_diagram_guitar": "Gitarre",
+  "chord_diagram_ukulele": "Ukulele",
+  "chord_diagram_zone_open": "Offen",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Bass: {1}"
  },
  "it": {
   "tab_songs": "Brani",
@@ -1001,7 +1043,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Swing casuale",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} giri/s"
+  "dance_value_speed": "{1} giri/s",
+  "chord_diagram_piano": "Pianoforte",
+  "chord_diagram_guitar": "Chitarra",
+  "chord_diagram_ukulele": "Ukulele",
+  "chord_diagram_zone_open": "Aperto",
+  "chord_diagram_zone_auto": "Auto",
+  "chord_diagram_bass": "Basso: {1}"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -1125,7 +1173,13 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "Случайный swing",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} об/с"
+  "dance_value_speed": "{1} об/с",
+  "chord_diagram_piano": "Фортепиано",
+  "chord_diagram_guitar": "Гитара",
+  "chord_diagram_ukulele": "Укулеле",
+  "chord_diagram_zone_open": "Открытая",
+  "chord_diagram_zone_auto": "Авто",
+  "chord_diagram_bass": "Бас: {1}"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -1246,6 +1300,12 @@
   "dance_swing": "swing",
   "dance_randomize_swing": "随机 swing",
   "dance_tab_swing": "Swing",
-  "dance_value_speed": "{1} 圈/秒"
+  "dance_value_speed": "{1} 圈/秒",
+  "chord_diagram_piano": "钢琴",
+  "chord_diagram_guitar": "吉他",
+  "chord_diagram_ukulele": "尤克里里",
+  "chord_diagram_zone_open": "开放",
+  "chord_diagram_zone_auto": "自动",
+  "chord_diagram_bass": "低音：{1}"
  }
 }
