@@ -37,6 +37,8 @@ export interface PlayerHooks {
   hasBasicChords: boolean;
   onChordsBasic(basic: boolean): void;
   onPitch?(): void;
+  /** Vista elegida (la nebulosa oculta sus blobs en 3D). */
+  onView?(v: View): void;
 }
 
 const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="13" width="5" height="3" rx="1" fill="currentColor"/><rect x="9.5" y="7" width="5" height="3" rx="1" fill="currentColor"/><rect x="15.5" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
@@ -86,9 +88,11 @@ export class PlayerView {
   private scene3d: Scene3D | null = null; // se construye la primera vez y vive con la cancion
   private scene3dLoading = false;
   private dead = false;
+  private card: { cover: string | null; title: string; artist: string };
 
   constructor(p: Player, song: LibraryEntry, cover: string | null, hooks: PlayerHooks) {
     this.p = p; this.hooks = hooks;
+    this.card = { cover, title: song.title || song.filename, artist: song.artist ?? '' };
     this.lyrics = new LyricsView({ kind: 'loading' }, (sec) => p.seek(sec * 1000));
     const top = h('div', { class: 'top' },
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
@@ -137,6 +141,7 @@ export class PlayerView {
     this.refreshActs();
     this.refreshPlay();
     this.renderView();
+    hooks.onView?.(this.view);
     this.loop();
   }
 
@@ -214,6 +219,7 @@ export class PlayerView {
     this.view = v;
     try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
     for (const [k, b] of this.tabs) b.setAttribute('aria-selected', String(k === v));
+    this.hooks.onView?.(v);
     this.renderView();
   }
 
@@ -260,7 +266,7 @@ export class PlayerView {
     void import('./scene3d.ts').then(({ Scene3D }) => {
       this.scene3dLoading = false;
       if (this.dead) return; // cancion cerrada mientras cargaba
-      this.scene3d = new Scene3D(this.p, { onEnabled: (on) => this.tabs.get('3d')!.classList.toggle('on3d', on) });
+      this.scene3d = new Scene3D(this.p, this.card, { onEnabled: (on) => this.tabs.get('3d')!.classList.toggle('on3d', on) });
       if (this.view === '3d') this.show3D();
     });
   }

@@ -14,6 +14,7 @@ import {
   SWING_MAX, SWING_MIN, worldPos, type Pose3D,
 } from '../player/audio3d.ts';
 import { iconOf } from './stemIcons.ts';
+import { addPanels, addStudioWall, addTraps, PANEL_COLOR, SongScreen, TRAP_COLOR } from './scene3dDecor.ts';
 import { h, img, setSlider, slider } from './dom.ts';
 
 // Camara inicial (DEF_* de Android): detras de la cabeza, mirando la pared frontal
@@ -23,6 +24,7 @@ const SPRITE = 0.5, RING = SPRITE * 1.55, OMNI = SPRITE * 2, SHADOW = SPRITE * 1
 const LONG_PRESS_MS = 450, DOUBLE_MS = 300, DOUBLE_PX = 60, SLOP_PX = 6;
 const LIGHT_OFF = 0.2; // 3D apagado: luces al 20 %
 const HIDE_EPS = 0.05, SHOW_EPS = 0.15; // dollhouse: histeresis al cruzar paredes
+const WALL_FIXTURE_CLEARANCE = 0.35; // paneles, tele, alfeizar: la pared se oculta antes de atravesarlos
 const LAMP_CD = 9, AMBIENT = 0.32; // calibrado a ojo (Android usa exposicion sunny-16 de Filament)
 const WARM = 0xffb46b; // ~3500 K
 const ACCENT_FALLBACK = [39, 179, 151] as const;
@@ -61,6 +63,26 @@ function felt(): Float32Array {
   const r = rng(7), f = new Float32Array(SIZE * SIZE), n1 = noise(SIZE, 8, r), n2 = noise(SIZE, 32, r), n3 = noise(SIZE, 64, r);
   for (let i = 0; i < f.length; i++) f[i] = 0.12 * n1[i] + 0.1 * n2[i] + 0.12 * n3[i] + 0.1 * (r() * 2 - 1);
   return (feltField = f);
+}
+let corkField: Float32Array | null = null;
+/** Corcho: celdas (Worley periodico, 40 por baldosa) con huecos oscuros en los bordes + manchas + grano. */
+function cork(): Float32Array {
+  if (corkField) return corkField;
+  const r = rng(71), cells = 40, pts: number[] = [], val: number[] = [];
+  for (let i = 0; i < cells * cells; i++) { pts.push(r(), r()); val.push(r() * 2 - 1); }
+  const mottle = noise(SIZE, 4, r), f = new Float32Array(SIZE * SIZE);
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+    const fx = x / SIZE * cells, fy = y / SIZE * cells, cx = Math.floor(fx), cy = Math.floor(fy);
+    let d1 = 9, d2 = 9, v = 0;
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      const gx = (cx + i + cells) % cells, gy = (cy + j + cells) % cells, k = gy * cells + gx;
+      const d = Math.hypot(cx + i + pts[k * 2] * 0.9 - fx, cy + j + pts[k * 2 + 1] * 0.9 - fy);
+      if (d < d1) { d2 = d1; d1 = d; v = val[k]; } else if (d < d2) d2 = d;
+    }
+    const e = d2 - d1, gap = e < 0.06 ? -0.22 * (1 - e / 0.06) : 0;
+    f[y * SIZE + x] = 0.16 * v + gap + 0.05 * mottle[y * SIZE + x] + 0.05 * (r() * 2 - 1);
+  }
+  return (corkField = f);
 }
 function carpet(): Float32Array {
   if (carpetField) return carpetField;
@@ -115,6 +137,8 @@ function parseColor(css: string): RGB {
   return m ? [+m[0], +m[1], +m[2]] : [...ACCENT_FALLBACK];
 }
 
+export interface SongCard { cover: string | null; title: string; artist: string }
+
 export interface Scene3DHooks {
   /** El interruptor de audio 3D cambio (pestana tintada, mezcla bloqueada). */
   onEnabled(on: boolean): void;
@@ -130,6 +154,9 @@ export class Scene3D {
   private controls: OrbitControls | null = null;
   private sprites = new Map<string, Sprite>();
   private walls: { mesh: THREE.Mesh; axis: 'x' | 'y' | 'z'; at: number; sign: number }[] = [];
+  private traps: { mesh: THREE.Mesh; sx: number; sz: number }[] = [];
+  private screen: SongScreen | null = null;
+  private card: SongCard;
   private wallTex: THREE.CanvasTexture | null = null;
   private ceilTex: THREE.CanvasTexture | null = null;
   private floorTex: THREE.CanvasTexture | null = null;
@@ -162,8 +189,8 @@ export class Scene3D {
   private danceBtn = h('button', { class: 'd3btn', attrs: { 'aria-label': t('stems_dance_title'), title: t('stems_dance_title') } });
   private panel = h('div', { class: 'd3panel', hidden: true });
 
-  constructor(p: Player, hooks: Scene3DHooks) {
-    this.p = p; this.hooks = hooks;
+  constructor(p: Player, card: SongCard, hooks: Scene3DHooks) {
+    this.p = p; this.hooks = hooks; this.card = card;
     this.buildChrome();
     (this.el as HTMLElement & { scene3d?: Scene3D }).scene3d = this; // acceso de las pruebas
     try {
@@ -278,7 +305,11 @@ export class Scene3D {
     };
     const cy = (ROOM_FLOOR_Y + ROOM_CEIL_Y) / 2;
     // Cuatro paredes mirando hacia dentro; cada una sabe en que plano se oculta (dollhouse)
-    const add = (m: THREE.Mesh, axis: 'x' | 'y' | 'z', at: number, sign: number) => { this.scene.add(m); this.walls.push({ mesh: m, axis, at, sign }); };
+    // Las paredes llevan objetos hacia dentro: se ocultan WALL_FIXTURE_CLEARANCE antes de su plano
+    const add = (m: THREE.Mesh, axis: 'x' | 'y' | 'z', at: number, sign: number) => {
+      this.scene.add(m);
+      this.walls.push({ mesh: m, axis, at: axis === 'y' ? at : at - sign * WALL_FIXTURE_CLEARANCE, sign });
+    };
     const front = plane(W, H, wallM, 1.26); front.position.set(0, cy, ROOM_HALF_Z); front.rotation.y = Math.PI; add(front, 'z', ROOM_HALF_Z, 1);
     const back = plane(W, H, wallM, 1.26); back.position.set(0, cy, -ROOM_HALF_Z); add(back, 'z', -ROOM_HALF_Z, -1);
     const left = plane(D, H, wallM, 1.26); left.position.set(ROOM_HALF_X, cy, 0); left.rotation.y = -Math.PI / 2; add(left, 'x', ROOM_HALF_X, 1);
@@ -286,6 +317,13 @@ export class Scene3D {
     const ceil = plane(W, D, ceilM, 1.26); ceil.position.set(0, ROOM_CEIL_Y, 0); ceil.rotation.x = Math.PI / 2; add(ceil, 'y', ROOM_CEIL_Y, 1);
     const floor = plane(W, D, floorM, 1.15); floor.position.set(0, ROOM_FLOOR_SURFACE_Y, 0); floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
+    // Decoracion: paneles en la pared de la tele y laterales, pilares, tele, ventana y puerta
+    const panelTex = bake(cork(), PANEL_COLOR, 0.44), trapTex = bake(cork(), TRAP_COLOR, 0.44);
+    addPanels([{ mesh: front, tv: true }, { mesh: left, tv: false }, { mesh: right, tv: false }], panelTex);
+    this.traps = addTraps(this.scene, trapTex);
+    addStudioWall(back);
+    this.screen = new SongScreen(front);
+    void this.screen.set(this.card.cover, this.card.title, this.card.artist, this.accent).then(() => (this.dirty = true));
   }
 
   /** Tinte de la sala: pared = gris + 46 % de acento, techo 16 % mas oscuro, suelo casi negro + 18 %. */
@@ -383,6 +421,7 @@ export class Scene3D {
     if (a.every((v, i) => v === this.accent[i])) return;
     this.accent = a;
     this.bakeRoom();
+    this.screen?.setFallback(a, !!this.card.cover);
     const ring = ringTex(a), halo = haloTex(a);
     for (const sp of this.sprites.values()) {
       sp.ring.material.map?.dispose(); sp.ring.material.map = ring;
@@ -479,6 +518,9 @@ export class Scene3D {
       if (w.mesh.visible && out > HIDE_EPS) w.mesh.visible = false;
       else if (!w.mesh.visible && out < -SHOW_EPS) w.mesh.visible = true;
     }
+    // Un pilar se oculta si cae cualquiera de sus dos paredes (si no, flota en el aire)
+    const wallAt = (axis: 'x' | 'z', sign: number) => this.walls.find((w) => w.axis === axis && w.sign === sign)?.mesh.visible ?? true;
+    for (const t of this.traps) t.mesh.visible = wallAt('x', t.sx) && wallAt('z', t.sz);
   }
 
   private loop = (now: number) => {

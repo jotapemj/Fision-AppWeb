@@ -369,13 +369,30 @@ test('3D: escena pintada, luces con el interruptor, arrastre, omni, mute, baile 
   await new Promise((r) => setTimeout(r, 1300));
   const after = await p.eval(`[...${sc}.sprites.keys()].map((k) => ${sc}.probe(k).pose)`);
   expect(after.every((q) => !q.placed && !q.omni && !q.muted && q.rh === 1.5 && q.h === 0), `reset: ${JSON.stringify(after)}`);
+  // Tele: caratula con texto blanco abajo y luz trasera con color
+  await p.waitFor(`${sc}.screen && ${sc}.screen.token > 0`, 3000);
+  await new Promise((r) => setTimeout(r, 300));
+  const tv = await p.eval(`(() => { const s = ${sc}.screen;
+    const d = s.card.getContext('2d').getImageData(64, 700, 896, 260).data; let white = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 235 && d[i + 1] > 235 && d[i + 2] > 235) white++;
+    const g = s.glow.getContext('2d').getImageData(0, 0, 256, 256).data; let lit = 0;
+    for (let i = 3; i < g.length; i += 4) if (g[i] > 20) lit++;
+    return { white, lit }; })()`);
+  expect(tv.white > 500 && tv.lit > 5000, `tele: ${tv.white} px de texto, ${tv.lit} px de luz trasera`);
+  // Dollhouse: camara fuera por +X -> esa pared y sus dos pilares se ocultan
+  const doll = await p.eval(`(() => { const s = ${sc}; s.camera.position.set(6, 1, 0); s.controls.update(); s.bounds();
+    const wall = s.walls.find((w) => w.axis === 'x' && w.sign === 1).mesh.visible;
+    const traps = s.traps.map((t) => t.sx + ':' + t.mesh.visible).join(',');
+    s.camera.position.set(0, 2, -4); s.controls.update(); s.bounds(); s.dirty = true;
+    return { wall, traps }; })()`);
+  expect(!doll.wall && doll.traps === '-1:true,-1:true,1:false,1:false', `dollhouse: pared ${doll.wall}, pilares ${doll.traps}`);
   // Mezcla bloqueada con el 3D encendido
   await p.eval(`[...document.querySelectorAll('.seg2 button')][2].click()`);
   const locked = await p.eval(`!!document.querySelector('.note3d') && [...document.querySelectorAll('.stem input')].every((i) => i.disabled)`);
   await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
   await p.eval(`document.querySelector('.d3head .switch').click()`); // deja el 3D como estaba
   expect(locked, 'mezcla sin bloquear en 3D');
-  return `pintado ${(on.lit * 100).toFixed(0)} %, brillo ${off.mean.toFixed(0)} -> ${on.mean.toFixed(0)}, arrastre, omni, mute, baile, reset y mezcla bloqueada`;
+  return `pintado ${(on.lit * 100).toFixed(0)} %, brillo ${off.mean.toFixed(0)} -> ${on.mean.toFixed(0)}, tele ${tv.white} px de texto, dollhouse, arrastre, omni, mute, baile, reset y mezcla bloqueada`;
 });
 
 test('sin excepciones en la pagina', async () => {

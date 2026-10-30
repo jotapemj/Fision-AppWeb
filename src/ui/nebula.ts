@@ -18,6 +18,8 @@ export class Nebula {
   private last = 0;
   private raf = 0;
   private on = false;
+  private orbitK = 1;      // 0 = blobs en orbita ocultos (vista 3D): queda el ancla
+  private orbitTo = 1;
   private still = matchMedia('(prefers-reduced-motion: reduce)');
 
   constructor() {
@@ -30,6 +32,9 @@ export class Nebula {
   setColors(p: NebulaColors) { this.palette = p; }
 
   setEnabled(on: boolean) { this.on = on; this.el.classList.toggle('on', on); this.sync(); }
+
+  /** Vista 3D: los 3 blobs en orbita se funden (500 ms); el ancla se queda. */
+  setOrbitBlobsVisible(v: boolean) { this.orbitTo = v ? 1 : 0; if (this.still.matches || !this.on) this.orbitK = this.orbitTo; }
 
   /** Pulso en un beat (0..1); se queda el maximo. */
   beat(intensity: number) { if (intensity > this.pulse) this.pulse = intensity; }
@@ -48,6 +53,7 @@ export class Nebula {
     const dt = this.last ? (now - this.last) / 1000 : 0;
     this.last = now;
     this.pulse = decayPulse(this.pulse, dt);
+    this.orbitK = this.orbitTo > this.orbitK ? Math.min(this.orbitTo, this.orbitK + dt / 0.5) : Math.max(this.orbitTo, this.orbitK - dt / 0.5);
     this.draw(this.still.matches ? 0 : (now - this.t0) / 1000);
   };
 
@@ -59,12 +65,12 @@ export class Nebula {
     ctx.clearRect(0, 0, w, hgt);
     ctx.globalCompositeOperation = 'lighter'; // PorterDuff ADD
     const p = this.pulse, min = Math.min(w, hgt);
-    this.orbit.forEach((o, i) => {
+    if (this.orbitK > 0) this.orbit.forEach((o, i) => {
       const a = 2 * Math.PI * o.freq * t + o.phase;
       const cx = w / 2 + w * o.rx * Math.cos(a), cy = hgt / 2 + hgt * o.ry * Math.sin(a);
       const r = i === 0 ? min * 0.30 * (1 + p * 0.40) : min * 0.55 * (1 + p * 0.10);
       const alpha = Math.min(230, i === 0 ? 170 + p * 70 : 135 + p * 60) / 255;
-      this.blob(cx, cy, r, this.palette.blobs[i], alpha, 0.20);
+      this.blob(cx, cy, r, this.palette.blobs[i], alpha * this.orbitK, 0.20);
     });
     // Ancla: elipse fija bajo el borde, como un foco tras el transporte
     const ax = w / 2, ay = hgt * ANCHOR_Y, ar = w * ANCHOR_W * (1 + p * 0.15);
