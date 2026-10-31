@@ -73,6 +73,17 @@ export class Api {
     return this.saveSession(await this.json(await this.authed('/auth/refresh', { method: 'POST' })));
   }
 
+  /** Sesion sin red: usuario y caducidad del token guardado (claims sub/exp). null si no hay o caduco. */
+  offlineSession(): Session | null {
+    const token = this.store.get();
+    try {
+      const b = token!.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const c = JSON.parse(atob(b + '='.repeat((4 - (b.length % 4)) % 4))) as { sub?: unknown; exp?: unknown };
+      if (typeof c.sub !== 'string' || typeof c.exp !== 'number' || c.exp * 1000 <= Date.now()) return null;
+      return { token: token!, user: c.sub, expiresAt: new Date(c.exp * 1000).toISOString() };
+    } catch { return null; }
+  }
+
   logout(): void { this.store.set(null); }
 
   async library(): Promise<LibraryEntry[]> { return this.json(await this.authed('/library')); }

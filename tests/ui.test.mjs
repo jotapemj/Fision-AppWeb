@@ -13,6 +13,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const H1 = '1'.repeat(64), H2 = '2'.repeat(64), H3 = '3'.repeat(64), H4 = '4'.repeat(64);
 
 const wd = (start, end, text) => ({ start, end, text });
+// Token con forma de JWT (sub/exp): sin red la web entra con la sesion guardada
+const TOK = `x.${Buffer.from(JSON.stringify({ sub: 'demo', exp: 4102444800 })).toString('base64url')}.y`;
 const LYRICS = { language: 'es', segments: [
   { start: 0.5, end: 2, text: 'primera linea', words: [wd(0.5, 1, 'primera'), wd(1, 2, 'linea')] },
   { start: 2.5, end: 4, text: 'segunda linea', words: [wd(2.5, 3, 'segunda'), wd(3, 4, 'linea')] },
@@ -43,15 +45,17 @@ async function fakeServer() {
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const pl = { list: [], calls: [] }; // playlists en memoria
   const del = { calls: [], queueGone: false, gone: false, busy: true }; // borrados
+  const net = { down: false }; // server inalcanzable
   const ch = { v: null, body: null, gets: [] }; // acordes nuevos en el server (refreshChords)
   const up = { jobs: null, calls: [], zips: [], newReady: false, config: {}, lyr: { posts: [], polls: 0, ready: false } }; // subidas, reprocesos, letra
   const srv = http.createServer(async (req, res) => {
     let body = '';
     for await (const c of req) body += c;
     const json = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
-    if (req.url === '/login') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
-    if (req.headers.authorization !== 'Bearer tok') return json(401, { detail: 'Not authenticated' });
-    if (req.url === '/auth/refresh') return json(200, { token: 'tok', user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
+    if (req.url === '/login') return json(200, { token: TOK, user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
+    if (net.down) return req.socket.destroy(); // server caido: sin respuesta
+    if (req.headers.authorization !== `Bearer ${TOK}`) return json(401, { detail: 'Not authenticated' });
+    if (req.url === '/auth/refresh') return json(200, { token: TOK, user: 'demo', expires_at: '2099-01-01T00:00:00+00:00' });
     if (req.method === 'DELETE' && req.url === '/jobs/j') { del.calls.push('DELETE /jobs/j'); del.queueGone = true; return json(200, { job_id: 'j', state: 'cancelled' }); }
     if (req.method === 'DELETE' && req.url === `/library/${H2}`) {
       del.calls.push(`DELETE H2${del.busy ? ' 409' : ''}`);
@@ -115,7 +119,7 @@ async function fakeServer() {
     json(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, del, ch, close: () => srv.close() };
+  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, del, ch, net, close: () => srv.close() };
 }
 
 // Medidas dentro de la pagina: solapes, recortes, contraste calculado
@@ -717,6 +721,28 @@ test('borrar: en cola se saca de la cola; descargada borra la copia (y para si s
   await p.waitFor(`!${row('Cancion rota')}`, 5000);
   expect(/nube|cloud/i.test(cloudItems.at(-1)) && stays && del.calls.join() === 'DELETE /jobs/j,DELETE H2 409,DELETE H2', `nube: ${cloudItems} -> ${del.calls}, tras 409 sigue ${stays}`);
   return `cola cancelada, copia local borrada con la cancion sonando, nube 409 -> borrada`;
+});
+
+test('sin red: entra con la sesion guardada, biblioteca y playlists de la copia offline; lo descargado suena', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, net = c.fake.net;
+  const before = await p.eval(`[...document.querySelectorAll('.dr b')].map((b) => b.textContent).join('|')`);
+  net.down = true;
+  await p.goto(c.url);
+  await p.waitFor(`document.querySelector('.me .who span.off') && document.querySelectorAll('.dr').length === ${before.split('|').length}`, 15000);
+  const st = await p.eval(`({ srv: document.querySelector('.me .who span').textContent, rows: [...document.querySelectorAll('.dr b')].map((b) => b.textContent).join('|'), login: !!document.querySelector('.login') })`);
+  expect(!st.login && /Servidor sin conexi|Server offline/.test(st.srv), `estado: ${JSON.stringify(st)}`);
+  expect(st.rows === before, `filas offline ${st.rows} vs ${before}`);
+  // Una descargada se abre y suena sin server
+  const local = `[...document.querySelectorAll('.dr')].find((r) => !r.classList.contains('cld'))`;
+  expect(await p.eval(`!!${local}`), 'hay una descargada');
+  await p.eval(`${local}.click()`);
+  await p.waitFor(`document.querySelector('.pbar .seek .meta span') && document.querySelector('.pbar .seek .meta span').textContent !== '00:00'`, 15000);
+  // Vuelve la red: se quita el aviso
+  net.down = false;
+  await p.eval(`dispatchEvent(new Event('online'))`);
+  await p.waitFor(`!document.querySelector('.me .who span.off')`, 8000);
+  return `${st.srv}; ${st.rows.split('|').length} filas; suena una descargada`;
 });
 
 test('sin excepciones en la pagina', async () => {

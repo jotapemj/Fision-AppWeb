@@ -71,6 +71,18 @@ test('cada cuenta ve solo lo suyo; borrar', () => withTmp(async (_, store) => {
   expect((await a.list()).length === 0, 'borrado');
 }));
 
+test('copia offline de la cuenta: biblioteca y playlists; no cuentan como canciones', () => withTmp(async (_, store) => {
+  const s = store('demo');
+  expect((await s.getMeta('library')) === null, 'sin copia = null');
+  await s.save(H, 'v1', files);
+  await s.putMeta('library', [{ hash: H, title: 'x' }]);
+  await s.putMeta('playlists', { list: [], details: [] });
+  const lib = await s.getMeta('library');
+  expect(lib.length === 1 && lib[0].title === 'x', 'biblioteca');
+  expect((await s.list()).join() === H, 'lista sin los json');
+  expect((await store('otro').getMeta('library')) === null, 'por cuenta');
+}));
+
 test('sello de acordes: al descargar = updated_at; se cambia sin tocar la copia', () => withTmp(async (_, store) => {
   const s = store('demo');
   expect((await s.chordsStamp(H)) === null, 'sin copia');

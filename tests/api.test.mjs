@@ -136,3 +136,12 @@ test('playlists: crear, listar sin canciones, reordenar con PUT, portada multipa
     return `${dup}, ${gone}`;
   } finally { s.close(); }
 });
+
+test('sesion sin red: usuario y caducidad del token guardado', () => {
+  const jwt = (claims) => `h.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.s`;
+  const mk = (tok) => new Api('', { get: () => tok, set: () => {} });
+  const s = mk(jwt({ sub: 'demo', exp: 4102444800 })).offlineSession();
+  expect(s?.user === 'demo' && s.expiresAt.startsWith('2100-01-01'), JSON.stringify(s));
+  expect(mk(jwt({ sub: 'demo', exp: 1000 })).offlineSession() === null, 'caducado');
+  expect(mk('basura').offlineSession() === null && mk(null).offlineSession() === null, 'sin token valido');
+});

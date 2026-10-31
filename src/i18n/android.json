@@ -275,7 +275,8 @@
   "export_solo_title": "Solo active",
   "export_solo_body": "The export ignores the solo: every stem plays at its own volume.",
   "export_solo_continue": "Continue",
-  "export_include_fx": "Include effects"
+  "export_include_fx": "Include effects",
+  "server_status_offline": "Server offline"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -555,7 +556,8 @@
   "export_solo_title": "Solo activo",
   "export_solo_body": "La exportación ignora el solo: cada pista suena con su volumen.",
   "export_solo_continue": "Continuar",
-  "export_include_fx": "Incluir efectos"
+  "export_include_fx": "Incluir efectos",
+  "server_status_offline": "Servidor sin conexión"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -834,7 +836,8 @@
   "export_solo_title": "Solo actiu",
   "export_solo_body": "L'exportació ignora el solo: cada pista sona amb el seu volum.",
   "export_solo_continue": "Continua",
-  "export_include_fx": "Inclou els efectes"
+  "export_include_fx": "Inclou els efectes",
+  "server_status_offline": "Servidor sense connexió"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -1116,7 +1119,8 @@
   "export_solo_title": "Соло увімкнено",
   "export_solo_body": "Експорт не враховує соло: кожна доріжка звучить зі своєю гучністю.",
   "export_solo_continue": "Продовжити",
-  "export_include_fx": "Додати ефекти"
+  "export_include_fx": "Додати ефекти",
+  "server_status_offline": "Сервер недоступний"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -1388,7 +1392,8 @@
   "export_solo_title": "Solo ativo",
   "export_solo_body": "A exportação ignora o solo: cada faixa toca no próprio volume.",
   "export_solo_continue": "Continuar",
-  "export_include_fx": "Incluir efeitos"
+  "export_include_fx": "Incluir efeitos",
+  "server_status_offline": "Servidor off-line"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -1660,7 +1665,8 @@
   "export_solo_title": "Solo actif",
   "export_solo_body": "L'export ignore le solo : chaque piste garde son volume.",
   "export_solo_continue": "Continuer",
-  "export_include_fx": "Inclure les effets"
+  "export_include_fx": "Inclure les effets",
+  "server_status_offline": "Serveur hors ligne"
  },
  "de": {
   "tab_songs": "Songs",
@@ -1928,7 +1934,8 @@
   "export_solo_title": "Solo aktiv",
   "export_solo_body": "Der Export ignoriert das Solo: Jeder Stem klingt mit seiner Lautstärke.",
   "export_solo_continue": "Weiter",
-  "export_include_fx": "Effekte einbeziehen"
+  "export_include_fx": "Effekte einbeziehen",
+  "server_status_offline": "Server offline"
  },
  "it": {
   "tab_songs": "Brani",
@@ -2200,7 +2207,8 @@
   "export_solo_title": "Solo attivo",
   "export_solo_body": "L'esportazione ignora il solo: ogni traccia suona al suo volume.",
   "export_solo_continue": "Continua",
-  "export_include_fx": "Includi gli effetti"
+  "export_include_fx": "Includi gli effetti",
+  "server_status_offline": "Server offline"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -2474,7 +2482,8 @@
   "export_solo_title": "Соло включено",
   "export_solo_body": "Экспорт не учитывает соло: каждая дорожка звучит со своей громкостью.",
   "export_solo_continue": "Продолжить",
-  "export_include_fx": "Включить эффекты"
+  "export_include_fx": "Включить эффекты",
+  "server_status_offline": "Сервер не в сети"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -2742,6 +2751,7 @@
   "export_solo_title": "独奏已开启",
   "export_solo_body": "导出会忽略独奏：每个分轨按各自音量播放。",
   "export_solo_continue": "继续",
-  "export_include_fx": "包含效果"
+  "export_include_fx": "包含效果",
+  "server_status_offline": "服务器离线"
  }
 }

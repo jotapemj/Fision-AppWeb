@@ -88,7 +88,12 @@ export class App {
   async start() {
     if (!this.api.hasToken) return this.showLogin();
     try { this.enter(await this.api.refresh()); }
-    catch (e) { if (e instanceof ApiError && e.status === 401) return; this.showLogin(t('login_err_network')); }
+    catch (e) {
+      if (e instanceof ApiError && e.status === 401) return;
+      // Sin red: se entra con la sesion guardada y la copia offline (lo descargado suena)
+      const s = this.api.offlineSession();
+      if (s) this.enter(s); else this.showLogin(t('login_err_network'));
+    }
   }
 
   private showLogin(notice = '') {
@@ -129,7 +134,9 @@ export class App {
     // Volver a la pestana = onStart de Android: biblioteca al dia (y acordes nuevos)
     if (!this.visHooked) {
       this.visHooked = true;
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && this.store) void this.refreshLibrary(); });
+      const resync = () => { if (this.store) void this.refreshLibrary().then(() => this.syncPlaylists()); };
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resync(); });
+      addEventListener('online', resync); // onConnectivityChanged(true)
     }
   }
 
@@ -146,10 +153,23 @@ export class App {
       // Los jobs de letra no ocupan la fila (la cancion se sigue pudiendo abrir) ni piden zip al acabar
       this.entries = entries; this.jobs = jobs.filter((j) => !this.lyricsJobs.has(j.job_id)); this.downloaded = new Set(local);
       this.online = true;
+      this.sidebar?.setOnline(true);
       this.render();
+      void this.store!.putMeta('library', entries).catch(() => {});
       void this.settleJobs();
       void this.refreshChords();
-    } catch (e) { this.online = false; if (!(e instanceof ApiError && e.status === 401)) console.warn('library', e); }
+    } catch (e) {
+      this.online = false;
+      if (e instanceof ApiError && e.status === 401) return;
+      console.warn('library', e);
+      this.sidebar?.setOnline(false);
+      // Sin red: la ultima biblioteca conocida y lo descargado (los jobs no se saben)
+      const store = this.store!;
+      if (!this.entries.length) this.entries = (await store.getMeta<LibraryEntry[]>('library')) ?? [];
+      this.downloaded = new Set(await store.list().catch(() => [...this.downloaded]));
+      this.jobs = [];
+      this.render();
+    }
     // Con jobs vivos, sondear hasta que acaben (luego la entrada pasa a ready)
     clearTimeout(this.pollTimer);
     if (this.jobs.length) this.pollTimer = window.setTimeout(() => this.refreshLibrary(), JOB_POLL_MS);
@@ -257,7 +277,15 @@ export class App {
       }
       for (const id of [...this.plDetail.keys()]) if (!list.some((p) => p.id === id)) this.plDetail.delete(id);
       this.playlists = list;
-    } catch (e) { if (e instanceof ApiError && e.status === 401) return; }
+      void this.store!.putMeta('playlists', { list, details: [...this.plDetail.values()] }).catch(() => {});
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return;
+      // Sin red: la copia offline (PlaylistRepository carga Room al arrancar); solo lectura
+      if (!this.playlists.length) {
+        const c = await this.store!.getMeta<{ list: PlaylistSummary[]; details: Playlist[] }>('playlists');
+        if (c) { this.playlists = c.list; for (const d of c.details) this.plDetail.set(d.id, d); }
+      }
+    }
     this.sidebar?.setPlaylists(this.playlists, this.online);
     // La abierta se refresca con su detalle nuevo
     const open = this.sidebar?.openPlaylist;
@@ -360,6 +388,7 @@ export class App {
       return;
     }
     this.entries = this.entries.filter((x) => x.hash !== e.hash);
+    void this.store!.putMeta('library', this.entries).catch(() => {});
     this.jobErrors.delete(e.hash); this.inflight.delete(e.hash); this.covers.delete(e.hash);
     this.render();
     void this.syncPlaylists(); // el server la quita de sus playlists: cambian las cuentas

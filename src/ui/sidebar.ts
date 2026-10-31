@@ -54,7 +54,12 @@ export class Sidebar {
   private bar: HTMLElement;
   private plHead = h('div', { class: 'plhead' });
 
+  private server: string;
+  private srv = h('span', { attrs: { role: 'status' } });
+
   constructor(user: string, server: string, hooks: SidebarHooks) {
+    this.server = server;
+    this.srv.textContent = server;
     this.hooks = hooks;
     const input = h('input', { type: 'search', placeholder: t('web_search'), attrs: { 'aria-label': t('web_search') } });
     input.oninput = () => { this.q = input.value; this.render(); };
@@ -67,7 +72,7 @@ export class Sidebar {
     const plSec = h('section', { class: 'plsec', attrs: { 'aria-label': t('tab_playlists') } }, h('div', { class: 'plbar' }, h('span', { textContent: t('tab_playlists') }), this.plAdd), this.plList);
     const me = h('div', { class: 'me' },
       h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } }),
-      h('span', { class: 'who' }, h('b', { textContent: user }), h('span', { textContent: server })),
+      h('span', { class: 'who' }, h('b', { textContent: user }), this.srv),
       h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }));
     me.lastElementChild!.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
     const addBtn = h('button', { class: 'addb', attrs: { 'aria-label': t('import_title') }, onclick: () => hooks.onAdd() });
@@ -75,6 +80,12 @@ export class Sidebar {
     addBtn.append(t('b_add'));
     this.plHead.hidden = true;
     this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision'), addBtn), find, h('div', {}, bar, this.plHead), this.list, plSec, me);
+  }
+
+  /** Servidor inalcanzable: lo dice en rojo (nube roja de Android); lo descargado suena igual. */
+  setOnline(on: boolean) {
+    this.srv.classList.toggle('off', !on);
+    this.srv.textContent = on ? this.server : `${this.server} · ${t('server_status_offline')}`;
   }
 
   update(rows: Row[], current: string | null, playing: boolean) {

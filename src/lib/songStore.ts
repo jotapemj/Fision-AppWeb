@@ -59,6 +59,16 @@ export class SongStore {
     } catch (e) { if (notFound(e)) return null; throw e; }
   }
 
+  /** Copia offline de la cuenta (biblioteca, playlists) junto a las canciones. null si no hay. */
+  async getMeta<T>(name: 'library' | 'playlists'): Promise<T | null> {
+    try { return JSON.parse(await (await (await (await this.root).getFileHandle(`${name}.json`)).getFile()).text()); }
+    catch { return null; }
+  }
+
+  async putMeta(name: 'library' | 'playlists', value: unknown): Promise<void> {
+    await writeFile(await this.root, `${name}.json`, JSON.stringify(value));
+  }
+
   /** Hashes con copia completa. */
   async list(): Promise<string[]> {
     const out: string[] = [];
