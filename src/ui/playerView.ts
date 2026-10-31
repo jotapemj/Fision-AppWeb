@@ -7,6 +7,7 @@ import { iconOf } from './stemIcons.ts';
 import { LyricsView, type LyricsActions, type LyricsState } from './lyricsView.ts';
 import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
 import { currentBeat, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
+import { ChordGrid } from './chordGrid.ts';
 import { ChordStrip } from './chordStrip.ts';
 import { ChordDiagrams } from './chordDiagrams.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
@@ -55,6 +56,9 @@ const PLAY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="#000"/></svg>';
 const SPEED_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a8 8 0 1 1 16 0" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 15l4-5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
 const VIEW_PREF = 'fision.view'; // vista recordada (comodidad por navegador)
+const CHORD_VIEW_PREF = 'fision.chordView'; // chord_diagram_view: 0 diagramas, 1 cuadricula
+function loadChordView(): boolean { try { return localStorage.getItem(CHORD_VIEW_PREF) === '1'; } catch { return false; } }
+function saveChordView(grid: boolean) { try { localStorage.setItem(CHORD_VIEW_PREF, grid ? '1' : '0'); } catch { /* sin storage */ } }
 function loadView(): View { try { const v = localStorage.getItem(VIEW_PREF); return v === 'lyrics' || v === 'chords' || v === '3d' ? v : 'mix'; } catch { return 'mix'; } }
 
 const withSvg = (el: HTMLElement, markup: string) => { el.insertAdjacentHTML('afterbegin', markup); return el; };
@@ -74,7 +78,8 @@ export class PlayerView {
   private view: View = loadView();
   private lyrics: LyricsView;
   private beats: { cells: BeatCell[]; beatsPerBar: number } | null = null;
-  private chords: { cells: BeatCell[]; beatsPerBar: number; strip: ChordStrip; diagrams: ChordDiagrams } | null = null;
+  private chords: { cells: BeatCell[]; beatsPerBar: number; strip: ChordStrip; diagrams: ChordDiagrams; grid: ChordGrid } | null = null;
+  private chordGrid = loadChordView(); // Diagramas | Cuadricula (chord_diagram_view, global)
   private beat = -2;
   private chordBeat = -2;
   private nowCh = h('b', { class: 'ch' });
@@ -173,9 +178,11 @@ export class PlayerView {
     this.beats = cells.length ? { cells, beatsPerBar } : null;
     if (!cells.some((c) => c.chord)) return;
     this.chords?.diagrams.destroy();
+    this.chords?.grid.destroy();
     const diagrams = new ChordDiagrams(cells, { notation: () => this.hooks.chordNotation(), format: (c) => this.hooks.formatChord(c),
       seekBeat: (b) => this.p.seek((cells[b]?.time ?? 0) * 1000) });
-    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, (sec) => this.p.seek(sec * 1000), (c) => this.hooks.formatChord(c)), diagrams };
+    const seek = (sec: number) => this.p.seek(sec * 1000), fmt = (c: string | null) => this.hooks.formatChord(c);
+    this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, seek, fmt), diagrams, grid: new ChordGrid(cells, seek, fmt) };
     this.nowNext.hidden = false;
     this.chordBeat = -2;
     if (this.view === 'chords') this.renderView();
@@ -217,11 +224,11 @@ export class PlayerView {
       const b = this.beat;
       if (b !== this.chordBeat) {
         this.chordBeat = b;
-        this.chords.strip.setBeat(b);
+        if (this.chordGrid) this.chords.grid.setBeat(b); else this.chords.strip.setBeat(b);
         const fmt = (c: string | null) => this.hooks.formatChord(c);
         const now = fmt(soundingChord(this.chords.cells, b)), next = fmt(nextChord(this.chords.cells, b));
         this.nowCh.textContent = now || '–'; this.nextCh.textContent = next || '–';
-        this.chords.diagrams.setBeat(b);
+        if (!this.chordGrid) this.chords.diagrams.setBeat(b);
       }
     }
     this.raf = requestAnimationFrame(this.loop);
@@ -241,10 +248,19 @@ export class PlayerView {
     if (this.view !== '3d') this.scene3d?.watchAccent(this.main); // sigue al acento aunque no se vea
     if (this.view === 'chords' && this.chords) {
       const meta = h('p', { class: 'chmeta', textContent: `${this.p.bpm ? Math.round(this.p.bpm) + ' BPM · ' : ''}${this.chords.beatsPerBar}/4` });
-      this.viewBox.className = 'view chv';
-      this.viewBox.replaceChildren(meta, this.chords.strip.el, this.chords.diagrams.el);
-      this.chordBeat = -2; // repintar la tira al volver
-      this.chords.strip.invalidate();
+      // Pildora Diagramas | Cuadricula: la cuadricula sustituye a la tira y a los diagramas
+      const pill = h('div', { class: 'seg chpill', attrs: { role: 'radiogroup', 'aria-label': t('web_view_chords') } });
+      [t('chord_view_diagrams'), t('chord_view_grid')].forEach((l, i) => {
+        const b = h('button', { textContent: l, attrs: { role: 'radio', 'aria-checked': String(this.chordGrid === (i === 1)) } });
+        b.onclick = () => { if (this.chordGrid === (i === 1)) return; this.chordGrid = i === 1; saveChordView(this.chordGrid); this.renderView(); };
+        pill.append(b);
+      });
+      const body = this.chordGrid ? [this.chords.grid.el] : [this.chords.strip.el, this.chords.diagrams.el];
+      for (const el of body) { el.classList.remove('swap'); void el.offsetWidth; el.classList.add('swap'); } // fundido + desliz
+      this.viewBox.className = `view chv${this.chordGrid ? ' grid' : ''}`;
+      this.viewBox.replaceChildren(h('div', { class: 'chhead' }, pill, meta), ...body);
+      this.chordBeat = -2; // repintar al volver
+      this.chords.strip.invalidate(); this.chords.grid.invalidate();
       return;
     }
     if (this.view === '3d') { this.show3D(); return; }

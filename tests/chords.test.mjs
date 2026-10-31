@@ -53,3 +53,16 @@ test('acordes sobre la letra: palabra que suena, hueco corto -> 1a palabra, inst
   expect(m.get(`${t2}:0`) === 'F' && m.get(`${t2}:1`) === 'E', `linea 2: ${got}`);
   return got;
 });
+
+test('cuadricula: dos compases por fila, anacrusa en su sitio, compas irregular deja hueco', async () => {
+  const { gridLayout } = await import('../src/ui/chordGrid.ts');
+  const cell = (pos) => ({ time: 0, pos, isDownbeat: pos === 1, chord: null });
+  // Anacrusa de 2 tiempos (3, 4), compas de 4, compas de 3 (irregular), compas de 4
+  const cells = [3, 4, 1, 2, 3, 4, 1, 2, 3, 1, 2, 3, 4].map(cell);
+  const g = gridLayout(cells);
+  expect(g.beatsPerBar === 4 && g.columns === 8, `bpb ${g.beatsPerBar}, columnas ${g.columns}`);
+  expect(g.slotOf[0] === 2 && g.slotOf[2] === 4, `anacrusa ${g.slotOf.slice(0, 3)}`);
+  expect(g.slotOf[9] === 12 && g.slots[11] === -1, `tras el compas de 3: ${g.slotOf[9]}, hueco ${g.slots[11]}`);
+  const six = gridLayout([1, 2, 3, 4, 5, 6].map(cell));
+  expect(six.columns === 6, 'compas de 6: un compas por fila');
+});

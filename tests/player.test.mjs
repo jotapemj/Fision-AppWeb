@@ -219,3 +219,17 @@ test('baile: orbita a su velocidad, swing 0.6 sin(fase), el agarrado no se mueve
   d.stop();
   expect(d.tick(1, poses).length === 0, 'parado');
 });
+
+test('seek en pausa: la posicion es el destino aunque el motor aun no lo aplique', () => {
+  const e = fakeEngine(), p = new Player(e, song());
+  e.seek = (ms) => { e.pending = ms; }; // como el motor real: se aplica al renderizar
+  e.pos = 5000;
+  p.seek(13_000);
+  expect(p.positionMs === 13_000, `pausa: ${p.positionMs}`);
+  p.skip(5000);
+  expect(p.positionMs === 18_000, `+5 s desde el destino: ${p.positionMs}`);
+  p.playing = true;
+  expect(p.positionMs === 18_000, 'sonando, aun sin aplicar: destino');
+  e.pos = 18_010; // el motor llego
+  near(p.positionMs, 18_010 - 40 - 130, 1e-9, 'llego: posicion percibida normal');
+});

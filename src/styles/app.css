@@ -197,6 +197,31 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .now-ch b { font-size: 44px; line-height: 1; color: var(--accent); min-width: 1ch; }
 .now-ch b.nx { font-size: 28px; color: rgba(255,255,255,.55); }
 .chmeta { text-align: right; color: var(--text-muted); font-size: 13px; padding: 0 0 8px; }
+.chhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 8px; }
+.chhead .chmeta { padding: 0; }
+.chpill { width: auto; }
+.chpill button { padding: 0 16px; }
+.view.chv.grid { grid-template-rows: auto minmax(0, 1fr); }
+/* Cuadricula: casillas como la tira; 2 compases por fila con raya de acento entre ellos */
+.cgrid { position: relative; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: #333 transparent; padding: 4px 0 40vh; --fade: 56px; }
+.cgrid.ft { -webkit-mask: linear-gradient(transparent, #000 var(--fade)); mask: linear-gradient(transparent, #000 var(--fade)); }
+.cgrid.fb { -webkit-mask: linear-gradient(#000 calc(100% - var(--fade)), transparent); mask: linear-gradient(#000 calc(100% - var(--fade)), transparent); }
+.cgrid.ft.fb { -webkit-mask: linear-gradient(transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask: linear-gradient(transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }
+.cgrid-in { display: grid; gap: 3px; max-width: 980px; margin: 0 auto; }
+.cgrid .g { position: relative; aspect-ratio: 1; border-radius: 8px; background: #262626; font: clamp(18px, 2.4vw, 30px) "MusGlyphs", serif; color: #fff; display: grid; place-items: center; overflow: hidden; }
+.cgrid .g.empty { background: none; }
+.cgrid .g.db { background: #3a3a3a; }
+.cgrid .g.played { background: color-mix(in srgb, var(--accent) 22%, #262626); }
+.cgrid .g.db.played { background: color-mix(in srgb, var(--accent) 22%, #3a3a3a); }
+.cgrid .g.trail { background: color-mix(in srgb, var(--accent) 45%, #000); }
+.cgrid .g.now { background: var(--accent); color: var(--on-accent); }
+.cgrid .g.ghost { font-size: clamp(14px, 1.8vw, 22px); color: rgba(255,255,255,.32); }
+.cgrid .g.ghost.now { color: rgba(4,20,15,.6); }
+.cgrid .g.b2 { overflow: visible; }
+.cgrid .g.b2::before { content: ""; position: absolute; left: -10px; top: 18%; bottom: 18%; width: 2px; border-radius: 1px; background: var(--accent); }
+.swap { animation: chswap 240ms cubic-bezier(.2,.7,.3,1); }
+@keyframes chswap { from { opacity: 0; transform: translateY(14px); } }
+@media (prefers-reduced-motion: reduce) { .swap { animation: none; } }
 .strip { position: relative; overflow: hidden; height: 88px; display: flex; align-items: center; }
 /* Bordes por mascara, no por degradado negro: sobre la nebulosa serian rectangulos */
 .strip { -webkit-mask: linear-gradient(90deg, transparent, #000 100px, #000 calc(100% - 100px), transparent); mask: linear-gradient(90deg, transparent, #000 100px, #000 calc(100% - 100px), transparent); }

@@ -319,6 +319,49 @@ test('diagramas: guitarra pintada, vocabulario, piano sin zonas, clic = seek y s
   return `guitarra ${g} px blancos, vocabulario ${vocab}, piano ${pianoLit} px, seek a Am`;
 });
 
+test('cuadricula: sustituye a tira y diagramas, 2 compases por fila, clic = seek, sigue la cancion y vuelve tras explorar', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  // En pausa: la cancion falsa dura 20 s y acabaria durante las esperas
+  const playing = await p.eval(`document.querySelector('.pbar .play').getAttribute('aria-label') !== ${JSON.stringify('Reproducir')} && /pau/i.test(document.querySelector('.pbar .play').getAttribute('aria-label'))`);
+  if (playing) await p.eval(`document.querySelector('.pbar .play').click()`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
+  await p.eval(`document.querySelectorAll('.chpill button')[1].click()`);
+  try {
+  await p.waitFor(`document.querySelectorAll('.cgrid .g').length === 40`, 5000);
+  const lay = await p.eval(`(() => {
+    const g = [...document.querySelectorAll('.cgrid .g')], r = (e) => e.getBoundingClientRect();
+    const row0 = g.filter((e) => Math.abs(r(e).top - r(g[0]).top) < 2).length;
+    return { strip: !!document.querySelector('.view .strip'), diag: !!document.querySelector('.view .cdg'), row0, b2: g[4].classList.contains('b2'),
+      gapBar: Math.round(r(g[4]).left - r(g[3]).right), gapBeat: Math.round(r(g[1]).left - r(g[0]).right), square: Math.abs(r(g[0]).width - r(g[0]).height) < 1.5 };
+  })()`);
+  expect(!lay.strip && !lay.diag && lay.row0 === 8 && lay.b2 && lay.gapBar > lay.gapBeat && lay.square, `maqueta: ${JSON.stringify(lay)}`);
+  // Clic en la casilla 25 (12.5 s, Am) = seek; la fila actual queda al ~30 % del alto
+  await p.eval(`document.querySelectorAll('.cgrid .g')[25].click()`);
+  try { await p.waitFor(`document.querySelector('.cgrid .g.now') === document.querySelectorAll('.cgrid .g')[25]`, 5000); }
+  catch { throw new Error(await p.eval(`JSON.stringify({ now: [...document.querySelectorAll('.cgrid .g')].indexOf(document.querySelector('.cgrid .g.now')), pos: document.querySelector('.seek .meta span').textContent, play: document.querySelector('.pbar .play').getAttribute('aria-label'), playing: ${playing} })`)); }
+  const at = () => p.eval(`(() => { const g = document.querySelector('.cgrid'), n = g.querySelector('.g.now'); return (n.getBoundingClientRect().top - g.getBoundingClientRect().top) / g.clientHeight; })()`);
+  await new Promise((r) => setTimeout(r, 900));
+  const followed = await at();
+  expect(followed > 0.2 && followed < 0.4, `fila actual al ${(followed * 100).toFixed(0)} % del alto`);
+  // Explorar (rueda) la separa; al soltar, el iman la devuelve
+  await p.eval(`(() => { const g = document.querySelector('.cgrid'); g.dispatchEvent(new WheelEvent('wheel', { deltaY: 600 })); g.scrollTop = g.scrollHeight; })()`);
+  await new Promise((r) => setTimeout(r, 300));
+  const away = await at();
+  await p.waitFor(`(() => { const g = document.querySelector('.cgrid'), n = g.querySelector('.g.now'); const k = (n.getBoundingClientRect().top - g.getBoundingClientRect().top) / g.clientHeight; return k > 0.2 && k < 0.4; })()`, 6000);
+  // Se recuerda
+  const pref = await p.eval(`localStorage.getItem('fision.chordView')`);
+  expect(pref === '1', `preferencia ${pref}`);
+    return `8 por fila, seek a Am, fila al ${(followed * 100).toFixed(0)} %, explorando ${(away * 100).toFixed(0)} % -> vuelve`;
+  } finally {
+    // Se deja en Diagramas y sonando, como estaba, para el resto
+    await p.eval(`document.querySelectorAll('.chpill button')[0]?.click()`);
+    await p.waitFor(`document.querySelector('.view .strip') && document.querySelector('.view .cdg')`, 3000);
+    await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+    if (playing) await p.eval(`document.querySelector('.pbar .play').click()`);
+  }
+});
+
 test('fondo animado: apagado por defecto; encendido pinta color y no tapa clics', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;

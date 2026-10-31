@@ -4,6 +4,8 @@ import { DEFAULT_VOLUME, isMetronome, isPitched, METRONOMES, orderIndex, stemOf 
 import { defaultPose, elevRad, sphericalDist, type Pose3D } from './audio3d.ts';
 
 // repeat_mode de Android
+const SEEK_LAND_MS = 250;  // el motor ya esta en el destino
+const SEEK_WAIT_MS = 1000; // sonando, nunca se espera mas
 export const Repeat = { Off: 0, All: 1, One: 2 } as const;
 export type Repeat = (typeof Repeat)[keyof typeof Repeat];
 
@@ -121,9 +123,18 @@ export class Player {
 
   /** Posicion que ve el usuario: motor - latencia de salida - 130 ms. */
   get positionMs(): number {
+    // El motor aplica el seek al renderizar: en pausa no se mueve. Hasta que llega, el destino
+    // (seekTargetMs de PlayerActivity)
+    const raw = this.engine.positionMs, tgt = this.seekTarget;
+    if (tgt !== null) {
+      if (!this.playing || (Math.abs(raw - tgt) > SEEK_LAND_MS && performance.now() - this.seekAt < SEEK_WAIT_MS)) return tgt;
+      this.seekTarget = null;
+    }
     const lat = (this.engine.ctx.outputLatency || this.engine.ctx.baseLatency || 0) * 1000;
-    return Math.max(0, this.engine.positionMs - (this.playing ? lat + BEAT_SYNC_OFFSET_MS : 0));
+    return Math.max(0, raw - (this.playing ? lat + BEAT_SYNC_OFFSET_MS : 0));
   }
+  private seekTarget: number | null = null;
+  private seekAt = 0;
 
   async play() { await this.engine.play(); this.playing = true; }
   pause() { this.engine.pause(); this.playing = false; }
@@ -131,9 +142,10 @@ export class Player {
   seek(ms: number) {
     const to = Math.min(Math.max(0, ms), this.durationMs);
     this.engine.seek(to);
+    this.seekTarget = to; this.seekAt = performance.now();
     this.applyHalfPhase(to); // se reaplica en cada seek
   }
-  skip(deltaMs: number) { this.seek(this.engine.positionMs + deltaMs); }
+  skip(deltaMs: number) { this.seek((this.seekTarget ?? this.engine.positionMs) + deltaMs); }
 
   setVolume(stem: string, v: number) {
     const s = this.find(stem);
