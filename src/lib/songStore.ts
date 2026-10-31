@@ -40,6 +40,25 @@ export class SongStore {
     } catch (e) { if (notFound(e)) return null; throw e; }
   }
 
+  /** updated_at con el que se refrescaron los acordes (al descargar = el de la copia). */
+  async chordsStamp(hash: string): Promise<string | null> {
+    const m = await this.mark(hash);
+    return m ? (m.chords_at ?? m.updated_at ?? null) : null;
+  }
+
+  async setChordsStamp(hash: string, stamp: string): Promise<void> {
+    const m = await this.mark(hash);
+    if (!m) return; // borrada mientras tanto
+    await writeFile(await (await this.root).getDirectoryHandle(hash), MARK, JSON.stringify({ ...m, chords_at: stamp }));
+  }
+
+  private async mark(hash: string): Promise<{ updated_at?: string; chords_at?: string } | null> {
+    try {
+      const d = await (await this.root).getDirectoryHandle(hash);
+      return JSON.parse(await (await (await d.getFileHandle(MARK)).getFile()).text());
+    } catch (e) { if (notFound(e)) return null; throw e; }
+  }
+
   /** Hashes con copia completa. */
   async list(): Promise<string[]> {
     const out: string[] = [];

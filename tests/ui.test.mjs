@@ -43,6 +43,7 @@ async function fakeServer() {
   const entry = (hash, title, state, created_at) => ({ hash, filename: `${title}.mp3`, title, artist: 'Prueba', cover_url: null, state, config: {}, created_at, updated_at: created_at });
   const pl = { list: [], calls: [] }; // playlists en memoria
   const del = { calls: [], queueGone: false, gone: false, busy: true }; // borrados
+  const ch = { v: null, body: null, gets: [] }; // acordes nuevos en el server (refreshChords)
   const up = { jobs: null, calls: [], zips: [], newReady: false, config: {}, lyr: { posts: [], polls: 0, ready: false } }; // subidas, reprocesos, letra
   const srv = http.createServer(async (req, res) => {
     let body = '';
@@ -60,7 +61,7 @@ async function fakeServer() {
     if (req.url === '/library') {
       const lib = [entry(H1, 'Cancion buena', 'ready', '2026-10-03'), entry(H2, 'Cancion rota', 'error', '2026-10-02'), entry(H3, 'Cancion en cola', del.queueGone ? 'cancelled' : 'processing', '2026-10-01')]
         .filter((x) => !(del.gone && x.hash === H2));
-      if (up.newReady !== false) lib.push({ ...entry(H4, 'Subida', up.newReady === true ? 'ready' : 'processing', '2026-10-04'), config: up.config });
+      if (up.newReady !== false) lib.push({ ...entry(H4, 'Subida', up.newReady === true ? 'ready' : 'processing', '2026-10-04'), config: up.config, ...(ch.v ? { updated_at: ch.v } : {}) });
       return json(200, lib);
     }
     if (req.url === '/jobs' && req.method === 'GET') {
@@ -97,6 +98,11 @@ async function fakeServer() {
       if (one && req.method === 'DELETE') { pl.list = pl.list.filter((x) => x !== one); res.writeHead(204); return res.end(); }
       if (m) return json(404, { detail: 'Playlist not found' });
     }
+    if (req.url.startsWith(`/library/${H4}/stems/chords`)) {
+      ch.gets.push(req.url.split('/').pop());
+      if (req.url.endsWith('/chords.txt') && ch.body) { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end(ch.body); }
+      return json(404, { detail: 'Not found' });
+    }
     if (req.url === `/library/${H4}/zip`) { up.zips.push(H4); res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': zip.length }); return res.end(zip); }
     if (req.url === `/library/${H1}/zip`) {
       up.zips.push(H1);
@@ -109,7 +115,7 @@ async function fakeServer() {
     json(404, { detail: 'nope' });
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, del, close: () => srv.close() };
+  return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, del, ch, close: () => srv.close() };
 }
 
 // Medidas dentro de la pagina: solapes, recortes, contraste calculado
@@ -616,6 +622,31 @@ test('letra: sin letra se elige idioma y se pide; el job de letra no ocupa la fi
   expect(!busyRow, 'la fila se marco como procesando por el job de letra');
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
   return `Auto -> ${lyr.posts[0]}, ${lyr.polls} sondeos, letra visible`;
+});
+
+test('acordes nuevos en el server: cambia updated_at -> baja solo chords*.txt y la tira cambia en caliente', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, ch = c.fake.ch;
+  // Acordes de la tira (palabras sueltas)
+  const strip = `[...document.querySelectorAll('.strip .c')].flatMap((x) => x.textContent.split(/\\s+/)).filter(Boolean)`;
+  const has = (k) => `${strip}.includes('${k}')`;
+  await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
+  expect(await p.eval(has('C')) && !(await p.eval(has('D'))), 'antes: C, sin D');
+  ch.body = 'N 0.000\nD 0.500\nG 2.500\nAm 12.000\n'; ch.v = '2026-10-09';
+  await p.eval(`document.dispatchEvent(new Event('visibilitychange'))`); // volver a la pestana
+  await p.waitFor(has('D'), 8000);
+  const gets = ch.gets.join(',');
+  expect(gets === 'chords.txt,chords_basic.txt', `pedidos: ${gets}`);
+  // Mismo updated_at: no se vuelve a pedir
+  await p.eval(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await new Promise((r) => setTimeout(r, 800));
+  expect(ch.gets.length === 2, `repetido: ${ch.gets.join(',')}`);
+  // Deja los acordes como estaban para el resto
+  ch.body = 'N 0.000\nC 0.500\nG 2.500\nAm 12.000\n'; ch.v = '2026-10-10';
+  await p.eval(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await p.waitFor(`!${has('D')}`, 8000);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+  return `C -> D en caliente; pedidos ${gets}`;
 });
 
 test('exportar: mezcla WAV con metronomo a la carpeta elegida; pista con eco (cola) desde el panel', async () => {

@@ -70,3 +70,14 @@ test('cada cuenta ve solo lo suyo; borrar', () => withTmp(async (_, store) => {
   await a.remove(H); // dos veces no falla
   expect((await a.list()).length === 0, 'borrado');
 }));
+
+test('sello de acordes: al descargar = updated_at; se cambia sin tocar la copia', () => withTmp(async (_, store) => {
+  const s = store('demo');
+  expect((await s.chordsStamp(H)) === null, 'sin copia');
+  await s.save(H, 'v1', files);
+  expect((await s.chordsStamp(H)) === 'v1', 'al descargar');
+  await s.setChordsStamp(H, 'v2');
+  expect((await s.chordsStamp(H)) === 'v2' && (await s.version(H)) === 'v1', 'sello nuevo, version igual');
+  await s.setChordsStamp(H2, 'x');
+  expect((await s.chordsStamp(H2)) === null, 'borrada: no crea nada');
+}));

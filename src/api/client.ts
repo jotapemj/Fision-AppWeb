@@ -130,6 +130,11 @@ export class Api {
   }
   /** Borra la cancion del server (y de sus playlists); 409 = no pudo parar su job en 60 s. */
   async deleteSong(hash: string): Promise<void> { await this.authed(`/library/${hash}`, { method: 'DELETE' }, [404]); }
+  /** Un fichero de la carpeta de la cancion (GET /library/{h}/stems/{file}); null si no existe. */
+  async songFile(hash: string, name: string): Promise<Uint8Array | null> {
+    const r = await this.authed(`/library/${hash}/stems/${encodeURIComponent(name)}`, {}, [404]);
+    return r.status === 404 ? null : new Uint8Array(await r.arrayBuffer());
+  }
   async deleteLyrics(hash: string): Promise<void> { await this.authed(`/library/${hash}/lyrics`, { method: 'DELETE' }, [404]); }
 
   async zip(hash: string, onProgress?: (done: number, total: number) => void): Promise<Uint8Array> {

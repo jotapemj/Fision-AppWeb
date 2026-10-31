@@ -8,7 +8,7 @@ import { RETRYABLE } from './library/importConfig.ts';
 import { Engine } from './engine/engine.ts';
 import { t } from './i18n/i18n.ts';
 import { buildRows, deleteKind, type Row } from './library/library.ts';
-import { SongStore } from './lib/songStore.ts';
+import { SongStore, type StoredFile } from './lib/songStore.ts';
 import { listZip, readZipEntry } from './lib/zip.ts';
 import { Player, parseBeats, parseBpm } from './player/player.ts';
 import { isMetronome, stemOf } from './player/stems.ts';
@@ -32,6 +32,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { capture, idbParamsStore, restore, type ParamsStore } from './player/songParams.ts';
 
 const JOB_POLL_MS = 4000;
+const CHORD_FILES = ['chords.txt', 'chords_basic.txt']; // CloudRepository.CHORD_FILES
 const LYRICS_POLL_MS = 2500; // LyricsManager
 const LYRICS_JOBS = 'fision.lyricsJobs'; // job_id -> hash de las transcripciones pedidas aqui
 
@@ -54,7 +55,9 @@ export class App {
   private engine: Engine | null = null;
   /** Voz medida de la cancion abierta (voces + coros), para la letra. */
   private voice: { hash: string; va: VocalActivity | null } | null = null;
-  private current: { entry: LibraryEntry; player: Player; view: PlayerView } | null = null;
+  private current: { entry: LibraryEntry; player: Player; view: PlayerView; reloadChords?: () => Promise<void> } | null = null;
+  private chordsInFlight = new Set<string>();
+  private visHooked = false;
   private opening = false;
   private pollTimer = 0;
   private nebula: Nebula | null = null;
@@ -123,6 +126,11 @@ export class App {
     this.root.replaceChildren(this.shell);
     // Playlists al entrar (y tras cada cambio), no en cada sondeo de jobs
     void this.refreshLibrary().then(() => this.syncPlaylists());
+    // Volver a la pestana = onStart de Android: biblioteca al dia (y acordes nuevos)
+    if (!this.visHooked) {
+      this.visHooked = true;
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && this.store) void this.refreshLibrary(); });
+    }
   }
 
   /** Centro sin cancion: nebulosa relajada + marca (una sola viva a la vez). */
@@ -140,6 +148,7 @@ export class App {
       this.online = true;
       this.render();
       void this.settleJobs();
+      void this.refreshChords();
     } catch (e) { this.online = false; if (!(e instanceof ApiError && e.status === 401)) console.warn('library', e); }
     // Con jobs vivos, sondear hasta que acaben (luego la entrada pasa a ready)
     clearTimeout(this.pollTimer);
@@ -149,6 +158,31 @@ export class App {
   private render() {
     this.rows = buildRows({ entries: this.entries, downloaded: this.downloaded, downloading: this.downloading, jobs: this.jobs, errors: this.jobErrors }, this.settings.get('sortAsc'));
     this.sidebar?.update(this.rows, this.current?.entry.hash ?? null, this.current?.player.playing ?? false);
+  }
+
+  /** CloudRepository.refreshChords: descargada cuyo updated_at cambio -> baja solo chords*.txt.
+   *  El sello se guarda si el server respondio (200 o 404); un fallo de red reintenta en otro refresco. */
+  private async refreshChords() {
+    const busy = new Set(this.jobs.map((j) => j.hash));
+    for (const e of this.entries) {
+      if (e.state !== 'ready' || !this.downloaded.has(e.hash) || busy.has(e.hash) || this.downloading.has(e.hash) || this.chordsInFlight.has(e.hash)) continue;
+      const store = this.store!;
+      if ((await store.chordsStamp(e.hash).catch(() => null)) === e.updated_at) continue;
+      this.chordsInFlight.add(e.hash);
+      let answered = true, replaced = false;
+      try {
+        for (const name of CHORD_FILES) {
+          try {
+            const data = await this.api.songFile(e.hash, name);
+            if (!data) continue; // sin esa variante
+            await store.putFile(e.hash, name, data);
+            replaced = true;
+          } catch (err) { answered = false; console.warn('chords', e.hash, err); }
+        }
+        if (answered) await store.setChordsStamp(e.hash, e.updated_at);
+      } finally { this.chordsInFlight.delete(e.hash); }
+      if (replaced && this.current?.entry.hash === e.hash) await this.current.reloadChords?.();
+    }
   }
 
   /** Lo que estaba en vuelo y ya no: listo = descargar siempre (aunque hubiera copia: reproceso);
@@ -390,6 +424,7 @@ export class App {
       const TEXT = ['beats.txt', 'downbeats.txt', 'chords.txt', 'chords_basic.txt'];
       const files = await this.store!.load(e.hash, (n) => /\.(flac|wav)$/i.test(n) || TEXT.includes(n));
       const txt = (n: string) => { const f = files.find((x) => x.name === n); return f ? new TextDecoder().decode(f.data) : null; };
+      const replaceFiles = (got: StoredFile[]) => { for (const g of got) { const k = files.findIndex((x) => x.name === g.name); if (k >= 0) files[k] = g; else files.push(g); } };
       const beats = files.find((f) => f.name === 'beats.txt');
       // Metronomos en bucle, como PlaybackService
       const audio = files.filter((f) => !TEXT.includes(f.name)).map((f) => ({ ...f, loop: isMetronome(stemOf(f.name)) }));
@@ -446,6 +481,14 @@ export class App {
       };
       applyChords();
       setLyr = (st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); };
+      // Acordes nuevos del server con la cancion abierta: se ven ya (chordsUpdatedListener)
+      this.current.reloadChords = async () => {
+        replaceFiles(await this.store!.load(e.hash, (n) => CHORD_FILES.includes(n)));
+        if (this.current?.view !== view) return;
+        const basic = !!txt('chords_basic.txt');
+        if (!basic && player.chordsBasic) player.setChordsBasic(false);
+        applyChords();
+      };
       this.loadLyrics(e, durSec).then((st) => {
         if (st.kind === 'content') lastContent = st;
         // Sin letra pero con su job en marcha: seguir esperandolo
