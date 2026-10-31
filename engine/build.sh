@@ -36,7 +36,7 @@ build_web() {
   mkdir -p "$ROOT/public/engine"
   "$EMXX" "${COMMON[@]}" "${SRC[@]}" -DFE_AUDIO_WORKLET=1 \
     -sAUDIO_WORKLET=1 -sWASM_WORKERS=1 -sENVIRONMENT=web,worker \
-    -sEXPORTED_RUNTIME_METHODS=FS,stringToNewUTF8,emscriptenRegisterAudioObject,emscriptenGetAudioObject \
+    -sEXPORTED_RUNTIME_METHODS=FS,stringToNewUTF8,emscriptenRegisterAudioObject,emscriptenGetAudioObject,wasmMemory \
     -o "$ROOT/public/engine/fision_engine.mjs"
   ls -la "$ROOT/public/engine"
 }

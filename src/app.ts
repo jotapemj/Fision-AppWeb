@@ -13,6 +13,7 @@ import { listZip, readZipEntry } from './lib/zip.ts';
 import { Player, parseBeats, parseBpm } from './player/player.ts';
 import { isMetronome, stemOf } from './player/stems.ts';
 import { buildRows as buildLyricRows } from './player/lyrics.ts';
+import { VocalActivity } from './player/vocalActivity.ts';
 import type { LyricsState } from './ui/lyricsView.ts';
 import { buildBeatCells, chordsOverWords, parseChords, parseTimes } from './player/chords.ts';
 import { h, toast } from './ui/dom.ts';
@@ -51,6 +52,8 @@ export class App {
   private rows: Row[] = [];
   private covers = new Map<string, Promise<string | null>>();
   private engine: Engine | null = null;
+  /** Voz medida de la cancion abierta (voces + coros), para la letra. */
+  private voice: { hash: string; va: VocalActivity | null } | null = null;
   private current: { entry: LibraryEntry; player: Player; view: PlayerView } | null = null;
   private opening = false;
   private pollTimer = 0;
@@ -395,6 +398,9 @@ export class App {
       this.stopSong();
       const beatsTxt = beats ? new TextDecoder().decode(beats.data) : null;
       const player = new Player(this.engine, { stems: rep.stems, durationMs: rep.durationMs, bpm: parseBpm(beatsTxt), beats: parseBeats(beatsTxt) });
+      // Principal y coros juntos: hay frases enteras que solo canta el coro
+      const env = (n: string) => { const s = player.stems.find((x) => x.stem === n); return s ? this.engine!.envelope(s.id) : null; };
+      this.voice = { hash: e.hash, va: VocalActivity.fromEnvelopes(env('vocals'), env('vocals2')) };
       // Mezcla guardada de esta cancion (solo en este navegador)
       const key = `${this.user}:${e.hash}`;
       restore(player, await this.params.get(key));
@@ -517,7 +523,8 @@ export class App {
       const [f] = await store.load(e.hash, (n) => n === 'lyrics.json').catch(() => []);
       if (f) try { json = JSON.parse(new TextDecoder().decode(f.data)); } catch { json = null; }
     }
-    const rows = json ? buildLyricRows(json, durationSec) : [];
+    const va = this.voice?.hash === e.hash ? this.voice.va : null;
+    const rows = json ? buildLyricRows(json, durationSec, va) : [];
     return rows.some((r) => r.type === 'text') ? { kind: 'content', rows } : { kind: 'picker' };
   }
 

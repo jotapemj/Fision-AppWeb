@@ -19,10 +19,19 @@ const LYRICS = { language: 'es', segments: [
   { start: 12, end: 15, text: 'tercera tras pausa', words: [wd(12, 12.5, 'tercera'), wd(12.5, 13, 'tras'), wd(13, 15, 'pausa')] },
 ] };
 
+// Voz falsa: el seno solo suena donde hay letra (como un stem de voces real; VocalActivity)
+function voiceWav(spans) {
+  const buf = sineWav(440, 20), sr = 48000;
+  for (let i = 0; i < (buf.length - 44) / 4; i++) {
+    if (!spans.some(([a, b]) => i >= a * sr && i < b * sr)) buf.writeInt32LE(0, 44 + i * 4);
+  }
+  return buf;
+}
+
 // Server falso: cuenta "demo"/"pw"; H1 lista, H2 con error, H3 en cola
 async function fakeServer() {
   const zip = makeZip([
-    { name: 'vocals.wav', data: sineWav(440, 20) }, { name: 'bass.wav', data: sineWav(110, 20) },
+    { name: 'vocals.wav', data: voiceWav([[0.5, 2], [2.5, 4], [12, 15]]) }, { name: 'bass.wav', data: sineWav(110, 20) },
     { name: 'kick.wav', data: sineWav(60, 20) }, { name: 'metronome.wav', data: sineWav(1000, 20) },
     // 120 BPM: un beat cada 0.5 s, compas de 4 (downbeat cada 2 s)
     { name: 'beats.txt', data: Buffer.from(['120.0', ...Array.from({ length: 40 }, (_, i) => (0.5 + i * 0.5).toFixed(2))].join('\n')), deflate: true },
@@ -237,10 +246,13 @@ test('letra: la linea activa sigue a la cancion y tocar una linea hace seek', as
   await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
   await p.waitFor(`document.querySelectorAll('.lyrics .cl').length >= 4`, 10000);
   const kinds = await p.eval(`[...document.querySelectorAll('.lyrics .cl')].map(e => e.classList.contains('ins') ? 'i' : 't').join('')`);
-  expect(kinds === 'ttit', `filas (texto/instrumental): ${kinds}`);
+  // Con la voz medida basta un hueco de 4 s: la cola 15-20 s tambien es instrumental (sin medida: ttit)
+  expect(kinds === 'ttiti', `filas (texto/instrumental): ${kinds}`);
   // Seek a la tercera linea tocandola
   await p.eval(`document.querySelectorAll('.lyrics .cl')[3].click()`);
-  await p.waitFor(`document.querySelectorAll('.lyrics .cl')[3].classList.contains('now')`, 5000);
+  // Se enciende al tocar (retencion), sin esperar a que el reloj llegue
+  await p.waitFor(`document.querySelectorAll('.lyrics .cl')[3].classList.contains('now')`, 300);
+  await p.waitFor(`document.querySelector('.seek .meta span').textContent === '00:12'`, 5000);
   const pos = await p.eval(`document.querySelector('.seek .meta span').textContent`);
   const nNow = await p.eval(`document.querySelectorAll('.lyrics .cl.now').length`);
   expect(pos === '00:12' && nNow === 1, `tras tocar: posicion ${pos}, activas ${nNow}`);

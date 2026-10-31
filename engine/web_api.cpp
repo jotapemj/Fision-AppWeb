@@ -120,6 +120,11 @@ EMSCRIPTEN_KEEPALIVE void fe_set_filter(int id, float a) { gEngine->setTrackFilt
 EMSCRIPTEN_KEEPALIVE void fe_set_echo(int id, float a, float delayMs) { gEngine->setTrackEcho(id, a, delayMs); }
 EMSCRIPTEN_KEEPALIVE void fe_set_reverb(int id, float send, int room) { gEngine->setTrackReverbSend(id, send, room); }
 
+// Envolvente RMS en dBFS cada 10 ms de una pista (VocalActivity de la letra); copia hasta la siguiente llamada
+static std::vector<float> gEnv;
+EMSCRIPTEN_KEEPALIVE float* fe_envelope(int id) { gEnv = gEngine->getTrackEnvelope(id); return gEnv.data(); }
+EMSCRIPTEN_KEEPALIVE int fe_envelope_len() { return (int)gEnv.size(); }
+
 // Render offline (tests): `frames` frames estereo intercalados
 EMSCRIPTEN_KEEPALIVE float* fe_render(int frames) {
     gOut.resize((size_t)frames * 2);

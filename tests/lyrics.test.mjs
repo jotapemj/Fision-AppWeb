@@ -1,6 +1,7 @@
 // Letra: saneado, filas instrumentales, onset de la 1a palabra, relevo y karaoke.
 import { test, expect, near } from './lib/harness.mjs';
 import { buildRows, activeRow, switchAt, firstWordOnset, wordProgress, sanitize } from '../src/player/lyrics.ts';
+import { VocalActivity } from '../src/player/vocalActivity.ts';
 
 const w = (start, end, text) => ({ start, end, text });
 const json = { segments: [
@@ -22,8 +23,54 @@ test('filas: instrumental si el hueco es de 8 s o mas', () => {
 });
 
 test('onset de la 1a palabra: corrige el silencio que se come Whisper', () => {
-  near(firstWordOnset(w(10, 12.5, 'Hola')), 12.5 - (0.25 + 0.07 * 4), 1e-9, 'larga');
-  expect(firstWordOnset(w(30, 30.4, 'tras')) === 30, 'corta: se respeta');
+  const seg = (x) => ({ start: x.start, end: x.end, text: x.text, words: [x] });
+  near(firstWordOnset(seg(w(10, 12.5, 'Hola'))), 12.5 - (0.25 + 0.07 * 4), 1e-9, 'larga');
+  expect(firstWordOnset(seg(w(30, 30.4, 'tras'))) === 30, 'corta: se respeta');
+});
+
+test('frases fusionadas: parte en inicios comunes, respeta nombres propios', () => {
+  const words = (s, t0) => s.split(' ').map((x, i) => w(t0 + i * 0.5, t0 + i * 0.5 + 0.5, x));
+  const seg = (s, t0) => { const ws = words(s, t0); return { start: t0, end: ws.at(-1).end, text: s, words: ws }; };
+  const rows = buildRows({ segments: [
+    seg('estar en pie Porque ya hasta', 1),
+    seg('vamos al Campo de Pepín', 5),
+    seg('Todavía no, Pero sí', 9),
+    seg('la gente dice que nada', 13),
+  ] }, 20).filter((r) => r.type === 'text').map((r) => r.text);
+  expect(JSON.stringify(rows) === JSON.stringify(['estar en pie', 'Porque ya hasta', 'vamos al Campo de Pepín', 'Todavía no, Pero sí', 'la gente dice que nada']), JSON.stringify(rows));
+  const split = buildRows({ segments: [seg('estar en pie Porque ya', 1)] }, 0);
+  near(split[1].start, 2.5, 1e-9, 'la parte nueva empieza en su palabra');
+  near(split[0].end, 2.5, 1e-9, 'la primera acaba en su ultima palabra');
+});
+
+// Envolvente sintetica: -10 dBFS donde hay voz, -90 en silencio (frames de 10 ms)
+const envelope = (sec, voiced) => {
+  const e = new Float32Array(Math.round(sec * 100)).fill(-90);
+  for (const [a, b] of voiced) e.fill(-10, Math.round(a * 100), Math.round(b * 100));
+  return e;
+};
+
+test('voz medida: onsets, fin de la voz y hueco instrumental de 4 s', () => {
+  const env = envelope(25, [[12, 13.3], [14, 15.2], [20, 21]]);
+  const va = VocalActivity.fromEnvelopes(env, null);
+  const js = { segments: [
+    { start: 10, end: 15, text: 'Y vuelvo aqui', words: [w(10, 12.5, 'Y'), w(12.5, 13.5, 'vuelvo'), w(13.5, 15, 'aqui')] },
+    { start: 20, end: 21, text: 'fin', words: [w(20, 21, 'fin')] },
+  ] };
+  const rows = buildRows(js, 25, va), r = rows.find((x) => x.text === 'Y vuelvo aqui');
+  near(r.onset, 12, 0.011, '1a palabra: regreso de la voz');
+  near(r.words[1].onset, 12.5, 1e-9, 'voz continua: se respeta');
+  near(r.words[2].onset, 13.96, 0.02, 'tras la pausa: fin del valle - 50 ms');
+  near(r.voicedEnd, 15.2, 0.011, 'nota sostenida mas alla del end');
+  // Con medida bastan 4 s: 15.2-20.5 y 21-25 son instrumentales; sin ella hacen falta 8
+  expect(rows.map((x) => x.type[0]).join('') === 'ititi', `con medida: ${rows.map((x) => x.type[0]).join('')}`);
+  const plain = buildRows(js, 25);
+  expect(plain.map((x) => x.type[0]).join('') === 'itt', `sin medida: ${plain.map((x) => x.type[0]).join('')}`);
+  expect(plain.find((x) => x.text === 'Y vuelvo aqui').voicedEnd === 15, 'sin medida: end');
+  // Relevo: el verso siguiente no toma el relevo antes de que acabe la voz
+  const i = rows.indexOf(r);
+  expect(switchAt(rows, i + 1) >= 15.2 - 1e-9, 'relevo tras voicedEnd');
+  expect(VocalActivity.fromEnvelopes(new Float32Array(100).fill(-95)) === null, 'sin voz audible = null');
 });
 
 test('relevo: no antes del fin de la anterior ni pasado su onset', () => {

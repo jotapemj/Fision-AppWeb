@@ -1,6 +1,6 @@
 // Vista Letra: linea activa centrada, karaoke por palabra, tocar = seek (maqueta player.html).
 import { t } from '../i18n/i18n.ts';
-import { activeRow, hasWords, wordProgress, type LyricRow } from '../player/lyrics.ts';
+import { activeRow, hasWords, KARAOKE_FADE_SEC, switchAt, wordProgress, type LyricRow } from '../player/lyrics.ts';
 import { h, img } from './dom.ts';
 import { LYRICS_LANGS, type LyricsLang } from '../player/lyricsLangs.ts';
 
@@ -34,6 +34,9 @@ export class LyricsView {
   private rows: LyricRow[] = [];
   private active = -2;
   private karaoke = loadKaraoke();
+  // Fila tocada: sigue encendida hasta que el reloj llega a `until` (lo oido va por detras del seek).
+  // `kar` fija el karaoke (palabra tocada encendida). Un seek lejos (antes de from - 1 s) la suelta.
+  private hold: { idx: number; until: number; from: number; kar: number } | null = null;
   private onSeek: (sec: number) => void;
   actions: LyricsActions | null = null;
 
@@ -44,6 +47,7 @@ export class LyricsView {
 
   set(state: LyricsState) {
     this.active = -2;
+    this.hold = null;
     if (state.kind === 'picker' || state.kind === 'processing' || state.kind === 'error') {
       this.rows = []; this.lines = []; this.words = [];
       this.el.replaceChildren(state.kind === 'picker' ? this.picker(!!state.reprocess) : this.processing(state.kind === 'error'));
@@ -83,13 +87,14 @@ export class LyricsView {
             ? h('span', { class: 'wd' }, h('i', { class: 'ch', textContent: fmt(chords.get(`${ri}:${k}`) ?? null) }), h('span', { textContent: w.text }))
             : h('span', { class: 'wd', textContent: w.text });
           // Palabra: seek a su onset (solo en karaoke; si no, la linea entera)
-          s.onclick = (ev) => { if (this.karaoke) { ev.stopPropagation(); this.onSeek(w.onset); } };
+          s.onclick = (ev) => { if (this.karaoke) { ev.stopPropagation(); this.tap(ri, w.onset, w.onset, w.onset + KARAOKE_FADE_SEC); } };
           ws.push(s);
           line.append(s, k < r.words.length - 1 && !withChords ? ' ' : '');
         });
       } else line.textContent = r.text;
-      line.onclick = () => this.onSeek(r.start);
-      line.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.onSeek(r.start); } };
+      const tapLine = () => this.tap(ri, r.start, switchAt(this.rows, ri), r.start);
+      line.onclick = tapLine;
+      line.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tapLine(); } };
       this.lines.push(line); this.words.push(ws); list.append(line);
     });
     this.scroller.classList.toggle('kar', this.karaoke && karaokeOk);
@@ -141,10 +146,24 @@ export class LyricsView {
     (list.querySelector('[aria-selected=true]') as HTMLElement | null)?.focus();
   }
 
+  /** Toque (holdLyricsRow): seek y la fila se enciende ya, tambien en pausa. */
+  private tap(idx: number, seekSec: number, until: number, kar: number) {
+    this.onSeek(seekSec);
+    this.hold = { idx, until, from: seekSec, kar };
+    this.paint(idx, kar);
+  }
+
   /** t = reloj de letra (s). Llamar en cada frame con la vista visible. */
   tick(sec: number) {
     if (!this.rows.length) return;
-    const i = activeRow(this.rows, sec);
+    let i = activeRow(this.rows, sec), kar = sec;
+    const hd = this.hold;
+    if (hd && (sec >= hd.until || sec < hd.from - 1)) this.hold = null;
+    else if (hd) { i = hd.idx; kar = Math.max(sec, hd.kar); }
+    this.paint(i, kar);
+  }
+
+  private paint(i: number, sec: number) {
     if (i !== this.active) {
       if (this.active >= 0) { this.lines[this.active]?.classList.remove('now'); for (const w of this.words[this.active] ?? []) w.style.removeProperty('--k'); }
       this.active = i;

@@ -222,3 +222,16 @@ test('stemGains replica el paneo de Android', async () => {
     near(gl, l, 1e-6, `L(${v},${p})`); near(gr, r, 1e-6, `R(${v},${p})`);
   }
 });
+
+test('envolvente de la pista: RMS en dBFS cada 10 ms (VocalActivity)', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  const [id] = await load([440], 1, 2.5);
+  const p = M._fe_envelope(id), n = M._fe_envelope_len();
+  const env = new Float32Array(M.wasmMemory.buffer, p, n).slice();
+  expect(n === 250, `frames: ${n}`);
+  const want = 20 * Math.log10(0.3 / Math.SQRT2); // seno de amplitud 0.3
+  near(env[100], want, 0.1, 'nivel del seno');
+  M._fe_envelope(999);
+  expect(M._fe_envelope_len() === 0, 'id fuera de rango = vacia');
+  return `${n} frames, ${env[100].toFixed(2)} dBFS`;
+});

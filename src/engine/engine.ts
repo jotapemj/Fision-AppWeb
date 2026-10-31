@@ -35,6 +35,9 @@ interface EngineModule {
   _fe_set_3d_muted(id: number, on: number): void;
   _fe_set_echo(id: number, a: number, delayMs: number): void;
   _fe_set_reverb(id: number, send: number, room: number): void;
+  _fe_envelope(id: number): number;
+  _fe_envelope_len(): number;
+  wasmMemory: WebAssembly.Memory;
 }
 
 export interface StemFile { name: string; data: Uint8Array; loop?: boolean }
@@ -138,4 +141,9 @@ export class Engine {
   set3DMuted(id: number, on: boolean): void { this.M._fe_set_3d_muted(id, on ? 1 : 0); }
   setEcho(id: number, amount: number, delayMs: number): void { this.M._fe_set_echo(id, amount, delayMs); }
   setReverb(id: number, send: number, room: number): void { this.M._fe_set_reverb(id, send, room); }
+  /** Envolvente RMS (dBFS cada 10 ms) de la pista, calculada al cargar (Track::computeEnvelope). */
+  envelope(id: number): Float32Array {
+    const p = this.M._fe_envelope(id), n = this.M._fe_envelope_len();
+    return n ? new Float32Array(this.M.wasmMemory.buffer, p, n).slice() : new Float32Array(0);
+  }
 }
