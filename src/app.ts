@@ -472,6 +472,7 @@ export class App {
       this.voice = { hash: e.hash, va: VocalActivity.fromEnvelopes(env('vocals'), env('vocals2')) };
       // Mezcla guardada de esta cancion (solo en este navegador)
       const key = `${this.user}:${e.hash}`;
+      player.setFlat3D(!this.settings.get('audio3dScene')); // antes de restaurar: el 3D guardado ya suena con su distancia
       restore(player, await this.params.get(key));
       player.autoplayNext = this.settings.get('autoplayNext');
       const hasBasic = !!txt('chords_basic.txt');
@@ -498,6 +499,7 @@ export class App {
         chordNotation: () => ({ shift: this.settings.get('chordTranspose') ? player.pitch : 0, latin: this.settings.get('chordLatin'), flat: this.settings.get('chordFlat') }),
         formatChord: (c) => formatChord(c, this.settings.get('chordTranspose') ? player.pitch : 0, this.settings.get('chordLatin'), this.settings.get('chordFlat')),
         hasBasicChords: hasBasic,
+        scene3d: () => this.settings.get('audio3dScene'),
         onChordsBasic: (basic) => { player.setChordsBasic(basic); applyChords(); },
         onPitch: () => { if (this.settings.get('chordTranspose')) view.reformatChords(); },
       });
@@ -545,6 +547,7 @@ export class App {
     if (k === 'nebula') this.nebula?.setEnabled(this.settings.get('nebula'));
     if (k === 'accentId' || k === 'songColors') { this.applySongColors(); this.idle?.setAccent(ACCENTS[this.settings.get('accentId')]); }
     if (k === 'sortAsc') this.render();
+    if (k === 'audio3dScene' && cur) { cur.player.setFlat3D(!this.settings.get('audio3dScene')); cur.view.reload3D(); }
     if (k === 'autoplayNext' && cur) cur.player.autoplayNext = this.settings.get('autoplayNext');
     if ((k === 'chordLatin' || k === 'chordFlat' || k === 'chordTranspose') && cur) cur.view.reformatChords();
   }

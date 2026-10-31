@@ -70,6 +70,8 @@ export function openSettings(store: SettingsStore, ctx: SettingsContext) {
       row(t('drawer_item_cifrado'), seg([[t('cifrado_american'), !s.chordLatin], [t('cifrado_latin'), s.chordLatin]], (i) => store.set('chordLatin', i === 1), t('drawer_item_cifrado'))),
       row(t('drawer_item_notation'), seg([[t('notation_sharp'), !s.chordFlat], [t('notation_flat'), s.chordFlat]], (i) => store.set('chordFlat', i === 1), t('drawer_item_notation'))),
       row(t('drawer_switch_transposition'), sw(s.chordTranspose, t('drawer_switch_transposition'), set('chordTranspose')))),
+    h('section', {}, h('h3', { textContent: t('performance_title') }),
+      row(t('audio3d_title'), seg([[t('performance_audio3d_scene'), s.audio3dScene], [t('performance_audio3d_flat'), !s.audio3dScene]], (i) => store.set('audio3dScene', i === 0), t('audio3d_title')))),
     h('section', {}, h('h3', { textContent: t('settings_section_about') }),
       h('p', { class: 'muted', textContent: `Fision Web ${t('about_version_fmt', ctx.webVersion)}` })));
   close.onclick = () => dlg.close();

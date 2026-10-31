@@ -278,7 +278,11 @@
   "export_include_fx": "Include effects",
   "server_status_offline": "Server offline",
   "chord_view_diagrams": "Diagrams",
-  "chord_view_grid": "Grid"
+  "chord_view_grid": "Grid",
+  "cd_listener_head": "Listener",
+  "performance_title": "Performance",
+  "performance_audio3d_scene": "3D scene",
+  "performance_audio3d_flat": "2D scene"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -561,7 +565,11 @@
   "export_include_fx": "Incluir efectos",
   "server_status_offline": "Servidor sin conexión",
   "chord_view_diagrams": "Diagramas",
-  "chord_view_grid": "Cuadrícula"
+  "chord_view_grid": "Cuadrícula",
+  "cd_listener_head": "Oyente",
+  "performance_title": "Rendimiento",
+  "performance_audio3d_scene": "Escena 3D",
+  "performance_audio3d_flat": "Escena 2D"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -843,7 +851,11 @@
   "export_include_fx": "Inclou els efectes",
   "server_status_offline": "Servidor sense connexió",
   "chord_view_diagrams": "Diagrames",
-  "chord_view_grid": "Quadrícula"
+  "chord_view_grid": "Quadrícula",
+  "cd_listener_head": "Oient",
+  "performance_title": "Rendiment",
+  "performance_audio3d_scene": "Escena 3D",
+  "performance_audio3d_flat": "Escena 2D"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -1128,7 +1140,11 @@
   "export_include_fx": "Додати ефекти",
   "server_status_offline": "Сервер недоступний",
   "chord_view_diagrams": "Діаграми",
-  "chord_view_grid": "Сітка"
+  "chord_view_grid": "Сітка",
+  "cd_listener_head": "Слухач",
+  "performance_title": "Продуктивність",
+  "performance_audio3d_scene": "3D-сцена",
+  "performance_audio3d_flat": "2D-сцена"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -1403,7 +1419,11 @@
   "export_include_fx": "Incluir efeitos",
   "server_status_offline": "Servidor off-line",
   "chord_view_diagrams": "Diagramas",
-  "chord_view_grid": "Grade"
+  "chord_view_grid": "Grade",
+  "cd_listener_head": "Ouvinte",
+  "performance_title": "Desempenho",
+  "performance_audio3d_scene": "Cena 3D",
+  "performance_audio3d_flat": "Cena 2D"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -1678,7 +1698,11 @@
   "export_include_fx": "Inclure les effets",
   "server_status_offline": "Serveur hors ligne",
   "chord_view_diagrams": "Diagrammes",
-  "chord_view_grid": "Grille"
+  "chord_view_grid": "Grille",
+  "cd_listener_head": "Auditeur",
+  "performance_title": "Performances",
+  "performance_audio3d_scene": "Scène 3D",
+  "performance_audio3d_flat": "Scène 2D"
  },
  "de": {
   "tab_songs": "Songs",
@@ -1949,7 +1973,11 @@
   "export_include_fx": "Effekte einbeziehen",
   "server_status_offline": "Server offline",
   "chord_view_diagrams": "Diagramme",
-  "chord_view_grid": "Raster"
+  "chord_view_grid": "Raster",
+  "cd_listener_head": "Zuhörer",
+  "performance_title": "Leistung",
+  "performance_audio3d_scene": "3D-Szene",
+  "performance_audio3d_flat": "2D-Szene"
  },
  "it": {
   "tab_songs": "Brani",
@@ -2224,7 +2252,11 @@
   "export_include_fx": "Includi gli effetti",
   "server_status_offline": "Server offline",
   "chord_view_diagrams": "Diagrammi",
-  "chord_view_grid": "Griglia"
+  "chord_view_grid": "Griglia",
+  "cd_listener_head": "Ascoltatore",
+  "performance_title": "Prestazioni",
+  "performance_audio3d_scene": "Scena 3D",
+  "performance_audio3d_flat": "Scena 2D"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -2501,7 +2533,11 @@
   "export_include_fx": "Включить эффекты",
   "server_status_offline": "Сервер не в сети",
   "chord_view_diagrams": "Диаграммы",
-  "chord_view_grid": "Сетка"
+  "chord_view_grid": "Сетка",
+  "cd_listener_head": "Слушатель",
+  "performance_title": "Производительность",
+  "performance_audio3d_scene": "3D-сцена",
+  "performance_audio3d_flat": "2D-сцена"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -2772,6 +2808,10 @@
   "export_include_fx": "包含效果",
   "server_status_offline": "服务器离线",
   "chord_view_diagrams": "和弦图",
-  "chord_view_grid": "网格"
+  "chord_view_grid": "网格",
+  "cd_listener_head": "听者",
+  "performance_title": "性能",
+  "performance_audio3d_scene": "3D 场景",
+  "performance_audio3d_flat": "2D 场景"
  }
 }

@@ -271,5 +271,9 @@
  "export_include_fx",
  "server_status_offline",
  "chord_view_diagrams",
- "chord_view_grid"
+ "chord_view_grid",
+ "cd_listener_head",
+ "performance_title",
+ "performance_audio3d_scene",
+ "performance_audio3d_flat"
 ]

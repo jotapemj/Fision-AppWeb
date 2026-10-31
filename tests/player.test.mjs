@@ -233,3 +233,30 @@ test('seek en pausa: la posicion es el destino aunque el motor aun no lo aplique
   e.pos = 18_010; // el motor llego
   near(p.positionMs, 18_010 - 40 - 130, 1e-9, 'llego: posicion percibida normal');
 });
+
+test('vista plana: distancia = |x, y| (min 0.1) y elevacion del slider; se guarda el modulo; la escena guarda unitario', async () => {
+  const { capture, restore } = await import('../src/player/songParams.ts');
+  const { heightForElev } = await import('../src/player/audio3d.ts');
+  const e = fakeEngine(), p = new Player(e, song());
+  p.setFlat3D(true);
+  p.set3DEnabled(true);
+  const g = idOf(p, 'guitar');
+  expect(e.d3[g].dist === 1 && e.d3[g].elev === 0, `semicirculo plano: ${JSON.stringify(e.d3[g])}`);
+  p.setPose('guitar', { az: Math.PI / 2, fr: 0.5, placed: true });
+  expect(close(e.d3[g].az, Math.PI / 2, 1e-9) && e.d3[g].dist === 0.5, JSON.stringify(e.d3[g]));
+  p.setPose('guitar', { fr: 0.02 });
+  expect(e.d3[g].dist === 0.1, `minimo 0.1: ${e.d3[g].dist}`);
+  // Elevacion del slider (-30..70): la pose guarda la altura con su radio de escena
+  p.setPose('guitar', { fr: 0.5, h: heightForElev(p.poses.get('guitar'), 40) });
+  expect(close(e.d3[g].elev, 40, 1e-6), `elevacion ${e.d3[g].elev}`);
+  p.setPose('guitar', { h: heightForElev(p.poses.get('guitar'), 85) });
+  expect(close(e.d3[g].elev, 70, 1e-6), `tope 70: ${e.d3[g].elev}`);
+  const saved = JSON.parse(JSON.stringify(capture(p))).stems.guitar;
+  expect(close(Math.hypot(saved.x, saved.y), 0.5, 1e-9), `modulo guardado: ${JSON.stringify(saved)}`);
+  const q = new Player(fakeEngine(), song());
+  restore(q, { stems: { guitar: saved } });
+  expect(close(q.poses.get('guitar').fr, 0.5, 1e-9), 'ida y vuelta');
+  // Escena: la misma pose da la distancia esferica (fr no cuenta)
+  p.setFlat3D(false);
+  expect(close(e.d3[g].dist, p.poses.get('guitar').rh / Math.cos(e.d3[g].elev * Math.PI / 180), 1e-6), `escena: ${e.d3[g].dist}`);
+});

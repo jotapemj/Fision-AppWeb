@@ -71,8 +71,9 @@ async function fakeServer() {
     if (req.url === '/jobs' && req.method === 'GET') {
       // Un job subido se ve en vuelo una vez y luego acaba
       const extra = up.jobs ? [up.jobs] : [];
+      // up.hold: el job sigue en vuelo (la prueba mira la fila mientras procesa)
       if (up.jobs) { up.jobs = null; up.newReady = 'pending'; }
-      else if (up.newReady === 'pending') up.newReady = true;
+      else if (up.newReady === 'pending' && !up.hold) up.newReady = true;
       if (up.lyr.posts.length && !up.lyr.ready) extra.push({ job_id: 'jl', hash: H4, filename: 'x', state: 'running', position: 0 });
       return json(200, [...(del.queueGone ? [] : [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]), ...extra]);
     }
@@ -273,7 +274,7 @@ test('letra: la linea activa sigue a la cancion y tocar una linea hace seek', as
   return `filas ${kinds}, seek a ${pos}`;
 });
 
-test('acordes: tira por beat, ahora/luego y acorde sobre la palabra', async () => {
+test('acordes: tira por beat, sin ahora/luego y acorde sobre la palabra', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
   await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
@@ -281,14 +282,14 @@ test('acordes: tira por beat, ahora/luego y acorde sobre la palabra', async () =
   const bars = await p.eval(`document.querySelectorAll('.strip .bar').length`);
   await p.eval(`document.querySelectorAll('.strip .c')[24].click()`); // 12.5 s, suena Am
   await p.waitFor(`document.querySelector('.strip .c.now') === document.querySelectorAll('.strip .c')[24]`, 5000);
-  const nowNext = await p.eval(`[...document.querySelectorAll('.now-ch b')].map(b => b.textContent).join(' / ')`);
-  expect(bars === 9 && nowNext === 'Am / –', `barras ${bars}, ahora/luego ${nowNext}`);
+  const nowNext = await p.eval(`!!document.querySelector('.now-ch')`);
+  expect(bars === 9 && !nowNext, `barras ${bars}, ahora/luego ${nowNext}`);
   // En la letra, G (2.5 s) cae sobre "segunda" (2.5-3.0)
   await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
   const over = await p.eval(`[...document.querySelectorAll('.lyrics .wd')].filter(w => w.querySelector('.ch')?.textContent).map(w => w.querySelector('.ch').textContent + '>' + w.lastChild.textContent).join(' ')`);
   expect(over.includes('G>segunda') && over.includes('C>primera'), `acordes sobre palabras: ${over}`);
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
-  return `ahora/luego ${nowNext}; ${over}`;
+  return `sin ahora/luego; ${over}`;
 });
 
 test('diagramas: guitarra pintada, vocabulario, piano sin zonas, clic = seek y se recuerda', async () => {
@@ -551,6 +552,81 @@ test('3D: escena pintada, luces con el interruptor, arrastre, omni, mute, baile 
   return `pintado ${(on.lit * 100).toFixed(0)} %, brillo ${off.mean.toFixed(0)} -> ${on.mean.toFixed(0)}, tele ${tv.white} px de texto, dollhouse, arrastre, omni, mute, baile, reset y mezcla bloqueada`;
 });
 
+test('3D plano (Rendimiento: Escena 2D): dummy, luces, arrastre sin cruzar la cabeza, altura, omni, mute, baile y reset', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const setScene = async (re) => {
+    await p.eval(`document.querySelector('.me .gear').click()`);
+    await p.waitFor(`document.querySelector('dialog.settings')`, 3000);
+    await p.eval(`[...document.querySelectorAll('dialog.settings .seg button')].find((b) => ${re}.test(b.textContent)).click()`);
+    await p.eval(`document.querySelector('dialog.settings .xbtn').click()`);
+  };
+  await setScene('/2D scene|Escena 2D/');
+  try {
+    await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
+    await p.waitFor(`document.querySelectorAll('.f3 .f3ic').length === 3 && document.querySelector('.f3 .f3head')?.naturalWidth > 0`, 10000);
+    const fl = `document.querySelector('.f3').flat3d`;
+    const st0 = await p.eval(`({ three: !!document.querySelector('.f3 canvas'), veil: getComputedStyle(document.querySelector('.f3veil')).opacity, inert: document.querySelector('.f3stage').classList.contains('inert') })`);
+    expect(!st0.three && +st0.veil > 0.7 && st0.inert, `apagado: ${JSON.stringify(st0)}`);
+    await p.eval(`document.querySelector('.f3 .d3head .switch').click()`);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(+(await p.eval(`getComputedStyle(document.querySelector('.f3veil')).opacity`)) < 0.05, 'luces encendidas');
+    const stem = await p.eval(`document.querySelector('.f3 .f3ic').dataset.stem`);
+    const mouse = async (type, x, y) => p.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+    const drag = async (s, dx, dy) => { await mouse('mousePressed', s.x, s.y); for (let k = 1; k <= 8; k++) await mouse('mouseMoved', s.x + dx * k / 8, s.y + dy * k / 8); await mouse('mouseReleased', s.x + dx, s.y + dy); };
+    // Arrastre: el icono sigue al raton; el azimut y el radio cambian; cerca = mas grande
+    const s0 = await p.eval(`${fl}.probe('${stem}')`);
+    await drag(s0, 90, 60);
+    const s1 = await p.eval(`${fl}.probe('${stem}')`);
+    expect(s1.pose.placed && Math.abs(s1.x - (s0.x + 90)) < 6 && Math.abs(s1.y - (s0.y + 60)) < 6 && s1.pose.fr < s0.pose.fr && s1.scale > s0.scale,
+      `arrastre: (${s0.x.toFixed(0)},${s0.y.toFixed(0)}) -> (${s1.x.toFixed(0)},${s1.y.toFixed(0)}), radio ${s0.pose.fr.toFixed(2)} -> ${s1.pose.fr.toFixed(2)}, escala ${s0.scale.toFixed(2)} -> ${s1.scale.toFixed(2)}`);
+    // No se mete en la cabeza
+    const hd = await p.eval(`(() => { const r = document.querySelector('.f3head').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
+    await drag(s1, hd.x - s1.x, hd.y - s1.y);
+    const s2 = await p.eval(`${fl}.probe('${stem}')`);
+    const ell = ((s2.x - hd.x) / (hd.w * 0.6)) ** 2 + ((s2.y - hd.y) / (hd.h * 0.55)) ** 2;
+    expect(ell > 0.98, `dentro de la cabeza: ${ell.toFixed(2)}`);
+    // Detras: circulo entero, justo debajo de la cabeza a distancia 1
+    const g = await p.eval(`({ ...${fl}.g })`);
+    await drag(s2, hd.x - s2.x, hd.y + g.r - s2.y);
+    const sb = await p.eval(`${fl}.probe('${stem}')`);
+    expect(Math.abs(Math.abs(sb.pose.az) - Math.PI) < 0.1 && sb.pose.fr > 0.95, `detras: az ${(sb.pose.az * 180 / Math.PI).toFixed(0)} fr ${sb.pose.fr.toFixed(2)}`);
+    // Altura: el slider vertical de la seleccionada
+    await p.eval(`(() => { const r = document.querySelector('.f3 .d3side input'); r.value = 40; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); })()`);
+    const s3 = await p.eval(`${fl}.probe('${stem}')`);
+    const elev = Math.atan2(s3.pose.h, s3.pose.rh) * 180 / Math.PI;
+    expect(Math.abs(elev - 40) < 0.5, `altura ${elev.toFixed(1)} grados`);
+    // Doble clic = omni (y el slider de altura se desactiva); pulsacion larga = mute
+    for (let k = 0; k < 2; k++) { await mouse('mousePressed', s3.x, s3.y); await mouse('mouseReleased', s3.x, s3.y); }
+    const omni = await p.eval(`({ o: ${fl}.probe('${stem}').pose.omni, cls: document.querySelector('.f3ic[data-stem="${stem}"]').classList.contains('omni'), off: document.querySelector('.f3 .d3side input').disabled })`);
+    await mouse('mousePressed', s3.x, s3.y); await new Promise((r) => setTimeout(r, 650)); await mouse('mouseReleased', s3.x, s3.y);
+    const muted = (await p.eval(`${fl}.probe('${stem}')`)).pose.muted;
+    expect(omni.o && omni.cls && omni.off && muted, `omni ${JSON.stringify(omni)}, mute ${muted}`);
+    // Baile: sin swing en el dialogo; gira; panel con velocidad y distancia
+    await p.eval(`document.querySelector('.f3 .d3btns .d3btn').click()`);
+    await p.waitFor(`document.querySelector('dialog.dance')`, 3000);
+    const swing = await p.eval(`document.querySelectorAll('dialog.dance .dswing').length`);
+    await p.eval(`document.querySelector('dialog.dance .btn').click()`);
+    const a0 = (await p.eval(`${fl}.probe('${stem}')`)).pose.az;
+    await new Promise((r) => setTimeout(r, 600));
+    const d = await p.eval(`${fl}.probe('${stem}')`);
+    const sliders = await p.eval(`document.querySelectorAll('.f3dance input').length`);
+    expect(swing === 0 && d.dancing && sliders === 2 && Math.abs(d.pose.az - a0) > 0.05, `baile: swing ${swing}, activo ${d.dancing}, sliders ${sliders}, giro ${(d.pose.az - a0).toFixed(3)}`);
+    await p.eval(`document.querySelector('.f3 .d3btns .d3btn').click()`);
+    // Reset: al semicirculo, sin omni ni mute ni altura
+    await p.eval(`document.querySelector('.f3 .d3btns .d3btn:last-child').click()`);
+    await new Promise((r) => setTimeout(r, 1300));
+    const after = await p.eval(`[...document.querySelectorAll('.f3ic')].map((b) => ${fl}.probe(b.dataset.stem).pose)`);
+    expect(after.every((q) => !q.placed && !q.omni && !q.muted && Math.abs(q.fr - 1) < 1e-9 && Math.abs(q.h) < 1e-9), `reset: ${JSON.stringify(after)}`);
+    await p.eval(`document.querySelector('.f3 .d3head .switch').click()`); // deja el 3D apagado
+    return `sin three.js; arrastre ${s0.pose.fr.toFixed(2)} -> ${s1.pose.fr.toFixed(2)}, fuera de la cabeza, altura 40, omni, mute, baile, reset`;
+  } finally {
+    // De vuelta a la escena 3D y a Mezcla para el resto
+    await setScene('/^3D scene$|^Escena 3D$/');
+    await p.eval(`[...document.querySelectorAll('.seg2 button')][2].click()`);
+  }
+});
+
 test('playlists: vacia, crear con el editor (solo las de la nube), abrirla, volver y borrar', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page, calls = c.fake.pl.calls;
@@ -639,10 +715,12 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     expect(hero === 'Mi tema|La Autora|true', `tarjeta: ${hero}`);
     await p.eval(`document.querySelectorAll('.imtile')[1].click()`);
     const custom = await p.eval(`document.querySelectorAll('dialog.imp .seg button')[2].getAttribute('aria-checked')`);
+    up.hold = true;
     await p.eval(`${btnSend}.click()`);
     await p.waitFor(`!document.querySelector('dialog.imp')`, 10000);
     // Mientras procesa, la fila lleva la portada del audio (el server aun no la tiene)
-    await p.waitFor(`[...document.querySelectorAll('.dr')].some((r) => r.textContent.includes('Subida') && r.querySelector('.cv img'))`, 3500);
+    try { await p.waitFor(`[...document.querySelectorAll('.dr')].some((r) => r.textContent.includes('Subida') && r.querySelector('.cv img'))`, 5000); }
+    finally { up.hold = false; }
     const sent = up.calls[0];
     expect(custom === 'true' && sent && /^multipart\/form-data/.test(sent.type) && sent.name === 'subida.wav', `subida: ${JSON.stringify(sent)}`);
     const cfg = JSON.parse(sent.cfg);

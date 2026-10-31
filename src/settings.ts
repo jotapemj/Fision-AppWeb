@@ -13,10 +13,11 @@ export interface Settings {
   chordTranspose: boolean;  // chord_transp_affects_view
   autoplayNext: boolean;    // autoplay_next
   sortAsc: boolean;         // songs_sort_order (0 = recientes primero)
+  audio3dScene: boolean;    // audio3d_scene_enabled (Rendimiento): escena 3D o vista plana 2D
 }
 
 export const DEFAULTS: Settings = { lang: '', accentId: 0, songColors: false, nebula: false, chordLatin: false,
-  chordFlat: false, chordTranspose: false, autoplayNext: false, sortAsc: false };
+  chordFlat: false, chordTranspose: false, autoplayNext: false, sortAsc: false, audio3dScene: true };
 
 const KEY = 'fision.settings';
 type Listener = (s: Settings, changed: keyof Settings) => void;

@@ -396,7 +396,7 @@ export class Scene3D {
   private place(stem: string) {
     const sp = this.sprites.get(stem), pose = this.p.poses.get(stem);
     if (!sp || !pose) return;
-    const w = worldPos(pose);
+    const w = worldPos({ ...pose, h: clampHeight(pose.h) }); // una elevacion de la vista plana puede pasar del techo
     sp.main.position.set(w.x, w.y, w.z);
     sp.ring.position.copy(sp.main.position); sp.halo.position.copy(sp.main.position);
     sp.halo.visible = pose.omni;
@@ -644,7 +644,7 @@ export class Scene3D {
       // Fallback: delta de pantalla
       az -= mx * 0.006; hh -= my * 0.003;
     }
-    this.p.setPose(stem, { az, h: clampHeight(hh), placed: true }, false);
+    this.p.setPose(stem, { az, h: clampHeight(hh), placed: true, fr: 1 }, false); // la escena guarda x/y unitarios (como Android)
     this.place(stem);
   }
 
@@ -668,7 +668,7 @@ export class Scene3D {
       const f = a.from.get(s.stem)!, to = defaultPose(i, n);
       let dAz = to.az - f.az;
       dAz = Math.atan2(Math.sin(dAz), Math.cos(dAz)); // por el camino corto
-      this.p.setPose(s.stem, { az: f.az + dAz * e, h: f.h + (to.h - f.h) * e, rh: f.rh + (to.rh - f.rh) * e, placed: k < 1 }, false);
+      this.p.setPose(s.stem, { az: f.az + dAz * e, h: f.h + (to.h - f.h) * e, rh: f.rh + (to.rh - f.rh) * e, fr: f.fr + (to.fr - f.fr) * e, placed: k < 1 }, false);
       this.place(s.stem);
     });
     if (done) { this.resetAnim = null; this.p.onChange?.(); this.syncControls(); }

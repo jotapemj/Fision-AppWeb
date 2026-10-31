@@ -12,6 +12,9 @@ export const MIN_DISTANCE = 0.3, MAX_DISTANCE = 3.0, DEFAULT_DISTANCE = 1.5;
 export const DANCE_SPEED_MIN = 0.02, DANCE_SPEED_MAX = 0.4, DANCE_SPEED_DEFAULT = 0.15; // vueltas/s
 export const SWING_MIN = 0.1, SWING_MAX = 2.0, SWING_DEFAULT = 0.5; // Hz
 export const DANCE_SINE_AMP = 0.6;
+// Vista plana 2D (ajuste de rendimiento): radio en unidades del semicirculo, elevacion del slider
+export const FLAT_ELEV_MIN = -30, FLAT_ELEV_MAX = 70, FLAT_MIN_DIST = 0.1;
+export const FLAT_DANCE_DIST_MIN = 0.4, FLAT_DANCE_DIST_MAX = 1.2;
 
 export interface Pose3D {
   az: number;      // azimut del motor (rad)
@@ -20,6 +23,7 @@ export interface Pose3D {
   omni: boolean;   // omnipresente (doble clic)
   muted: boolean;  // mute 3D (pulsacion larga); no toca el volumen
   placed: boolean; // false = hueco del semicirculo frontal (x/y sin guardar)
+  fr: number;       // vista plana: distancia = modulo de x/y (1 = semicirculo). La escena lo deja en 1
 }
 
 /** Lo que se guarda por stem (StemSettingsCodec): x/y en convencion motor, e grados, d radio horizontal. */
@@ -38,24 +42,25 @@ export const elevRad = (p: Pick<Pose3D, 'h' | 'rh'>) => Math.atan2(p.h, p.rh);
 export const sphericalDist = (p: Pick<Pose3D, 'h' | 'rh'>) => p.rh / Math.max(0.05, Math.cos(elevRad(p)));
 
 export function defaultPose(i: number, n: number): Pose3D {
-  return { az: slotAz(i, n), h: 0, rh: DEFAULT_DISTANCE, omni: false, muted: false, placed: false };
+  return { az: slotAz(i, n), h: 0, rh: DEFAULT_DISTANCE, omni: false, muted: false, placed: false, fr: 1 };
 }
 
 /** Pose guardada -> pose; lo que falte cae al default (sceneEngineAzimuth / sceneHorizontalDistance). */
 export function fromSaved(s: Saved3D | undefined, i: number, n: number): Pose3D {
   const p = defaultPose(i, n);
   if (!s) return p;
-  if (fin(s.x) && fin(s.y) && (s.x !== 0 || s.y !== 0)) { p.az = Math.atan2(s.x, -s.y); p.placed = true; }
+  if (fin(s.x) && fin(s.y) && (s.x !== 0 || s.y !== 0)) { p.az = Math.atan2(s.x, -s.y); p.placed = true; p.fr = Math.hypot(s.x, s.y); }
   if (fin(s.d)) p.rh = clampDistance(s.d);
   const e = fin(s.e) ? clamp(s.e, -89, 89) : 0;
-  p.h = clampHeight(p.rh * Math.tan(e * Math.PI / 180));
+  // Sin recortar al techo: el angulo guardado manda (la escena recorta solo el dibujo)
+  p.h = p.rh * Math.tan(e * Math.PI / 180);
   p.omni = s.o === true; p.muted = s.m === true;
   return p;
 }
 
 export function toSaved(p: Pose3D): Saved3D {
   const s: Saved3D = {};
-  if (p.placed) { s.x = Math.sin(p.az); s.y = -Math.cos(p.az); s.d = p.rh; }
+  if (p.placed) { s.x = Math.sin(p.az) * p.fr; s.y = -Math.cos(p.az) * p.fr; s.d = p.rh; }
   else if (p.rh !== DEFAULT_DISTANCE) s.d = p.rh;
   const e = elevRad(p) * 180 / Math.PI;
   if (Math.abs(e) > 0.001) s.e = e;
@@ -65,7 +70,14 @@ export function toSaved(p: Pose3D): Saved3D {
 }
 
 /** Hay algo que resetear (has3DModifications). */
-export const modified = (p: Pose3D) => p.placed || p.h !== 0 || p.rh !== DEFAULT_DISTANCE || p.omni || p.muted;
+export const modified = (p: Pose3D) => p.placed || p.h !== 0 || p.rh !== DEFAULT_DISTANCE || p.omni || p.muted || p.fr !== 1;
+
+/** Vista plana (apply3DPositionToEngine): distancia = modulo de x/y, nunca menos de 0.1. */
+export const flatDist = (p: Pick<Pose3D, 'fr'>) => Math.max(FLAT_MIN_DIST, p.fr);
+/** Elevacion de la vista plana: la de la pose, en su rango del slider. */
+export const flatElevDeg = (p: Pick<Pose3D, 'h' | 'rh'>) => clamp(elevRad(p) * 180 / Math.PI, FLAT_ELEV_MIN, FLAT_ELEV_MAX);
+/** Altura que da esa elevacion con el radio de la escena (la pose guarda h). */
+export const heightForElev = (p: Pick<Pose3D, 'rh'>, deg: number) => p.rh * Math.tan(clamp(deg, FLAT_ELEV_MIN, FLAT_ELEV_MAX) * Math.PI / 180);
 
 /** Posicion en el mundo. El oyente mira a +Z; la camara empieza detras (en -Z) y su derecha es -X,
  *  asi que el oido derecho (+pi/2) cae en -X: lo que se ve a la derecha suena a la derecha. */

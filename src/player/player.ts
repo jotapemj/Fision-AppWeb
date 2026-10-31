@@ -1,7 +1,7 @@
 // Estado y reglas del reproductor (sin DOM). Reglas de app_spec §3.
 import type { Engine, LoadedStem } from '../engine/engine.ts';
 import { DEFAULT_VOLUME, isMetronome, isPitched, METRONOMES, orderIndex, stemOf } from './stems.ts';
-import { defaultPose, elevRad, sphericalDist, type Pose3D } from './audio3d.ts';
+import { defaultPose, elevRad, flatDist, flatElevDeg, sphericalDist, type Pose3D } from './audio3d.ts';
 
 // repeat_mode de Android
 const SEEK_LAND_MS = 250;  // el motor ya esta en el destino
@@ -89,6 +89,8 @@ export class Player {
   repeat: Repeat = Repeat.Off;
   // Audio 3D (§3.7): en 3D no cuentan volumen ni balance
   audio3d = false;
+  /** Vista plana 2D (audio3d_scene_enabled off): el motor recibe otra distancia. */
+  flat3d = false;
   readonly poses = new Map<string, Pose3D>();
   autoplayNext = false;
   playing = false;
@@ -240,6 +242,12 @@ export class Player {
     this.onChange?.();
   }
 
+  /** Escena 3D o vista plana: misma pose guardada, distinta distancia en el motor. */
+  setFlat3D(on: boolean) {
+    this.flat3d = on;
+    if (this.audio3d) for (const s of this.stems) this.push3D(s.stem);
+  }
+
   /** Cambia la pose; `save` = asentado (soltar, parar baile), no a 60 fps. */
   setPose(stem: string, patch: Partial<Pose3D>, save = true) {
     const p = this.poses.get(stem);
@@ -254,7 +262,8 @@ export class Player {
   /** El motor recibe esfericas: azimut, distancia real y elevacion en grados. */
   push3D(stem: string) {
     const p = this.poses.get(stem)!;
-    this.engine.set3DPosition(this.find(stem).id, p.az, sphericalDist(p), elevRad(p) * 180 / Math.PI);
+    if (this.flat3d) this.engine.set3DPosition(this.find(stem).id, p.az, flatDist(p), flatElevDeg(p));
+    else this.engine.set3DPosition(this.find(stem).id, p.az, sphericalDist(p), elevRad(p) * 180 / Math.PI);
   }
 
   setChordsBasic(b: boolean) { this.chordsBasic = b; this.onChange?.(); }

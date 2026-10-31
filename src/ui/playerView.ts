@@ -6,7 +6,7 @@ import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
 import { LyricsView, type LyricsActions, type LyricsState } from './lyricsView.ts';
 import { LYRICS_CLOCK_OFFSET_MS } from '../player/lyrics.ts';
-import { currentBeat, nextChord, soundingChord, type BeatCell } from '../player/chords.ts';
+import { currentBeat, type BeatCell } from '../player/chords.ts';
 import { ChordGrid } from './chordGrid.ts';
 import { ChordStrip } from './chordStrip.ts';
 import { ChordDiagrams } from './chordDiagrams.ts';
@@ -25,6 +25,7 @@ import icRestore from '../assets/icons/ic_restore_stem.svg';
 import icDrumset from '../assets/icons/ic_drumset.png';
 import icMenu from '../assets/icons/ic_menu.svg';
 import type { Scene3D } from './scene3d.ts';
+import type { Flat3D } from './flat3d.ts';
 
 export type View = 'lyrics' | 'chords' | 'mix' | '3d';
 
@@ -39,6 +40,8 @@ export interface PlayerHooks {
   chordNotation(): { shift: number; latin: boolean; flat: boolean };
   /** Hay chords_basic.txt: se ofrece Basicos / Avanzado. */
   hasBasicChords: boolean;
+  /** audio3d_scene_enabled: true = escena 3D, false = vista plana. */
+  scene3d(): boolean;
   onChordsBasic(basic: boolean): void;
   onPitch?(): void;
   /** Vista elegida (la nebulosa oculta sus blobs en 3D). */
@@ -82,9 +85,6 @@ export class PlayerView {
   private chordGrid = loadChordView(); // Diagramas | Cuadricula (chord_diagram_view, global)
   private beat = -2;
   private chordBeat = -2;
-  private nowCh = h('b', { class: 'ch' });
-  private nextCh = h('b', { class: 'ch nx' });
-  private nowNext = h('span', { class: 'now-ch', hidden: true });
   private viewBox = h('div', { class: 'view' });
   private tabs = new Map<View, HTMLButtonElement>();
   private seekEl: HTMLInputElement;
@@ -98,7 +98,7 @@ export class PlayerView {
   private raf = 0;
   private drumsOpen = true;
   private fxStem: string | null = null; // stem del panel derecho
-  private scene3d: Scene3D | null = null; // se construye la primera vez y vive con la cancion
+  private scene3d: Scene3D | Flat3D | null = null; // se construye la primera vez y vive con la cancion
   private scene3dLoading = false;
   private dead = false;
   private card: { cover: string | null; title: string; artist: string };
@@ -127,8 +127,7 @@ export class PlayerView {
     tab('mix', t('web_view_mix'), null, MIX_SVG);
     tab('3d', t('web_view_3d'), icItd);
     this.tabs.get('3d')!.classList.toggle('on3d', p.audio3d);
-    this.nowNext.append(h('small', { textContent: t('web_now') }), this.nowCh, h('small', { textContent: t('web_next_chord') }), this.nextCh);
-    this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg, h('span', { class: 'sp' }), this.nowNext), this.viewBox);
+    this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg), this.viewBox);
 
     // --- barra inferior ---
     this.seekEl = slider(0, 1000, 1, 0, t('web_position'));
@@ -161,6 +160,13 @@ export class PlayerView {
 
   destroy() { this.dead = true; cancelAnimationFrame(this.raf); this.scene3d?.destroy(); this.scene3d = null; }
 
+  /** Cambio Escena 3D / 2D en ajustes: se rehace la vista (la pose guardada es la misma). */
+  reload3D() {
+    if (!this.scene3d) return;
+    this.scene3d.destroy(); this.scene3d = null;
+    if (this.view === '3d') this.renderView();
+  }
+
   private lyricsState: LyricsState = { kind: 'loading' };
 
   setLyrics(state: LyricsState) {
@@ -183,7 +189,6 @@ export class PlayerView {
       seekBeat: (b) => this.p.seek((cells[b]?.time ?? 0) * 1000) });
     const seek = (sec: number) => this.p.seek(sec * 1000), fmt = (c: string | null) => this.hooks.formatChord(c);
     this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, seek, fmt), diagrams, grid: new ChordGrid(cells, seek, fmt) };
-    this.nowNext.hidden = false;
     this.chordBeat = -2;
     if (this.view === 'chords') this.renderView();
   }
@@ -225,9 +230,6 @@ export class PlayerView {
       if (b !== this.chordBeat) {
         this.chordBeat = b;
         if (this.chordGrid) this.chords.grid.setBeat(b); else this.chords.strip.setBeat(b);
-        const fmt = (c: string | null) => this.hooks.formatChord(c);
-        const now = fmt(soundingChord(this.chords.cells, b)), next = fmt(nextChord(this.chords.cells, b));
-        this.nowCh.textContent = now || '–'; this.nextCh.textContent = next || '–';
         if (!this.chordGrid) this.chords.diagrams.setBeat(b);
       }
     }
@@ -292,10 +294,15 @@ export class PlayerView {
     this.viewBox.replaceChildren(h('div', { class: 'd3load', attrs: { role: 'status', 'aria-label': t('web_3d_loading') } }, h('span', { class: 'spin' })));
     if (this.scene3dLoading) return;
     this.scene3dLoading = true;
-    void import('./scene3d.ts').then(({ Scene3D }) => {
+    const hooks = { onEnabled: (on: boolean) => this.tabs.get('3d')!.classList.toggle('on3d', on) };
+    // Rendimiento: escena (three.js, chunk aparte) o vista plana 2D (sin three.js)
+    const make: Promise<Scene3D | Flat3D> = this.hooks.scene3d()
+      ? import('./scene3d.ts').then(({ Scene3D }) => new Scene3D(this.p, this.card, hooks))
+      : import('./flat3d.ts').then(({ Flat3D }) => new Flat3D(this.p, hooks));
+    void make.then((v) => {
       this.scene3dLoading = false;
-      if (this.dead) return; // cancion cerrada mientras cargaba
-      this.scene3d = new Scene3D(this.p, this.card, { onEnabled: (on) => this.tabs.get('3d')!.classList.toggle('on3d', on) });
+      if (this.dead) { v.destroy(); return; } // cancion cerrada mientras cargaba
+      this.scene3d = v;
       if (this.view === '3d') this.show3D();
     });
   }
