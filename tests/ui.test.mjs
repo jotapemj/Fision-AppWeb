@@ -251,6 +251,26 @@ test('metronomo: encender y elegir 2x desde su desplegable', async () => {
   return `${before} -> ${after}`;
 });
 
+test('sonido en downbeat: interruptor y sonido en el menu; baja el WAV y lo carga en el motor', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`document.querySelector('.top .ib').click()`);
+  await p.waitFor(`document.querySelector('.menu-pop .dbpick')`);
+  const hiddenOff = await p.eval(`document.querySelector('.menu-pop .dbpick').hidden`);
+  await p.eval(`document.querySelectorAll('.menu-pop .switch')[1].click()`);
+  await p.eval(`document.querySelector('.menu-pop .dbpick').click()`);
+  const n = await p.eval(`document.querySelectorAll('.menu-pop .dblist button').length`);
+  await p.eval(`document.querySelectorAll('.menu-pop .dblist button')[4].click()`); // stick
+  await p.waitFor(`performance.getEntriesByType('resource').some((r) => r.name.endsWith('/dbclick_stick.wav'))`, 5000);
+  const st = await p.eval(`({ on: document.querySelector('.main').player.downbeatOn, sub: document.querySelector('.menu-pop .dbpick small').textContent,
+    saved: JSON.parse(localStorage.getItem('fision.settings')).downbeatType })`);
+  await p.eval(`document.querySelectorAll('.menu-pop .switch')[1].click()`); // dejarlo apagado
+  const off = await p.eval(`document.querySelector('.main').player.downbeatOn`);
+  await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  expect(hiddenOff && n === 13 && st.on && st.saved === 4 && /Baqueta|Stick/.test(st.sub) && !off, JSON.stringify({ hiddenOff, n, ...st, off }));
+  return `13 sonidos; ${st.sub} cargado; apagado de nuevo`;
+});
+
 test('letra: la linea activa sigue a la cancion y tocar una linea hace seek', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
@@ -274,7 +294,45 @@ test('letra: la linea activa sigue a la cancion y tocar una linea hace seek', as
   return `filas ${kinds}, seek a ${pos}`;
 });
 
-test('acordes: tira por beat, sin ahora/luego y acorde sobre la palabra', async () => {
+test('letra magnetica: cerca del centro se engancha y vuelve; lejos se desprende; un seek la engancha', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const playing = await p.eval(`/pau/i.test(document.querySelector('.pbar .play').getAttribute('aria-label'))`);
+  if (playing) await p.eval(`document.querySelector('.pbar .play').click()`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
+  try {
+    await p.waitFor(`document.querySelectorAll('.lyrics .cl').length >= 4`, 10000);
+    await p.eval(`document.querySelectorAll('.lyrics .cl')[1].click()`);
+    await new Promise((r) => setTimeout(r, 900));
+    // Distancia (px) de la linea activa al centro del scroller
+    const off = `(() => { const b = document.querySelector('.lyrics'), n = b.querySelector('.cl.now'); const r = n.getBoundingClientRect(), q = b.getBoundingClientRect();
+      return Math.round((r.top + r.height / 2) - (q.top + q.height / 2)); })()`;
+    const scrollBy = (dy) => p.eval(`(() => { const b = document.querySelector('.lyrics'); b.dispatchEvent(new WheelEvent('wheel', { deltaY: ${dy} })); b.scrollTop += ${dy}; })()`);
+    const o0 = await p.eval(off);
+    // Cerca (60 px): al soltar vuelve al centro
+    await scrollBy(60);
+    await new Promise((r) => setTimeout(r, 900));
+    const near = await p.eval(off);
+    // Lejos (todo abajo): se queda donde se dejo
+    await scrollBy(4000);
+    await new Promise((r) => setTimeout(r, 900));
+    const far = await p.eval(off);
+    const det = await p.eval(`document.querySelector('.lyrics').scrollTop`);
+    // Un seek (+5 s) la engancha otra vez
+    await p.eval(`[...document.querySelectorAll('.pbar button')].find((b) => /Adelante 5|Forward 5/.test(b.getAttribute('aria-label') || '')).click()`);
+    await new Promise((r) => setTimeout(r, 1200));
+    const back = await p.eval(off);
+    expect(Math.abs(o0) < 30 && Math.abs(near) < 30, `cerca: ${o0} -> ${near} px del centro`);
+    expect(Math.abs(far) > 150 && det > 0, `lejos no vuelve: ${far} px`);
+    expect(Math.abs(back) < 30, `tras el seek: ${back} px`);
+    return `cerca vuelve (${near} px), lejos se queda (${far} px), seek engancha (${back} px)`;
+  } finally {
+    await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+    if (playing) await p.eval(`document.querySelector('.pbar .play').click()`);
+  }
+});
+
+test('acordes: tira por beat, sin ahora/luego; acordes sobre la letra con su boton', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
   await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
@@ -284,10 +342,30 @@ test('acordes: tira por beat, sin ahora/luego y acorde sobre la palabra', async 
   await p.waitFor(`document.querySelector('.strip .c.now') === document.querySelectorAll('.strip .c')[24]`, 5000);
   const nowNext = await p.eval(`!!document.querySelector('.now-ch')`);
   expect(bars === 9 && !nowNext, `barras ${bars}, ahora/luego ${nowNext}`);
-  // En la letra, G (2.5 s) cae sobre "segunda" (2.5-3.0)
+  // Letra: acordes ocultos por defecto; el boton (solo con acordes) los enciende por cancion
   await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
-  const over = await p.eval(`[...document.querySelectorAll('.lyrics .wd')].filter(w => w.querySelector('.ch')?.textContent).map(w => w.querySelector('.ch').textContent + '>' + w.lastChild.textContent).join(' ')`);
-  expect(over.includes('G>segunda') && over.includes('C>primera'), `acordes sobre palabras: ${over}`);
+  await p.waitFor(`document.querySelector('.lyopts .lychb')`, 5000);
+  const off = await p.eval(`({ btn: !document.querySelector('.lychb').hidden, pressed: document.querySelector('.lychb').getAttribute('aria-pressed'),
+    vis: [...document.querySelectorAll('.lyrics .lc')].some((e) => +getComputedStyle(e).opacity > 0.05) })`);
+  expect(off.btn && off.pressed === 'false' && !off.vis, `apagado por defecto: ${JSON.stringify(off)}`);
+  await p.eval(`document.querySelector('.lychb').click()`);
+  await new Promise((r) => setTimeout(r, 600));
+  // G (2.5 s) justo encima de "segunda" (2.5-3.0); el nombre no tapa la palabra
+  const over = await p.eval(`(() => {
+    const out = [];
+    for (const line of document.querySelectorAll('.lyrics .cl:not(.ins)')) {
+      const ws = [...line.querySelectorAll('.wd')];
+      for (const c of line.querySelectorAll('.lc')) {
+        const cr = c.getBoundingClientRect();
+        const w = ws.find((x) => { const r = x.getBoundingClientRect(); return Math.abs(r.left - cr.left) < 3 && cr.bottom <= r.top + 6 && r.top - cr.bottom < 14; });
+        out.push(c.textContent + '>' + (w ? w.textContent : '?'));
+      }
+    }
+    return out.join(' ');
+  })()`);
+  const saved = await p.eval(`document.querySelector('.main').player.chordsOnLyrics`);
+  expect(over.includes('G>segunda') && !over.includes('?') && saved, `acordes sobre palabras: ${over}, guardado ${saved}`);
+  await p.eval(`document.querySelector('.lychb').click()`); // apagado otra vez
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
   return `sin ahora/luego; ${over}`;
 });
@@ -318,6 +396,46 @@ test('diagramas: guitarra pintada, vocabulario, piano sin zonas, clic = seek y s
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
   expect(pref === 'piano', `instrumento guardado: ${pref}`);
   return `guitarra ${g} px blancos, vocabulario ${vocab}, piano ${pianoLit} px, seek a Am`;
+});
+
+test('tira: arrastrar con el raton explora sin seek; al soltar se ajusta y el iman vuelve; clic = seek', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const playing = await p.eval(`/pau/i.test(document.querySelector('.pbar .play').getAttribute('aria-label'))`);
+  if (playing) await p.eval(`document.querySelector('.pbar .play').click()`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[1].click()`);
+  try {
+    await p.waitFor(`document.querySelectorAll('.strip .c').length === 40`, 5000);
+    await p.eval(`document.querySelectorAll('.strip .c')[4].click()`); // 2.5 s
+    await p.waitFor(`document.querySelector('.strip .c.now') === document.querySelectorAll('.strip .c')[4]`, 5000);
+    await new Promise((r) => setTimeout(r, 400));
+    const st = `(() => { const s = document.querySelector('.strip'), n = s.querySelector('.c.now'); return { x: n.getBoundingClientRect().left - s.getBoundingClientRect().left, w: s.clientWidth,
+      pos: document.querySelector('.seek .meta span').textContent, now: [...s.querySelectorAll('.c')].indexOf(n) }; })()`;
+    const s0 = await p.eval(st);
+    const box = await p.eval(`(() => { const r = document.querySelector('.strip').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const mouse = (type, x) => p.send('Input.dispatchMouseEvent', { type, x, y: box.y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+    // Arrastre lento de 560 px a la izquierda (~8 celdas): sin seek, la tira se mueve
+    await mouse('mousePressed', box.x);
+    for (let k = 1; k <= 14; k++) { await mouse('mouseMoved', box.x - 40 * k); await new Promise((r) => setTimeout(r, 16)); }
+    await new Promise((r) => setTimeout(r, 120));
+    await mouse('mouseReleased', box.x - 560);
+    await new Promise((r) => setTimeout(r, 450));
+    const s1 = await p.eval(st);
+    const snapped = await p.eval(`(() => { const s = document.querySelector('.strip'), sl = s.getBoundingClientRect().left + s.clientWidth / 3;
+      return Math.min(...[...s.querySelectorAll('.c')].map((c) => Math.abs(c.getBoundingClientRect().left - sl))); })()`);
+    expect(s1.pos === s0.pos && s1.now === s0.now, `el arrastre hizo seek: ${s0.pos} -> ${s1.pos}`);
+    expect(s0.x - s1.x > 400 && snapped < 2, `explorando: ${s0.x.toFixed(0)} -> ${s1.x.toFixed(0)} px, ajuste ${snapped.toFixed(1)} px`);
+    // Iman: lejos (8 celdas) espera 1.5 s + 100 ms/celda y vuelve al beat actual
+    await p.waitFor(`(() => { const s = document.querySelector('.strip'), n = s.querySelector('.c.now'); return Math.abs(n.getBoundingClientRect().left - s.getBoundingClientRect().left - ${s0.x}) < 2; })()`, 4500);
+    // Clic tras explorar con la rueda: seek
+    await p.eval(`document.querySelector('.strip').dispatchEvent(new WheelEvent('wheel', { deltaY: 200, cancelable: true }))`);
+    await p.eval(`document.querySelectorAll('.strip .c')[24].click()`);
+    await p.waitFor(`document.querySelector('.strip .c.now') === document.querySelectorAll('.strip .c')[24]`, 5000);
+    return `arrastre ${Math.round(s0.x - s1.x)} px sin seek, ajustado a celda, iman de vuelta; clic = seek`;
+  } finally {
+    await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+    if (playing) await p.eval(`document.querySelector('.pbar .play').click()`);
+  }
 });
 
 test('cuadricula: sustituye a tira y diagramas, 2 compases por fila, clic = seek, sigue la cancion y vuelve tras explorar', async () => {
@@ -733,7 +851,7 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     await p.waitFor(`document.querySelector('.top .t b')?.textContent === 'Cancion buena' && !document.querySelector('canvas.curtain-c')`, 10000);
     const before = up.zips.filter((z) => z === H1).length;
     await p.eval(`document.querySelector('.top .ib').click()`);
-    await p.eval(`document.querySelector('.menu-pop .menuitem').click()`);
+    await p.eval(`[...document.querySelectorAll('.menu-pop .menuitem')].find((b) => /Reprocesar|Reprocess/.test(b.textContent)).click()`);
     await p.waitFor(`document.querySelector('dialog.imp') && !${btnSend}.disabled`, 5000);
     await p.eval(`${btnSend}.click()`);
     await p.waitFor(`!document.querySelector('dialog.imp')`, 5000);

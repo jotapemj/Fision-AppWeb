@@ -179,11 +179,38 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cl { font-size: 32px; line-height: 1.3; color: rgba(255,255,255,.4); cursor: pointer; transform-origin: 0 50%;
   transition: transform 520ms cubic-bezier(.4,0,.2,1), color 520ms cubic-bezier(.4,0,.2,1); width: fit-content; }
 .cl:hover { color: rgba(255,255,255,.6); }
-.cl.now { transform: scale(1.154); color: var(--accent); }
+.cl.now { transform: scale(1.154); color: #fff; } /* AppWhite, como Android */
 .cl.ins { font-size: 28px; }
-.kar .cl.now { color: rgba(255,255,255,.76); }
-.kar .cl.now .wd { color: color-mix(in srgb, var(--accent) calc(var(--k, 0) * 100%), rgba(255,255,255,.76)); }
+.kar .cl.now { color: rgba(255,255,255,.55); } /* lyrics_line_current */
+.kar .cl.now .wd { color: color-mix(in srgb, #fff calc(var(--k, 0) * 100%), rgba(255,255,255,.55)); }
 @media (prefers-reduced-motion: reduce) { .cl { transition: none; } }
+/* Acordes sobre la letra (ChordLyricsTextView): banda encima de cada linea, nombre sobre su letra */
+.cl { position: relative; }
+.lylist .cl:not(.ins) { transition: transform 520ms cubic-bezier(.4,0,.2,1), color 520ms cubic-bezier(.4,0,.2,1), line-height 250ms cubic-bezier(.4,0,.2,1), padding-top 250ms cubic-bezier(.4,0,.2,1); }
+.chon .cl:not(.ins) { line-height: calc(1.3em + 22px); padding-top: 12px; }
+.lc { position: absolute; left: 0; top: -24px; font-style: normal; font-size: 21px; line-height: 1; white-space: nowrap; pointer-events: none;
+  color: rgba(255,255,255,.4); opacity: 0; transition: opacity 250ms cubic-bezier(.4,0,.2,1), color 150ms; }
+.chon .lc { opacity: 1; }
+.cl.now .lc { color: rgba(255,255,255,.55); }
+.cl.now .lc.on { color: var(--accent); }
+/* Parte instrumental: fila de acordes encima de la nota (ChordStripView) */
+.cl.ins:has(.lstrip) { width: auto; }
+.lstrip { height: 0; opacity: 0; overflow: hidden; transition: height 250ms cubic-bezier(.4,0,.2,1), opacity 250ms cubic-bezier(.4,0,.2,1); }
+.chon .lstrip { height: 34px; opacity: 1; }
+.lstrip.fl { -webkit-mask: linear-gradient(90deg, transparent, #000 36px); mask: linear-gradient(90deg, transparent, #000 36px); }
+.lstrip.fr { -webkit-mask: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+.lstrip.fl.fr { -webkit-mask: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+.lstrack { display: flex; gap: 22px; white-space: nowrap; width: max-content; transition: transform 380ms cubic-bezier(0,0,.2,1); }
+.lstrack .ch { font-style: normal; font-size: 24px; color: rgba(255,255,255,.4); }
+.cl.now .lstrack .ch { color: rgba(255,255,255,.55); }
+.cl.now .lstrack .ch.past { color: rgba(255,255,255,.4); }
+.cl.now .lstrack .ch.now { color: var(--accent); }
+/* Boton acordes en la letra (b_lyricsChords): circulo, acento cuando esta encendido */
+.lychb { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.25); transition: background 200ms; }
+.lychb img { width: 20px; height: 20px; transition: filter 200ms; }
+.lychb[aria-pressed=true] { background: var(--accent); }
+.lychb[aria-pressed=true] img { filter: brightness(0); }
+@media (prefers-reduced-motion: reduce) { .lylist .cl:not(.ins), .lc, .lstrip, .lstrack { transition: none; } }
 .skel { display: grid; gap: 22px; padding: 30vh 14% 0 0; }
 .skel i { height: 28px; border-radius: 8px; background: linear-gradient(90deg, #161616 0%, #222 50%, #161616 100%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
 .skel i:nth-child(2) { width: 80%; } .skel i:nth-child(3) { width: 90%; } .skel i:nth-child(4) { width: 60%; }
@@ -221,6 +248,9 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 /* Bordes por mascara, no por degradado negro: sobre la nebulosa serian rectangulos */
 .strip { -webkit-mask: linear-gradient(90deg, transparent, #000 100px, #000 calc(100% - 100px), transparent); mask: linear-gradient(90deg, transparent, #000 100px, #000 calc(100% - 100px), transparent); }
 .strip-track { display: flex; align-items: center; gap: 8px; transition: transform 300ms cubic-bezier(.2,.7,.3,1); will-change: transform; }
+.strip { cursor: grab; user-select: none; touch-action: pan-y; }
+.strip.dragging, .strip.dragging .c { cursor: grabbing; }
+.strip-track.free { transition: none; }
 .strip .c { flex: none; width: 64px; height: 64px; border-radius: 8px; background: #262626; font: 26px "MusGlyphs", serif; color: #fff; display: grid; place-items: center; }
 .strip .c.db { background: #3a3a3a; }
 .strip .c.played { background: color-mix(in srgb, var(--accent) 22%, #262626); }
@@ -266,10 +296,6 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cdg.piano .cdvocab { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .cdg.piano .cdmini canvas { width: 128px; height: 56px; }
 /* Letra con acordes encima: palabra de dos pisos */
-.withch .cl:not(.ins) { display: flex; flex-wrap: wrap; column-gap: 12px; }
-.withch .wd { display: inline-grid; }
-.withch .wd .ch { font-style: normal; font-size: 24px; line-height: 1.25; height: 30px; color: rgba(255,255,255,.45); }
-.withch .cl.now .wd .ch { color: var(--accent); }
 
 /* ---------- Mezcla ---------- */
 .mix { max-width: 680px; display: grid; }
@@ -565,3 +591,10 @@ dialog.expdlg { width: min(460px, calc(100% - 32px)); }
 .linkb { color: var(--accent); font-size: 13px; text-decoration: underline; }
 .fxtop .expb { margin-left: auto; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 13px; color: var(--text-soft); }
 .fxtop .expb:hover { background: var(--press); }
+/* Sonido en downbeat: elegir sonido (single_choice_dialog en linea) */
+.menu-pop .dbpick { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.menu-pop .dbpick small { color: var(--text-muted); font-size: 13px; }
+.menu-pop .dblist { display: grid; gap: 2px; max-height: 240px; overflow-y: auto; margin: 4px 0; scrollbar-width: thin; }
+.menu-pop .dblist button { text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--text-soft); }
+.menu-pop .dblist button:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.menu-pop .dblist button[aria-checked=true] { color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent); }

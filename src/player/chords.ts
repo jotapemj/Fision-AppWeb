@@ -1,5 +1,4 @@
 // Acordes: lectura, celdas por beat (PlayerActivity.buildBeatCells) y formato (ChordFormatter).
-import type { LyricRow } from './lyrics.ts';
 
 export interface ChordEvent { chord: string; time: number }
 export interface BeatCell { time: number; pos: number; isDownbeat: boolean; chord: string | null }
@@ -114,29 +113,3 @@ export function formatChord(chord: string | null, semi = 0, latin = false, flat 
   return formatSingle(chord, semi, latin, flat);
 }
 
-/**
- * Acordes encima de la letra (solo web): cada cambio, ya cuantizado a su beat, va a la palabra
- * que suena en ese instante; si cae en el hueco antes de una linea (< 2 s), a su primera palabra.
- * En partes instrumentales no se pinta. Varios en la misma palabra: el ultimo.
- * Devuelve clave "fila:palabra" -> acorde.
- */
-export function chordsOverWords(rows: LyricRow[], cells: BeatCell[]): Map<string, string> {
-  const out = new Map<string, string>();
-  const LEAD = 2;
-  for (const c of cells) {
-    if (!c.chord) continue;
-    const t = c.time;
-    let placed = false;
-    for (let r = 0; r < rows.length && !placed; r++) {
-      const row = rows[r];
-      if (row.type !== 'text' || !row.words.length) continue;
-      if (t < row.start - LEAD) break;
-      if (t > row.end) continue;
-      let w = 0;
-      while (w + 1 < row.words.length && row.words[w + 1].start <= t) w++;
-      out.set(`${r}:${w}`, c.chord);
-      placed = true;
-    }
-  }
-  return out;
-}

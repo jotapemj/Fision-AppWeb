@@ -185,3 +185,71 @@ export function activeRow(rows: LyricRow[], t: number): number {
 export const wordProgress = (w: Word, t: number) => Math.min(1, Math.max(0, (t - w.onset) / KARAOKE_FADE_SEC));
 
 export const hasWords = (rows: LyricRow[]) => rows.some((r) => r.words.length > 0);
+
+// ---------------- Acordes sobre la letra (LyricsLinesAdapter.rebuildRowChords) ----------------
+
+/** Cambio de acorde colocado en una fila: palabra `word` (-1 = parte instrumental), letra `char`
+ *  dentro de ella, o `after` = en el hueco tras esa palabra (un cambio en un silencio). */
+export interface RowChord { time: number; raw: string; word: number; after: boolean; char: number }
+
+// Un acorde un poco antes de una palabra cae en ella
+const CHORD_WORD_LEAD_SEC = 0.15;
+// Un acorde tanto tras acabar una palabra cae en un silencio, no en ella
+const CHORD_WORD_TAIL_SEC = 0.12;
+/** Reloj de los acordes = reloj de letra - (130 - 80) ms: la tira los enciende con la posicion percibida. */
+export const CHORD_LAG_SEC = 0.05;
+
+/** Palabras que se pintan en una fila de texto (sin marcas de tiempo: las del texto). */
+export function rowWords(r: LyricRow): string[] {
+  return r.words.length ? r.words.map((w) => w.text) : r.text.trim().split(/\s+/).filter(Boolean);
+}
+
+/** Inicio y fin cantados de cada palabra (wordLayout). Sin marcas: repartidas por la linea. */
+function wordTimes(r: LyricRow): { times: number[]; endTimes: number[] } {
+  const words = r.words, n = words.length;
+  if (n) {
+    const times = words.map((w) => w.onset);
+    // Una palabra acaba en su marca, nunca despues de que se cante la siguiente; la ultima, con la voz medida
+    const endTimes = words.map((w, i) => {
+      let e = i === n - 1 ? Math.max(w.end, r.voicedEnd) : w.end;
+      if (i + 1 < n) e = Math.min(e, times[i + 1]);
+      return Math.max(times[i], e);
+    });
+    return { times, endTimes };
+  }
+  const m = Math.max(1, rowWords(r).length);
+  return { times: Array.from({ length: m }, (_, i) => r.start + (r.end - r.start) * i / m),
+    endTimes: Array.from({ length: m }, (_, i) => r.start + (r.end - r.start) * (i + 1) / m) };
+}
+
+/**
+ * Cada cambio de acorde en la fila encendida cuando suena: en la parte instrumental donde cae, o en la
+ * linea que se canta (una linea sigue encendida en el silencio hasta que la siguiente toma el relevo).
+ * Dentro de la linea va sobre una palabra solo si cambia mientras se canta (o justo antes); un cambio en
+ * un silencio va al hueco tras la ultima palabra cantada.
+ */
+export function rowChords(rows: LyricRow[], marks: { time: number; raw: string }[]): RowChord[][] {
+  const out: RowChord[][] = rows.map(() => []);
+  if (!rows.length) return out;
+  const layouts = new Map<number, ReturnType<typeof wordTimes> & { lens: number[] }>();
+  for (const m of marks) {
+    let ri = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if ((r.type === 'text' ? r.onset : r.start) <= m.time + CHORD_WORD_LEAD_SEC) ri = i; else break;
+    }
+    const r = rows[ri];
+    if (r.type !== 'text') { out[ri].push({ time: m.time, raw: m.raw, word: -1, after: false, char: 0 }); continue; }
+    let wl = layouts.get(ri);
+    if (!wl) { wl = { ...wordTimes(r), lens: rowWords(r).map((w) => w.length) }; layouts.set(ri, wl); }
+    let w = 0;
+    for (let i = 0; i < wl.times.length; i++) if (wl.times[i] <= m.time + CHORD_WORD_LEAD_SEC) w = i;
+    const after = m.time > wl.endTimes[w] + CHORD_WORD_TAIL_SEC && m.time + CHORD_WORD_LEAD_SEC >= wl.times[w];
+    // Letra que se canta en ese instante: las letras repartidas por el tiempo de la palabra
+    let char = 0;
+    const len = wl.lens[w] ?? 0, dur = wl.endTimes[w] - wl.times[w];
+    if (!after && len > 1 && dur > 0 && m.time > wl.times[w]) char = Math.min(len - 1, Math.floor(Math.min(1, (m.time - wl.times[w]) / dur) * len));
+    out[ri].push({ time: m.time, raw: m.raw, word: w, after, char });
+  }
+  return out;
+}

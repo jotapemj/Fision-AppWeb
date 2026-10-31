@@ -120,6 +120,13 @@ EMSCRIPTEN_KEEPALIVE void fe_set_filter(int id, float a) { gEngine->setTrackFilt
 EMSCRIPTEN_KEEPALIVE void fe_set_echo(int id, float a, float delayMs) { gEngine->setTrackEcho(id, a, delayMs); }
 EMSCRIPTEN_KEEPALIVE void fe_set_reverb(int id, float send, int room) { gEngine->setTrackReverbSend(id, send, room); }
 
+// Click de downbeat (motor, sample-accurate): WAV del FS, cola por tiempo de fuente, pista que se atenua
+EMSCRIPTEN_KEEPALIVE int fe_click_wav(const char* path) { return gEngine->setClickWav(path) ? 1 : 0; }
+EMSCRIPTEN_KEEPALIVE void fe_click_at(double ms) { gEngine->scheduleClickAt((int64_t)ms); }
+EMSCRIPTEN_KEEPALIVE void fe_click_clear() { gEngine->clearClickSchedule(); }
+EMSCRIPTEN_KEEPALIVE void fe_click_enabled(int on) { gEngine->setClickEnabled(on != 0); }
+EMSCRIPTEN_KEEPALIVE void fe_click_duck(int id) { gEngine->setClickDuckTrack(id); }
+
 // Envolvente RMS en dBFS cada 10 ms de una pista (VocalActivity de la letra); copia hasta la siguiente llamada
 static std::vector<float> gEnv;
 EMSCRIPTEN_KEEPALIVE float* fe_envelope(int id) { gEnv = gEngine->getTrackEnvelope(id); return gEnv.data(); }

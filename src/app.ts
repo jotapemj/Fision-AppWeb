@@ -12,10 +12,10 @@ import { SongStore, type StoredFile } from './lib/songStore.ts';
 import { listZip, readZipEntry } from './lib/zip.ts';
 import { Player, parseBeats, parseBpm } from './player/player.ts';
 import { isMetronome, stemOf } from './player/stems.ts';
-import { buildRows as buildLyricRows } from './player/lyrics.ts';
+import { buildRows as buildLyricRows, rowChords } from './player/lyrics.ts';
 import { VocalActivity } from './player/vocalActivity.ts';
 import type { LyricsState } from './ui/lyricsView.ts';
-import { buildBeatCells, chordsOverWords, parseChords, parseTimes } from './player/chords.ts';
+import { buildBeatCells, parseChords, parseTimes } from './player/chords.ts';
 import { h, toast } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
@@ -24,7 +24,7 @@ import { Sidebar, type RowMenuItem } from './ui/sidebar.ts';
 import { Nebula } from './ui/nebula.ts';
 import { IdleMain } from './ui/idleMain.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
-import { ACCENTS, type SettingsStore } from './settings.ts';
+import { ACCENTS, DOWNBEAT_SOUNDS, type SettingsStore } from './settings.ts';
 import { openSettings } from './ui/settingsView.ts';
 import { cssRgb, songColors, type SongColors } from './player/songPalette.ts';
 import { formatChord } from './player/chords.ts';
@@ -493,6 +493,8 @@ export class App {
         onEnded: () => this.step(1), onPlayState: () => this.render(),
         onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
         nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
+        downbeat: { get: () => ({ on: this.settings.get('downbeatSound'), type: this.settings.get('downbeatType') }),
+          setOn: (on) => this.settings.set('downbeatSound', on), setType: (i) => this.settings.set('downbeatType', i) },
         onView: (v) => this.nebula?.setOrbitBlobsVisible(v !== '3d'),
         onReprocess: () => this.reprocessCurrent(),
         onExport: (stem) => openExport({ player, entry: e, load: (want) => this.store!.load(e.hash, want) }, stem),
@@ -513,9 +515,11 @@ export class App {
       const applyChords = () => {
         const { cells, beatsPerBar } = buildBeatCells(parseBeats(beatsTxt), parseTimes(txt('downbeats.txt')), parseChords(txt(player.chordsBasic ? 'chords_basic.txt' : 'chords.txt')));
         view.setChords(cells, beatsPerBar);
-        view.setLyrics(lyrics.kind === 'content' ? { ...lyrics, chords: chordsOverWords(lyrics.rows, cells) } : lyrics);
+        player.setDownbeats(cells.filter((c) => c.isDownbeat).map((c) => c.time));
+        view.setLyrics(lyrics.kind === 'content' ? { ...lyrics, chords: rowChords(lyrics.rows, cells.filter((c) => c.chord).map((c) => ({ time: c.time, raw: c.chord! }))) } : lyrics);
       };
       applyChords();
+      void this.applyDownbeat(player); // motor nuevo: el click se carga otra vez
       setLyr = (st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); };
       // Acordes nuevos del server con la cancion abierta: se ven ya (chordsUpdatedListener)
       this.current.reloadChords = async () => {
@@ -549,7 +553,28 @@ export class App {
     if (k === 'sortAsc') this.render();
     if (k === 'audio3dScene' && cur) { cur.player.setFlat3D(!this.settings.get('audio3dScene')); cur.view.reload3D(); }
     if (k === 'autoplayNext' && cur) cur.player.autoplayNext = this.settings.get('autoplayNext');
+    if ((k === 'downbeatSound' || k === 'downbeatType') && cur) void this.applyDownbeat(cur.player, k === 'downbeatType');
     if ((k === 'chordLatin' || k === 'chordFlat' || k === 'chordTranspose') && cur) cur.view.reformatChords();
+  }
+
+  private clickWavs = new Map<number, Uint8Array>();
+  private clickLoaded: { player: Player; type: number } | null = null;
+
+  /** Sonido en downbeat (ensureDownbeatSoundLoaded): el WAV se baja una vez y se carga en cada motor nuevo. */
+  private async applyDownbeat(player: Player, reload = false) {
+    const on = this.settings.get('downbeatSound'), type = this.settings.get('downbeatType');
+    const loaded = this.clickLoaded?.player === player && this.clickLoaded.type === type && !reload;
+    if (!on || loaded) { player.setDownbeatSound(on); return; }
+    let wav = this.clickWavs.get(type);
+    if (!wav) {
+      const r = await fetch(`${import.meta.env.BASE_URL}dbclick/dbclick_${DOWNBEAT_SOUNDS[type]}.wav`).catch(() => null);
+      if (!r?.ok) return;
+      wav = new Uint8Array(await r.arrayBuffer());
+      this.clickWavs.set(type, wav);
+    }
+    if (this.current?.player !== player || this.settings.get('downbeatType') !== type) return; // cambio mientras bajaba
+    player.setDownbeatSound(this.settings.get('downbeatSound'), wav);
+    this.clickLoaded = { player, type };
   }
 
   private paletteCache = new Map<string, SongColors | null>();

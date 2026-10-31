@@ -11,6 +11,7 @@ import { ChordGrid } from './chordGrid.ts';
 import { ChordStrip } from './chordStrip.ts';
 import { ChordDiagrams } from './chordDiagrams.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
+import { DOWNBEAT_SOUNDS } from '../settings.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
 import icChords from '../assets/icons/ic_chord_carousel.svg';
 import icItd from '../assets/icons/ic_itd.png';
@@ -34,6 +35,8 @@ export interface PlayerHooks {
   /** Beat nuevo: posicion en el compas, compas y tempo oido (BPM x multiplicador). */
   onBeat(pos: number, beatsPerBar: number, heardBpm: number | null): void;
   nebula: { get(): boolean; set(on: boolean): void };
+  /** Sonido en downbeat (global) y su sonido: indice de DOWNBEAT_SOUNDS. */
+  downbeat: { get(): { on: boolean; type: number }; setOn(on: boolean): void; setType(i: number): void };
   /** Formato de acorde con los ajustes (latino, bemoles, transporte con el tono). */
   formatChord(c: string | null): string;
   /** Transporte (trasponer con el tono), cifrado latino y bemoles: para diagramas y nombres de nota. */
@@ -107,6 +110,9 @@ export class PlayerView {
     this.p = p; this.hooks = hooks;
     this.card = { cover, title: song.title || song.filename, artist: song.artist ?? '' };
     this.lyrics = new LyricsView({ kind: 'loading' }, (sec) => p.seek(sec * 1000));
+    // Acordes en la letra: por cancion (Room chordsOnLyrics)
+    this.lyrics.setChordsOn(p.chordsOnLyrics);
+    this.lyrics.onChordsToggle = (on) => p.setChordsOnLyrics(on);
     this.lyrics.actions = hooks.lyrics ?? null;
     const top = h('div', { class: 'top' },
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
@@ -128,6 +134,7 @@ export class PlayerView {
     tab('3d', t('web_view_3d'), icItd);
     this.tabs.get('3d')!.classList.toggle('on3d', p.audio3d);
     this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg), this.viewBox);
+    (this.main as HTMLElement & { player?: Player }).player = p; // acceso de las pruebas
 
     // --- barra inferior ---
     this.seekEl = slider(0, 1000, 1, 0, t('web_position'));
@@ -185,6 +192,7 @@ export class PlayerView {
     if (!cells.some((c) => c.chord)) return;
     this.chords?.diagrams.destroy();
     this.chords?.grid.destroy();
+    this.chords?.strip.destroy();
     const diagrams = new ChordDiagrams(cells, { notation: () => this.hooks.chordNotation(), format: (c) => this.hooks.formatChord(c),
       seekBeat: (b) => this.p.seek((cells[b]?.time ?? 0) * 1000) });
     const seek = (sec: number) => this.p.seek(sec * 1000), fmt = (c: string | null) => this.hooks.formatChord(c);
@@ -424,6 +432,24 @@ export class PlayerView {
       const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(neb.get()), 'aria-label': t('drawer_switch_nebula') } });
       sw.onclick = () => { neb.set(!neb.get()); sw.setAttribute('aria-checked', String(neb.get())); };
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('drawer_switch_nebula') }), sw));
+      // Sonido en downbeat + sonido (solo suena con el metronomo encendido, como Android)
+      const db = this.hooks.downbeat;
+      const dsw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(db.get().on), 'aria-label': t('drawer_switch_downbeat') } });
+      const pick = h('button', { class: 'menuitem dbpick', attrs: { 'aria-expanded': 'false' } });
+      const list = h('div', { class: 'dblist', hidden: true, attrs: { role: 'radiogroup', 'aria-label': t('downbeat_sound_dialog_title') } });
+      const syncDb = () => {
+        const { on, type } = db.get();
+        dsw.setAttribute('aria-checked', String(on));
+        pick.hidden = !on; if (!on) { list.hidden = true; pick.setAttribute('aria-expanded', 'false'); }
+        pick.replaceChildren(h('span', { textContent: t('drawer_item_downbeat_sound') }), h('small', { textContent: t(`downbeat_sound_${DOWNBEAT_SOUNDS[type]}`) }));
+        list.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-checked', String(i === type)));
+      };
+      DOWNBEAT_SOUNDS.forEach((id, i) => list.append(h('button', { textContent: t(`downbeat_sound_${id}`), attrs: { role: 'radio' },
+        onclick: () => { db.setType(i); list.hidden = true; pick.setAttribute('aria-expanded', 'false'); syncDb(); } })));
+      dsw.onclick = () => { db.setOn(!db.get().on); syncDb(); };
+      pick.onclick = () => { list.hidden = !list.hidden; pick.setAttribute('aria-expanded', String(!list.hidden)); };
+      pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('drawer_switch_downbeat') }), dsw), pick, list);
+      syncDb();
       if (this.hooks.onReprocess) {
         const rp = h('button', { class: 'menuitem', textContent: t('drawer_item_reprocess') });
         rp.onclick = () => { pop.remove(); anchor.setAttribute('aria-expanded', 'false'); this.hooks.onReprocess!(); };

@@ -235,3 +235,25 @@ test('envolvente de la pista: RMS en dBFS cada 10 ms (VocalActivity)', async () 
   expect(M._fe_envelope_len() === 0, 'id fuera de rango = vacia');
   return `${n} frames, ${env[100].toFixed(2)} dBFS`;
 });
+
+test('click de downbeat: suena al cruzar el instante, atenua el metronomo y calla deshabilitado', async () => {
+  { const sk = await needEngine(); if (sk) return sk; }
+  const wav = fs.readFileSync(path.join(ROOT, 'public/dbclick/dbclick_stick.wav'));
+  const run = async (enabled) => {
+    const [music, metro] = await load([440, 1000], 2, 4);
+    M._fe_set_volume(music, 0, 0); M._fe_set_volume(metro, 0.2, 0.2);
+    M.FS.writeFile('/t/click.wav', wav);
+    const s = M.stringToNewUTF8('/t/click.wav'); expect(M._fe_click_wav(s) === 1, 'WAV del click'); M._free(s);
+    M._fe_click_enabled(enabled ? 1 : 0); M._fe_click_duck(metro); M._fe_click_at(1000);
+    M._fe_start();
+    return render(2);
+  };
+  const rms = (x, a, b) => { let e = 0; for (let i = Math.round(a * SR); i < Math.round(b * SR); i++) e += x[i] ** 2; return Math.sqrt(e / ((b - a) * SR)); };
+  const on = await run(true), off = await run(false);
+  // Diferencia entre las dos pasadas = click (+ hueco del metronomo atenuado)
+  let first = -1;
+  for (let i = 0; i < on.length; i++) if (Math.abs(on[i] - off[i]) > 0.05) { first = i / SR; break; }
+  expect(first > 0.95 && first < 1.3, `click en ${first.toFixed(3)} s`);
+  expect(rms(on, 0.2, 0.9) - rms(off, 0.2, 0.9) < 1e-4, 'nada antes del instante');
+  return `click/atenuacion a ${(first * 1000).toFixed(0)} ms del render (trigger 1000 ms)`;
+});

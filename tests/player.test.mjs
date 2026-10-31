@@ -19,6 +19,9 @@ function fakeEngine() {
     set3DOmni(id, on) { (e.d3[id] ??= {}).omni = on; }, set3DMuted(id, on) { (e.d3[id] ??= {}).muted = on; },
     trackSeeks: [],
     seekTrack(id, ms) { e.trackSeeks.push([id, ms]); },
+    clicks: [], clickOn: false, clickDuck: -1, clickWav: 0,
+    setClickWav() { e.clickWav++; return true; }, clickAt(ms) { e.clicks.push(ms); }, clearClicks() { e.clicks = []; },
+    setClickEnabled(on) { e.clickOn = on; }, setClickDuck(id) { e.clickDuck = id; },
     async play() { e.played++; },
     pause() { e.paused++; } };
   return e;
@@ -259,4 +262,21 @@ test('vista plana: distancia = |x, y| (min 0.1) y elevacion del slider; se guard
   // Escena: la misma pose da la distancia esferica (fr no cuenta)
   p.setFlat3D(false);
   expect(close(e.d3[g].dist, p.poses.get('guitar').rh / Math.cos(e.d3[g].elev * Math.PI / 180), 1e-6), `escena: ${e.d3[g].dist}`);
+});
+
+test('click de downbeat: solo con metronomo, cola desde la posicion, pausa la vacia, duck al metronomo elegido', async () => {
+  const e = fakeEngine(), p = new Player(e, song());
+  p.setDownbeats([0.5, 2.1, 4.0]);
+  p.setDownbeatSound(true, new Uint8Array(4));
+  expect(e.clickWav === 1 && !e.clickOn && e.clicks.length === 0, 'sin metronomo no suena');
+  p.setMetronome(true, 2);
+  expect(e.clickOn && e.clickDuck === 8 && e.clicks.join() === '500,2100,4000', `cola ${e.clicks} duck ${e.clickDuck}`);
+  p.seek(2100);
+  expect(e.clicks.join() === '4000', `tras seek: ${e.clicks}`);
+  p.pause();
+  expect(e.clicks.length === 0, 'pausa = cancelPendingDownbeats');
+  await p.play();
+  expect(e.clicks.join() === '4000', `al reanudar: ${e.clicks}`);
+  p.setDownbeatSound(false);
+  expect(!e.clickOn && e.clickDuck === -1 && e.clicks.length === 0, 'apagado');
 });

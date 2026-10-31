@@ -1,7 +1,7 @@
 // Acordes: lectura, celdas por beat como Android, formato y acordes sobre la letra.
 import { test, expect } from './lib/harness.mjs';
-import { parseChords, buildBeatCells, currentBeat, soundingChord, nextChord, formatChord, chordsOverWords } from '../src/player/chords.ts';
-import { buildRows } from '../src/player/lyrics.ts';
+import { parseChords, buildBeatCells, currentBeat, soundingChord, nextChord, formatChord } from '../src/player/chords.ts';
+import { buildRows, rowChords } from '../src/player/lyrics.ts';
 
 const beats = Array.from({ length: 16 }, (_, i) => 0.5 + i * 0.5); // 120 BPM desde 0.5 s
 
@@ -37,20 +37,26 @@ test('formato: transporte, bemoles, latino quita ;, bajo invertido', () => {
   expect(formatChord('N.C.') === 'N.C.' && formatChord(null) === '', 'no parseable');
 });
 
-test('acordes sobre la letra: palabra que suena, hueco corto -> 1a palabra, instrumental fuera', () => {
+test('acordes sobre la letra = rebuildRowChords: fila encendida, letra que suena, hueco tras la palabra, instrumental', () => {
   const w = (s, e, t) => ({ start: s, end: e, text: t });
   const rows = buildRows({ segments: [
     { start: 2, end: 4, words: [w(2, 2.4, 'uno'), w(2.4, 3, 'dos'), w(3, 4, 'tres')] },
-    { start: 20, end: 22, words: [w(20, 21, 'cuatro'), w(21, 22, 'cinco')] },
+    { start: 20, end: 22, words: [w(20, 20.5, 'cuatro'), w(21.5, 22, 'cinco')] },
   ] }, 40);
-  const cellsAt = (times) => times.map(([time, chord]) => ({ time, pos: 1, isDownbeat: true, chord }));
-  const m = chordsOverWords(rows, cellsAt([[1.0, 'C'], [2.5, 'G'], [12, 'Am'], [19, 'F'], [21.5, 'E']]));
-  const t1 = rows.findIndex((r) => r.type === 'text');
-  const got = [...m.entries()].map(([k, v]) => `${k}=${v}`).join(' ');
-  expect(m.get(`${t1}:0`) === 'C' && m.get(`${t1}:1`) === 'G', `linea 1: ${got}`);
-  expect(![...m.values()].includes('Am'), `instrumental no se pinta: ${got}`);
-  const t2 = rows.findIndex((r, i) => r.type === 'text' && i > t1);
-  expect(m.get(`${t2}:0`) === 'F' && m.get(`${t2}:1`) === 'E', `linea 2: ${got}`);
+  const marks = [[1.0, 'C'], [2.5, 'G'], [2.75, 'D'], [12, 'Am'], [21.0, 'F'], [21.4, 'E']].map(([time, raw]) => ({ time, raw }));
+  const rc = rowChords(rows, marks);
+  const t1 = rows.findIndex((r) => r.type === 'text'), ins = rows.findIndex((r) => r.type === 'instrumental'), t2 = rows.findLastIndex((r) => r.type === 'text');
+  const fmt = (c) => `${c.raw}@${c.word}${c.after ? '+' : ''}:${c.char}`;
+  const got = rc.map((cs, i) => `${i}[${cs.map(fmt).join(' ')}]`).join(' ');
+  // Antes de la primera linea: su primera palabra; G y D sobre "dos" (letras 0 y 1: la palabra dura 0.6 s)
+  expect(rc[t1].map(fmt).join(' ') === 'C@0:0 G@1:0 D@1:1', `linea 1: ${got}`);
+  expect(rc[ins].map(fmt).join(' ') === 'Am@-1:0', `instrumental: ${got}`);
+  // F en el silencio entre "cuatro" y "cinco": tras la palabra; E justo antes de "cinco": sobre ella
+  expect(rc[t2].map(fmt).join(' ') === 'F@0+:0 E@1:0', `linea 2: ${got}`);
+  // Sin marcas de palabra: palabras del texto repartidas por la linea
+  const plain = buildRows({ segments: [{ start: 0, end: 4, text: 'a b c d' }] }, 4);
+  const pc = rowChords(plain, [{ time: 2.1, raw: 'C' }]);
+  expect(pc[0].length === 1 && pc[0][0].word === 2, `sin marcas: ${JSON.stringify(pc)}`);
   return got;
 });
 

@@ -84,6 +84,7 @@ export class Player {
   metroVolume = 100;
   metroHalfB = false; // variante B del 0.5x: desfase de un beat local
   chordsBasic = false; // chords_basic.txt en vez de chords.txt (por cancion)
+  chordsOnLyrics = false; // nombres de acorde sobre la letra (por cancion)
   pitch = 0;
   tempoMult = 1;
   repeat: Repeat = Repeat.Off;
@@ -94,6 +95,10 @@ export class Player {
   readonly poses = new Map<string, Pose3D>();
   autoplayNext = false;
   playing = false;
+  // Click de downbeat (global): solo suena con el metronomo encendido (PlayerActivity)
+  downbeatOn = false;
+  private clickLoaded = false;
+  private downbeats: number[] = []; // ms de las celdas con isDownbeat
   private repeatOneUsed = false;
   /** Algo guardable cambio (mezcla, tono, tempo, metronomo). El solo no cuenta. */
   onChange: (() => void) | null = null;
@@ -138,14 +143,15 @@ export class Player {
   private seekTarget: number | null = null;
   private seekAt = 0;
 
-  async play() { await this.engine.play(); this.playing = true; }
-  pause() { this.engine.pause(); this.playing = false; }
+  async play() { this.scheduleClicks(this.seekTarget ?? this.engine.positionMs); await this.engine.play(); this.playing = true; }
+  pause() { this.engine.pause(); this.playing = false; this.engine.clearClicks(); } // cancelPendingDownbeats
   toggle() { return this.playing ? this.pause() : this.play(); }
   seek(ms: number) {
     const to = Math.min(Math.max(0, ms), this.durationMs);
     this.engine.seek(to);
     this.seekTarget = to; this.seekAt = performance.now();
     this.applyHalfPhase(to); // se reaplica en cada seek
+    this.scheduleClicks(to);
   }
   skip(deltaMs: number) { this.seek((this.seekTarget ?? this.engine.positionMs) + deltaMs); }
 
@@ -216,7 +222,37 @@ export class Player {
       const id = this.metronomeIds[m];
       if (id !== undefined) this.engine.setVolume(id, on && i === speed ? this.metroVolume : 0);
     });
+    this.applyClick();
     this.onChange?.();
+  }
+
+  /** Downbeats de la cancion (celdas isDownbeat, en ms como (long)(time*1000f)). */
+  setDownbeats(sec: number[]) {
+    this.downbeats = sec.map((t) => Math.trunc(Math.fround(Math.fround(t) * 1000))); // float32 como Java
+    this.applyClick();
+  }
+
+  /** Interruptor y sonido del click (ensureDownbeatSoundLoaded). `wav` nuevo = recargar; tras cada load hace falta. */
+  setDownbeatSound(on: boolean, wav?: Uint8Array) {
+    this.downbeatOn = on;
+    if (wav) this.clickLoaded = this.engine.setClickWav(wav);
+    this.applyClick();
+  }
+
+  /** Habilitar, pista que se atenua y cola desde la posicion actual (rescheduleClicksFromCurrentBeat). */
+  private applyClick() {
+    const on = this.downbeatOn && this.metroOn && this.clickLoaded;
+    this.engine.setClickEnabled(on);
+    const duck = on ? this.metronomeIds[METRO_STEM[this.metroSpeed]] : undefined;
+    this.engine.setClickDuck(duck ?? -1);
+    this.scheduleClicks(this.seekTarget ?? this.engine.positionMs);
+  }
+
+  /** Cola del motor: todos los downbeats que faltan (el motor dispara al cruzarlos, sample-accurate). */
+  private scheduleClicks(fromMs: number) {
+    this.engine.clearClicks();
+    if (!this.downbeatOn || !this.metroOn || !this.clickLoaded) return;
+    for (const ms of this.downbeats) if (ms > fromMs) this.engine.clickAt(ms);
   }
 
   setHalfVariantB(b: boolean) { this.metroHalfB = b; this.applyHalfPhase(this.engine.positionMs); this.onChange?.(); }
@@ -267,6 +303,7 @@ export class Player {
   }
 
   setChordsBasic(b: boolean) { this.chordsBasic = b; this.onChange?.(); }
+  setChordsOnLyrics(on: boolean) { this.chordsOnLyrics = on; this.onChange?.(); }
 
   cycleRepeat() { this.repeat = ((this.repeat + 1) % 3) as Repeat; this.repeatOneUsed = false; }
 

@@ -275,5 +275,21 @@
  "cd_listener_head",
  "performance_title",
  "performance_audio3d_scene",
- "performance_audio3d_flat"
+ "performance_audio3d_flat",
+ "drawer_switch_downbeat",
+ "drawer_item_downbeat_sound",
+ "downbeat_sound_dialog_title",
+ "downbeat_sound_clap",
+ "downbeat_sound_glass",
+ "downbeat_sound_metronomebell",
+ "downbeat_sound_snap",
+ "downbeat_sound_stick",
+ "downbeat_sound_synthbella",
+ "downbeat_sound_synthbellb",
+ "downbeat_sound_synthsquarea",
+ "downbeat_sound_synthsquareb",
+ "downbeat_sound_synthsquarec",
+ "downbeat_sound_tongue",
+ "downbeat_sound_weird",
+ "downbeat_sound_whistle"
 ]

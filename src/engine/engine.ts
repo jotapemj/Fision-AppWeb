@@ -36,6 +36,11 @@ interface EngineModule {
   _fe_set_echo(id: number, a: number, delayMs: number): void;
   _fe_set_reverb(id: number, send: number, room: number): void;
   _fe_envelope(id: number): number;
+  _fe_click_wav(path: number): number;
+  _fe_click_at(ms: number): void;
+  _fe_click_clear(): void;
+  _fe_click_enabled(on: number): void;
+  _fe_click_duck(id: number): void;
   _fe_envelope_len(): number;
   wasmMemory: WebAssembly.Memory;
 }
@@ -141,6 +146,20 @@ export class Engine {
   set3DMuted(id: number, on: boolean): void { this.M._fe_set_3d_muted(id, on ? 1 : 0); }
   setEcho(id: number, amount: number, delayMs: number): void { this.M._fe_set_echo(id, amount, delayMs); }
   setReverb(id: number, send: number, room: number): void { this.M._fe_set_reverb(id, send, room); }
+  /** Click de downbeat: carga el WAV en el motor (empieza mudo; vacia la cola). Repetir tras cada load. */
+  setClickWav(data: Uint8Array): boolean {
+    const M = this.M;
+    M.FS.writeFile('/click.wav', data);
+    const p = M.stringToNewUTF8('/click.wav');
+    const ok = M._fe_click_wav(p) === 1;
+    M._free(p); M.FS.unlink('/click.wav');
+    return ok;
+  }
+  clickAt(ms: number): void { this.M._fe_click_at(ms); }
+  clearClicks(): void { this.M._fe_click_clear(); }
+  setClickEnabled(on: boolean): void { this.M._fe_click_enabled(on ? 1 : 0); }
+  /** Pista que se atenua 160 ms al sonar el click (el metronomo activo; -1 = ninguna). */
+  setClickDuck(id: number): void { this.M._fe_click_duck(id); }
   /** Envolvente RMS (dBFS cada 10 ms) de la pista, calculada al cargar (Track::computeEnvelope). */
   envelope(id: number): Float32Array {
     const p = this.M._fe_envelope(id), n = this.M._fe_envelope_len();
