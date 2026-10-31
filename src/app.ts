@@ -251,7 +251,7 @@ export class App {
 
   private async addSong() {
     const f = await pickAudio();
-    if (f) openImport({ kind: 'upload', file: f }, { api: this.api, gpu: this.serverGpu(), onSubmitted: (r) => this.onSubmitted(r) });
+    if (f) openImport({ kind: 'upload', file: f }, { api: this.api, gpu: this.serverGpu(), onSubmitted: (r, m) => this.onSubmitted(r, m.cover) });
   }
 
   private reprocessCurrent() {
@@ -261,7 +261,9 @@ export class App {
     void this.cover(e.hash).then((cover) => openImport({ kind: 'reprocess', entry: e, cover }, { api: this.api, gpu: this.serverGpu(), onSubmitted: (r) => this.onSubmitted(r) }));
   }
 
-  private onSubmitted(r: { hash: string; job_id?: string }) {
+  private onSubmitted(r: { hash: string; job_id?: string }, cover?: Blob | null) {
+    // Portada del audio mientras el server procesa (el server solo la da al acabar)
+    if (cover && !this.downloaded.has(r.hash)) void this.store!.putSticky(r.hash, cover).then(() => { this.covers.delete(r.hash); this.render(); }).catch(() => {});
     this.jobErrors.delete(r.hash);
     if (r.job_id) this.inflight.set(r.hash, r.job_id);
     void this.refreshLibrary();
@@ -390,6 +392,7 @@ export class App {
     this.entries = this.entries.filter((x) => x.hash !== e.hash);
     void this.store!.putMeta('library', this.entries).catch(() => {});
     this.jobErrors.delete(e.hash); this.inflight.delete(e.hash); this.covers.delete(e.hash);
+    void this.store!.putSticky(e.hash, null).catch(() => {});
     this.render();
     void this.syncPlaylists(); // el server la quita de sus playlists: cambian las cuentas
   }
@@ -416,6 +419,7 @@ export class App {
       await this.store!.save(e.hash, e.updated_at, files);
       this.downloaded.add(e.hash);
       this.covers.delete(e.hash); // ahora hay portada local (antes pudo quedar null en cache)
+      void this.store!.putSticky(e.hash, null).catch(() => {});
     } catch (err) { console.warn('download', err); }
     finally { this.downloading.delete(e.hash); this.render(); }
   }
@@ -430,7 +434,8 @@ export class App {
           const [f] = await this.store!.load(hash, (n) => n === 'artcover.png').catch(() => []);
           if (f) return URL.createObjectURL(new Blob([f.data as BlobPart], { type: 'image/png' }));
         }
-        const b = e ? await this.api.cover(e).catch(() => null) : null;
+        // Sin portada del server (aun procesando): la del audio subido
+        const b = (e ? await this.api.cover(e).catch(() => null) : null) ?? await this.store!.getSticky(hash);
         return b ? URL.createObjectURL(b) : null;
       })();
       this.covers.set(hash, p);

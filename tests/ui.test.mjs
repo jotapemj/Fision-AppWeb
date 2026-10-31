@@ -543,6 +543,22 @@ test('playlists: vacia, crear con el editor (solo las de la nube), abrirla, volv
   return `creada y abierta; se ofrece solo ${offer}; borrada ("${toastText}")`;
 });
 
+// WAV con LIST INFO + chunk id3 (APIC PNG): lo que leeria MediaMetadataRetriever
+function taggedWav(wav) {
+  const le = (n) => { const b = Buffer.alloc(4); b.writeUInt32LE(n); return b; };
+  const be = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+  const ss = (n) => Buffer.from([(n >> 21) & 127, (n >> 14) & 127, (n >> 7) & 127, n & 127]);
+  const png = bandsPng(16, 16, [[[40, 200, 120], 1]]);
+  const apic = Buffer.concat([Buffer.from([0]), Buffer.from('image/png\0', 'latin1'), Buffer.from([3, 0]), png]);
+  const frame = (id, d) => Buffer.concat([Buffer.from(id), be(d.length), Buffer.from([0, 0]), d]);
+  const tag = Buffer.concat([frame('TIT2', Buffer.from('\0Mi tema', 'latin1')), frame('TPE1', Buffer.from('\0La Autora', 'latin1')), frame('APIC', apic)]);
+  const id3 = Buffer.concat([Buffer.from('ID3'), Buffer.from([3, 0, 0]), ss(tag.length), tag]);
+  const chunk = Buffer.concat([Buffer.from('id3 '), le(id3.length), id3, Buffer.alloc(id3.length & 1)]);
+  const out = Buffer.concat([wav.subarray(0, 36), chunk, wav.subarray(36)]);
+  out.writeUInt32LE(out.length - 8, 4);
+  return out;
+}
+
 test('anadir: comprueba antes de subir, sube con config; al acabar el job se descarga; reprocesar', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page, up = c.fake.up;
@@ -550,7 +566,7 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
   const btnSend = `document.querySelector('dialog.imp .plfoot .btn:not(.ghost)')`;
   try {
     const short = path.join(tmp, 'corta.wav'), good = path.join(tmp, 'subida.wav');
-    fs.writeFileSync(short, sineWav(440, 5)); fs.writeFileSync(good, sineWav(440, 20));
+    fs.writeFileSync(short, sineWav(440, 5)); fs.writeFileSync(good, taggedWav(sineWav(440, 20)));
     const choose = async (file) => {
       await p.waitFor(`document.querySelector('input.pick-audio')`, 3000);
       const doc = await p.send('DOM.getDocument', {});
@@ -574,10 +590,16 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     await p.eval(`document.querySelector('.imhero .btn.ghost').click()`);
     await choose(good);
     await p.waitFor(`/0:20/.test(document.querySelector('.imtx small').textContent)`, 5000);
+    // Etiquetas del audio en la tarjeta (titulo, artista, portada y su fondo desenfocado)
+    await p.waitFor(`document.querySelector('.imhero.pic .imcv img')?.naturalWidth > 0`, 5000);
+    const hero = await p.eval(`[document.querySelector('.imtx b').textContent, document.querySelector('.imtx span').textContent, !!document.querySelector('.imbg img')].join('|')`);
+    expect(hero === 'Mi tema|La Autora|true', `tarjeta: ${hero}`);
     await p.eval(`document.querySelectorAll('.imtile')[1].click()`);
     const custom = await p.eval(`document.querySelectorAll('dialog.imp .seg button')[2].getAttribute('aria-checked')`);
     await p.eval(`${btnSend}.click()`);
     await p.waitFor(`!document.querySelector('dialog.imp')`, 10000);
+    // Mientras procesa, la fila lleva la portada del audio (el server aun no la tiene)
+    await p.waitFor(`[...document.querySelectorAll('.dr')].some((r) => r.textContent.includes('Subida') && r.querySelector('.cv img'))`, 3500);
     const sent = up.calls[0];
     expect(custom === 'true' && sent && /^multipart\/form-data/.test(sent.type) && sent.name === 'subida.wav', `subida: ${JSON.stringify(sent)}`);
     const cfg = JSON.parse(sent.cfg);

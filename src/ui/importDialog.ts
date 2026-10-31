@@ -1,5 +1,6 @@
 // Anadir cancion / reprocesar (ImportActivity): tarjeta del audio, separacion con presets y
 // tiles, aviso sin GPU y subida con progreso real y cancelable.
+import { readTags } from '../lib/audioTags.ts';
 import { ApiError, type Api, type JobSubmit, type LibraryEntry } from '../api/client.ts';
 import { t } from '../i18n/i18n.ts';
 import {
@@ -16,7 +17,7 @@ export interface ImportCtx {
   api: Api;
   /** GPU del server (de /server/info); null mientras se lee. */
   gpu: Promise<boolean | null>;
-  onSubmitted(r: JobSubmit, meta: { title: string; artist: string }): void;
+  onSubmitted(r: JobSubmit, meta: { title: string; artist: string; cover?: Blob | null }): void;
 }
 
 export type ImportTarget = { kind: 'upload'; file: File } | { kind: 'reprocess'; entry: LibraryEntry; cover: string | null };
@@ -56,7 +57,10 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
   const cover = h('span', { class: 'imcv' });
   const titleEl = h('b'), artistEl = h('span'), metaEl = h('small');
   const changeBtn = h('button', { class: 'btn ghost', textContent: t('import_change_song'), hidden: reprocess });
-  const hero = h('div', { class: 'imhero' }, cover, h('div', { class: 'imtx' }, titleEl, artistEl, metaEl), changeBtn);
+  // Con portada embebida: la misma de fondo, desenfocada (bindHero de Android)
+  const heroBg = h('span', { class: 'imbg', attrs: { 'aria-hidden': 'true' } });
+  const hero = h('div', { class: 'imhero' }, heroBg, cover, h('div', { class: 'imtx' }, titleEl, artistEl, metaEl), changeBtn);
+  let picture: Blob | null = null, picUrl: string | null = null;
   const modeSeg = h('div', { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': t('import_section_separation') } });
   const tiles = h('div', { class: 'imtiles' });
   const rest = h('div', { class: 'imrest' });
@@ -79,11 +83,28 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
       return;
     }
     if (!file) return;
-    titleEl.textContent = file.name.replace(/\.[^.]+$/, '');
+    const f = file;
+    titleEl.textContent = f.name.replace(/\.[^.]+$/, '');
     artistEl.textContent = '';
-    metaEl.textContent = fileMeta(file.name, file.size, null);
+    metaEl.textContent = fileMeta(f.name, f.size, null);
+    setPicture(null);
+    // Titulo, artista y portada embebidos (MediaMetadataRetriever); sin ellos, el nombre del fichero
+    void readTags(f).then((tg) => {
+      if (file !== f) return;
+      if (tg.title) titleEl.textContent = tg.title;
+      artistEl.textContent = tg.artist ?? '';
+      if (tg.picture) setPicture(new Blob([tg.picture.data as BlobPart], { type: tg.picture.mime }));
+    });
     duration = await durationOf(file);
     metaEl.textContent = fileMeta(file.name, file.size, duration);
+  };
+
+  const setPicture = (b: Blob | null) => {
+    if (picUrl) URL.revokeObjectURL(picUrl);
+    picture = b; picUrl = b ? URL.createObjectURL(b) : null;
+    cover.replaceChildren(...(picUrl ? [img(picUrl, '', '')] : []));
+    heroBg.replaceChildren(...(picUrl ? [img(picUrl, '', '')] : []));
+    hero.classList.toggle('pic', !!picUrl);
   };
 
   const paintSep = () => {
@@ -125,7 +146,7 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
     abort = new AbortController();
     // El server responde 401 sin leer el cuerpo: refrescar antes de subir todo
     try { await ctx.api.refresh(); } catch (e) { if (e instanceof ApiError && e.status === 401) { dlg.close(); return; } }
-    const meta = { title: titleEl.textContent ?? '', artist: artistEl.textContent ?? '' };
+    const meta = { title: titleEl.textContent ?? '', artist: artistEl.textContent ?? '', cover: picture };
     try {
       const r = await ctx.api.uploadJob(file, file.name, buildConfig(sep, !!gpu), (sent, total) => {
         bar.value = total ? sent / total : 0;
@@ -172,7 +193,7 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
     h('div', { class: 'shd' }, h('h2', { textContent: t(reprocess ? 'import_reprocess_title' : 'import_title') }), close),
     hero, h('h3', { textContent: t('import_section_separation') }), modeSeg, tiles, rest, gpuWarn, loading, progress, err,
     h('div', { class: 'plfoot' }, cancel, send));
-  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('close', () => { if (picUrl) URL.revokeObjectURL(picUrl); dlg.remove(); });
   dlg.addEventListener('cancel', (e) => { if (abort) { e.preventDefault(); abort.abort(); } });
   void paintHero(); paintSep();
   // Device segun /server/info: sin dato = cpu (y el envio espera a saberlo)

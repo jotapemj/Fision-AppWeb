@@ -69,6 +69,19 @@ export class SongStore {
     await writeFile(await this.root, `${name}.json`, JSON.stringify(value));
   }
 
+  /** Portada del audio subido mientras el server procesa (sticky cover de Android). null = borrar. */
+  async putSticky(hash: string, data: Blob | null): Promise<void> {
+    if (!HASH_RE.test(hash)) return;
+    const root = await this.root, name = `sticky_${hash}`;
+    if (data) await writeFile(root, name, new Uint8Array(await data.arrayBuffer()));
+    else try { await root.removeEntry(name); } catch (e) { if (!notFound(e)) throw e; }
+  }
+
+  async getSticky(hash: string): Promise<Blob | null> {
+    try { return await (await (await this.root).getFileHandle(`sticky_${hash}`)).getFile(); }
+    catch { return null; }
+  }
+
   /** Hashes con copia completa. */
   async list(): Promise<string[]> {
     const out: string[] = [];
