@@ -11,7 +11,7 @@ const IDLE_SPEED = 0.5;
 
 export class IdleMain {
   readonly el: HTMLElement;
-  private nebula = new Nebula(IDLE_SPEED);
+  private nebula = new Nebula(IDLE_SPEED, false); // sin tope: aqui no hay textos del reproductor
   private mark = h('canvas', { class: 'idlemark', attrs: { role: 'img', 'aria-label': 'Fision' } });
 
   constructor(text: string, accent: string) {

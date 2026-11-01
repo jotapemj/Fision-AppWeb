@@ -53,3 +53,27 @@ export function pulseFor(pos: number, beatsPerBar: number, heardBpm: number | nu
 
 export const PULSE_DECAY_PER_SEC = 7;
 export const decayPulse = (p: number, dtSec: number) => { const v = p * Math.exp(-dtSec * PULSE_DECAY_PER_SEC); return v < 0.005 ? 0 : v; };
+
+/** Luminancia relativa (WCAG) de un color sRGB 0..255. */
+const relLum = (c: number[]) => {
+  const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+};
+
+/** Tope del fondo (luminancia del peor punto, calculado como si todo se solapara). Calibrado con la e2e de
+ *  contraste: 0.075 deja el peor texto en 4.54; 0.065 en 4.75. */
+export const NEBULA_MAX_LUM = 0.065;
+const PEAK_BLOB = [230 / 255, 195 / 255, 195 / 255], PEAK_ANCHOR = 240 / 255, VEIL_KEEP = 0.6;
+
+/**
+ * Tope de brillo (web, decision JP; Android no lo tiene): factor para el alpha de blobs y ancla tal que el peor
+ * punto (todo sumado en 'lighter', pulso maximo, tras el velo .4) no pase de maxLum. 1 = no hace falta.
+ */
+export function brightnessCap(p: { blobs: number[][]; anchor: number[] }, maxLum = NEBULA_MAX_LUM): number {
+  const sum = [0, 1, 2].map((ch) => p.blobs.reduce((s, c, i) => s + c[ch] * (PEAK_BLOB[i] ?? PEAK_BLOB[1]), 0) + p.anchor[ch] * PEAK_ANCHOR);
+  const lumAt = (k: number) => relLum(sum.map((v) => Math.min(255, v * k) * VEIL_KEEP));
+  if (lumAt(1) <= maxLum) return 1;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (lumAt(m) <= maxLum) lo = m; else hi = m; }
+  return lo;
+}

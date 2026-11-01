@@ -498,7 +498,7 @@ test('fondo animado: apagado por defecto; encendido pinta color y no tapa clics'
   const on = await p.eval(state);
   await p.eval(`document.querySelector('.menu-pop .switch').click()`); // dejarlo como estaba
   await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
-  expect(on.op === 1 && on.lit > 0.2, `encendido: opacidad ${on.op}, pixeles con color ${(on.lit * 100).toFixed(0)} %`);
+  expect(on.op === 1 && on.lit > 0.1, `encendido: opacidad ${on.op}, pixeles con color ${(on.lit * 100).toFixed(0)} %`);
   expect(on.top !== 'CANVAS', `el canvas tapa la UI: ${on.top}`);
   return `encendido: ${(on.lit * 100).toFixed(0)} % de pixeles con color`;
 });
@@ -527,6 +527,98 @@ for (const [w, hgt] of [[1440, 900], [1280, 800]]) {
     return `${m.measured} textos medidos`;
   });
 }
+
+// Contraste sobre el fondo animado: el fondo se mide en el pixel (captura sin textos), no en el CSS.
+// Peor caso: pulso al maximo y 16 instantes de las orbitas; 4 acentos y colores de portada.
+test('contraste con el fondo animado encendido: textos sobre la nebulosa en su peor instante', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.size(1280, 800);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`); // vista Mezcla
+  await p.eval(`document.querySelector('.top .ib').click()`);
+  await p.waitFor(`document.querySelector('.menu-pop .switch')`);
+  await p.eval(`document.querySelector('.menu-pop .switch').click()`);
+  await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  await new Promise((r) => setTimeout(r, 700));
+  const SEL = ['.fxpanel b', '.fxv', '.lr small', '.fxpanel .seg button', '.bar2 .t', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
+    '.seek .meta span', '.seg2 button', '.top .t b', '.top .t span'];
+  // Textos a medir: color, tamano y caja del texto (rango), solo los que caen sobre la nebulosa
+  const items = await p.eval(`(() => { const out = [];
+    for (const s of ${JSON.stringify(SEL)}) for (const el of document.querySelectorAll(s)) {
+      if (!el.closest('.main, .pbar') || !el.getClientRects().length || !el.textContent.trim()) continue;
+      const rg = document.createRange(); rg.selectNodeContents(el); const r = rg.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const st = getComputedStyle(el);
+      out.push({ s, txt: el.textContent.trim().slice(0, 16), color: st.color, big: parseFloat(st.fontSize) >= 18.66, x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) });
+    } return out; })()`);
+  const parse = (s) => { const v = s.match(/[\d.]+/g).map(Number); return s.startsWith('color(') ? [v[0] * 255, v[1] * 255, v[2] * 255, v[3] ?? 1] : [v[0], v[1], v[2], v[3] ?? 1]; };
+  const lum = (r, g, b) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const fgs = items.map((it) => parse(it.color));
+  const hide = `(() => { const st = document.createElement('style'); st.id = 'nocolor';
+    st.textContent = '* { color: transparent !important; text-shadow: none !important; caret-color: transparent !important } svg, img, input, canvas:not(.nebula) { visibility: hidden !important }';
+    document.head.append(st); })()`;
+  const worst = new Map(); // texto -> peor contraste visto
+  const perPal = {};        // paleta -> textos por debajo del minimo
+  const scenario = async (name) => {
+    for (let k = 0; k < 16; k++) {
+      await p.eval(`(() => { const n = document.querySelector('canvas.nebula').nebula; cancelAnimationFrame(n.raf); n.pulse = 1; n.orbitK = 1; n.draw(${k * 7.3}); })()`);
+      const png = decodePng(Buffer.from((await p.send('Page.captureScreenshot', { format: 'png' })).result.data, 'base64'));
+      items.forEach((it, i) => {
+        const [fr, fg, fb, fa] = fgs[i], rs = [];
+        for (let y = it.y; y < it.y + it.h; y++) for (let x = it.x; x < it.x + it.w; x++) {
+          const o = (y * png.width + x) * 4, r = png.data[o], g = png.data[o + 1], b = png.data[o + 2];
+          rs.push(ratio(lum(fr * fa + r * (1 - fa), fg * fa + g * (1 - fa), fb * fa + b * (1 - fa)), lum(r, g, b)));
+        }
+        rs.sort((a, b) => a - b);
+        const v = rs[Math.floor(rs.length * 0.05)]; // el 5 % peor del fondo (bordes finos fuera)
+        const key = `${it.s} "${it.txt}"`;
+        if (!worst.has(key) || v < worst.get(key).v) worst.set(key, { v, need: it.big ? 3 : 4.5, where: name });
+        if (v < (it.big ? 3 : 4.5)) (perPal[name] ??= new Set()).add(key);
+      });
+    }
+  };
+  const settingsDo = async (js) => {
+    await p.eval(`document.querySelector('.me .gear').click()`);
+    await p.waitFor(`document.querySelector('dialog.settings[open]')`);
+    await p.eval(js);
+    await p.eval(`document.querySelector('dialog.settings').close()`);
+    await new Promise((r) => setTimeout(r, 200));
+  };
+  const songSw = `[...document.querySelectorAll('dialog.settings .srow')].find(r => /cover|portada|canción|song/i.test(r.textContent)).querySelector('.switch')`;
+  try {
+    await p.eval(hide);
+    for (let a = 0; a < 4; a++) {
+      await p.eval(`document.getElementById('nocolor').remove()`);
+      await settingsDo(`document.querySelectorAll('dialog.settings .acc')[${a}].click()`);
+      await p.eval(hide);
+      await scenario(`acento ${a}`);
+    }
+    await p.eval(`document.getElementById('nocolor').remove()`);
+    await settingsDo(`${songSw}.click()`);
+    await new Promise((r) => setTimeout(r, 800));
+    // con colores de portada cambian los colores de texto de acento: se releen
+    const colors = await p.eval(`(() => { const out = []; for (const s of ${JSON.stringify(SEL)}) for (const el of document.querySelectorAll(s)) {
+      if (!el.closest('.main, .pbar') || !el.getClientRects().length || !el.textContent.trim()) continue;
+      const rg = document.createRange(); rg.selectNodeContents(el); const r = rg.getBoundingClientRect(); if (r.width < 2 || r.height < 2) continue;
+      out.push(getComputedStyle(el).color); } return out; })()`);
+    colors.forEach((col, i) => { if (fgs[i]) fgs[i] = parse(col); });
+    await p.eval(hide);
+    await scenario('portada');
+  } finally {
+    await p.eval(`document.getElementById('nocolor')?.remove()`);
+    await settingsDo(`if (${songSw}.getAttribute('aria-checked') === 'true') ${songSw}.click(); document.querySelectorAll('dialog.settings .acc')[0].click()`);
+    await p.eval(`document.querySelector('.top .ib').click()`);
+    await p.waitFor(`document.querySelector('.menu-pop .switch')`);
+    await p.eval(`document.querySelector('.menu-pop .switch').click()`); // fondo animado apagado otra vez
+    await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+  }
+  const bad = [...worst].filter(([, w]) => w.v < w.need).map(([k, w]) => `${k} ${w.v.toFixed(2)} (${w.where})`);
+  const min = [...worst].sort((a, b) => a[1].v - b[1].v).slice(0, 3).map(([k, w]) => `${k} ${w.v.toFixed(2)}`);
+  expect(items.length > 30, `pocos textos: ${items.length}`);
+  expect(!bad.length, `contraste < minimo sobre la nebulosa: ${bad.join('; ')} | por paleta: ${Object.entries(perPal).map(([k, v]) => `${k} ${v.size}`).join(', ')}`);
+  return `${items.length} textos x 16 instantes x 5 paletas; peores: ${min.join(', ')}`;
+});
 
 test('ajustes: dialogo medible, cifrado latino y colores de portada', async () => {
   const c = await setup(); if (c.skip) return c.skip;

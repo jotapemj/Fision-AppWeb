@@ -1,6 +1,6 @@
 // Fondo animado (NebulaBackgroundView): 3 blobs en orbita + ancla bajo el transporte,
 // mezcla aditiva, velo 0x66000000, 30 fps, pulso por beat. Opt-in (nebula_enabled = false).
-import { accentPalette, decayPulse, orbits } from '../player/nebulaMath.ts';
+import { accentPalette, brightnessCap, decayPulse, orbits } from '../player/nebulaMath.ts';
 
 export interface NebulaColors { blobs: number[][]; anchor: number[] }
 
@@ -13,6 +13,8 @@ export class Nebula {
   private ctx = this.el.getContext('2d')!;
   private orbit = orbits();
   private palette: NebulaColors = accentPalette('#27B397');
+  private capped: boolean;
+  private cap: number; // tope de brillo para que los textos se lean
   private pulse = 0;
   private t0 = performance.now();
   private last = 0;
@@ -23,16 +25,20 @@ export class Nebula {
   private still = matchMedia('(prefers-reduced-motion: reduce)');
   private speed: number;
 
-  /** `speed` multiplica el giro de las orbitas (el centro sin cancion va a 0.5). */
-  constructor(speed = 1) {
+  /** `speed` multiplica el giro de las orbitas (el centro sin cancion va a 0.5). `capped`: tope de brillo
+   *  (detras del reproductor; el centro sin cancion va sin tope). */
+  constructor(speed = 1, capped = true) {
     this.speed = speed;
+    this.capped = capped;
+    this.cap = capped ? brightnessCap(this.palette) : 1;
     this.el.className = 'nebula';
     this.el.setAttribute('aria-hidden', 'true');
+    (this.el as HTMLCanvasElement & { nebula?: Nebula }).nebula = this; // acceso de las pruebas
     document.addEventListener('visibilitychange', () => this.sync());
   }
 
   /** Paleta: la del acento (fromAccent) o la de la portada. */
-  setColors(p: NebulaColors) { this.palette = p; }
+  setColors(p: NebulaColors) { this.palette = p; this.cap = this.capped ? brightnessCap(p) : 1; }
 
   setEnabled(on: boolean) { this.on = on; this.el.classList.toggle('on', on); this.sync(); }
 
@@ -73,13 +79,13 @@ export class Nebula {
       const cx = w / 2 + w * o.rx * Math.cos(a), cy = hgt / 2 + hgt * o.ry * Math.sin(a);
       const r = i === 0 ? min * 0.30 * (1 + p * 0.40) : min * 0.55 * (1 + p * 0.10);
       const alpha = Math.min(230, i === 0 ? 170 + p * 70 : 135 + p * 60) / 255;
-      this.blob(cx, cy, r, this.palette.blobs[i], alpha * this.orbitK, 0.20);
+      this.blob(cx, cy, r, this.palette.blobs[i], alpha * this.orbitK * this.cap, 0.20);
     });
     // Ancla: elipse fija bajo el borde, como un foco tras el transporte
     const ax = w / 2, ay = hgt * ANCHOR_Y, ar = w * ANCHOR_W * (1 + p * 0.15);
     ctx.save();
     ctx.translate(ax, ay); ctx.scale(1, ANCHOR_SQUASH); ctx.translate(-ax, -ay);
-    this.blob(ax, ay, ar, this.palette.anchor, Math.min(240, 160 + p * 80) / 255, 0);
+    this.blob(ax, ay, ar, this.palette.anchor, Math.min(240, 160 + p * 80) / 255 * this.cap, 0);
     ctx.restore();
     // Velo "cristal esmerilado"
     ctx.globalCompositeOperation = 'source-over';

@@ -604,7 +604,8 @@ export class App {
         el.style.setProperty('--accent', cssRgb(pal.accent));
         el.style.setProperty('--accent-2', cssRgb(pal.secondary));
         el.style.setProperty('--accent-12', `rgb(${pal.accent.join(' ')} / .12)`);
-      } else for (const v of ['--accent', '--accent-2', '--accent-12']) el.style.removeProperty(v);
+        el.style.setProperty('--on-accent', '#000'); // acento de portada con Y .20: #04140f se queda en 4.49:1
+      } else for (const v of ['--accent', '--accent-2', '--accent-12', '--on-accent']) el.style.removeProperty(v);
     }
     this.nebula?.setColors(pal ? { blobs: pal.blobs, anchor: pal.anchor } : accentPalette(accent));
   }
