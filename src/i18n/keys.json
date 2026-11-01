@@ -330,5 +330,9 @@
  "licenses_intro",
  "license_meta_fmt",
  "license_detail_visit",
- "about_view_licenses"
+ "about_view_licenses",
+ "library_filter_chip",
+ "te_find",
+ "te_find_playlist",
+ "playlist_count"
 ]

@@ -57,7 +57,9 @@
   "web_coach_bar_metronome": "Dynamic metronome",
   "web_coach_bar_tempo": "Tempo in BPM",
   "web_coach_menu_body": "Animated background, downbeat sound, chord version, reprocess and export.",
-  "web_licenses_back": "Back"
+  "web_licenses_back": "Back",
+  "web_open_player": "Open player",
+  "web_collapse_player": "Minimize player"
  },
  "es": {
   "web_search": "Buscar",
@@ -117,7 +119,9 @@
   "web_coach_bar_metronome": "Metrónomo dinámico",
   "web_coach_bar_tempo": "Velocidad en BPM",
   "web_coach_menu_body": "Fondo animado, sonido en downbeat, versión de acordes, reprocesar y exportar.",
-  "web_licenses_back": "Volver"
+  "web_licenses_back": "Volver",
+  "web_open_player": "Abrir reproductor",
+  "web_collapse_player": "Minimizar reproductor"
  },
  "ca": {
   "web_search": "Cerca",
@@ -177,7 +181,9 @@
   "web_coach_bar_metronome": "Metrònom dinàmic",
   "web_coach_bar_tempo": "Velocitat en BPM",
   "web_coach_menu_body": "Fons animat, so al downbeat, versió d'acords, reprocessar i exportar.",
-  "web_licenses_back": "Torna"
+  "web_licenses_back": "Torna",
+  "web_open_player": "Obre el reproductor",
+  "web_collapse_player": "Minimitza el reproductor"
  },
  "uk": {
   "web_search": "Пошук",
@@ -237,7 +243,9 @@
   "web_coach_bar_metronome": "Динамічний метроном",
   "web_coach_bar_tempo": "Темп у BPM",
   "web_coach_menu_body": "Анімований фон, звук на сильній долі, версія акордів, переобробка та експорт.",
-  "web_licenses_back": "Назад"
+  "web_licenses_back": "Назад",
+  "web_open_player": "Відкрити плеєр",
+  "web_collapse_player": "Згорнути плеєр"
  },
  "pt-BR": {
   "web_search": "Buscar",
@@ -297,7 +305,9 @@
   "web_coach_bar_metronome": "Metrônomo dinâmico",
   "web_coach_bar_tempo": "Andamento em BPM",
   "web_coach_menu_body": "Fundo animado, som no primeiro tempo, versão dos acordes, reprocessar e exportar.",
-  "web_licenses_back": "Voltar"
+  "web_licenses_back": "Voltar",
+  "web_open_player": "Abrir player",
+  "web_collapse_player": "Minimizar player"
  },
  "fr": {
   "web_search": "Rechercher",
@@ -357,7 +367,9 @@
   "web_coach_bar_metronome": "Métronome dynamique",
   "web_coach_bar_tempo": "Tempo en BPM",
   "web_coach_menu_body": "Fond animé, son sur le premier temps, version des accords, retraiter et exporter.",
-  "web_licenses_back": "Retour"
+  "web_licenses_back": "Retour",
+  "web_open_player": "Ouvrir le lecteur",
+  "web_collapse_player": "Réduire le lecteur"
  },
  "de": {
   "web_search": "Suchen",
@@ -417,7 +429,9 @@
   "web_coach_bar_metronome": "Dynamisches Metronom",
   "web_coach_bar_tempo": "Tempo in BPM",
   "web_coach_menu_body": "Animierter Hintergrund, Klang auf der Eins, Akkordversion, neu verarbeiten und exportieren.",
-  "web_licenses_back": "Zurück"
+  "web_licenses_back": "Zurück",
+  "web_open_player": "Player öffnen",
+  "web_collapse_player": "Player minimieren"
  },
  "it": {
   "web_search": "Cerca",
@@ -477,7 +491,9 @@
   "web_coach_bar_metronome": "Metronomo dinamico",
   "web_coach_bar_tempo": "Tempo in BPM",
   "web_coach_menu_body": "Sfondo animato, suono sul primo tempo, versione degli accordi, rielabora ed esporta.",
-  "web_licenses_back": "Indietro"
+  "web_licenses_back": "Indietro",
+  "web_open_player": "Apri il lettore",
+  "web_collapse_player": "Riduci il lettore"
  },
  "ru": {
   "web_search": "Поиск",
@@ -537,7 +553,9 @@
   "web_coach_bar_metronome": "Динамический метроном",
   "web_coach_bar_tempo": "Темп в BPM",
   "web_coach_menu_body": "Анимированный фон, звук на сильную долю, версия аккордов, повторная обработка и экспорт.",
-  "web_licenses_back": "Назад"
+  "web_licenses_back": "Назад",
+  "web_open_player": "Открыть плеер",
+  "web_collapse_player": "Свернуть плеер"
  },
  "zh-Hans": {
   "web_search": "搜索",
@@ -597,6 +615,8 @@
   "web_coach_bar_metronome": "动态节拍器",
   "web_coach_bar_tempo": "以 BPM 计的速度",
   "web_coach_menu_body": "动态背景、强拍提示音、和弦版本、重新处理和导出。",
-  "web_licenses_back": "返回"
+  "web_licenses_back": "返回",
+  "web_open_player": "打开播放器",
+  "web_collapse_player": "收起播放器"
  }
 }

@@ -26,6 +26,7 @@ import icNext from '../assets/icons/ic_skip_next.svg';
 import icRestore from '../assets/icons/ic_restore_stem.svg';
 import icDrumset from '../assets/icons/ic_drumset.png';
 import icMenu from '../assets/icons/ic_menu.svg';
+import icCollapse from '../assets/icons/ic_back_downside.svg';
 import type { Scene3D } from './scene3d.ts';
 import type { Flat3D } from './flat3d.ts';
 
@@ -33,6 +34,8 @@ export type View = 'lyrics' | 'chords' | 'mix' | '3d';
 
 export interface PlayerHooks {
   onPrev(): void; onNext(): void; onEnded(r: 'next'): void; onPlayState(playing: boolean): void;
+  /** Movil: bajar el reproductor a la biblioteca (b_back). */
+  onCollapse?(): void;
   /** Beat nuevo: posicion en el compas, compas y tempo oido (BPM x multiplicador). */
   onBeat(pos: number, beatsPerBar: number, heardBpm: number | null): void;
   nebula: { get(): boolean; set(on: boolean): void };
@@ -119,7 +122,8 @@ export class PlayerView {
     this.lyrics.setChordsOn(p.chordsOnLyrics);
     this.lyrics.onChordsToggle = (on) => p.setChordsOnLyrics(on);
     this.lyrics.actions = hooks.lyrics ?? null;
-    const top = h('div', { class: 'top' },
+    const collapse = h('button', { class: 'mback', attrs: { 'aria-label': t('web_collapse_player') }, onclick: () => hooks.onCollapse?.() }, img(icCollapse, '', ''));
+    const top = h('div', { class: 'top' }, collapse,
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
       h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })),
       h('span', { class: 'sp' }));

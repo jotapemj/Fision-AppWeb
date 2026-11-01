@@ -21,6 +21,7 @@ import { loginView } from './ui/login.ts';
 import { idleBar, PlayerView } from './ui/playerView.ts';
 import { Curtain } from './ui/curtain.ts';
 import { Sidebar, type RowMenuItem } from './ui/sidebar.ts';
+import { MiniPlayer, type MiniSong } from './ui/miniPlayer.ts';
 import { Nebula } from './ui/nebula.ts';
 import { IdleMain } from './ui/idleMain.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
@@ -36,6 +37,7 @@ const JOB_POLL_MS = 4000;
 const CHORD_FILES = ['chords.txt', 'chords_basic.txt']; // CloudRepository.CHORD_FILES
 const LYRICS_POLL_MS = 2500; // LyricsManager
 const LYRICS_JOBS = 'fision.lyricsJobs'; // job_id -> hash de las transcripciones pedidas aqui
+const MOBILE_MQ = '(max-width: 699px)'; // movil = calco de Android (decision JP)
 
 // GET /jobs no dice el tipo: los jobs de letra se reconocen por su id (sobreviven a recargar)
 function loadLyricsJobs(): Map<string, string> { try { return new Map(Object.entries(JSON.parse(localStorage.getItem(LYRICS_JOBS) ?? '{}'))); } catch { return new Map(); } }
@@ -77,6 +79,10 @@ export class App {
   private idle: IdleMain | null = null; // centro sin cancion
   private lyricsJobs = loadLyricsJobs();
   private lyricsTimer = 0;
+  // Movil: biblioteca o reproductor a pantalla completa, con el mini-player en la biblioteca
+  private mq = matchMedia(MOBILE_MQ);
+  private mini: MiniPlayer | null = null;
+  private onPlayer = false;
 
   constructor(root: HTMLElement, settings: SettingsStore) {
     this.root = root;
@@ -84,6 +90,9 @@ export class App {
     settings.subscribe((_, k) => this.onSetting(k));
     this.api.onUnauthorized = () => this.showLogin(t('login_session_expired'));
     addEventListener('pagehide', () => this.flushSave?.());
+    this.mq.addEventListener('change', () => { if (!this.mq.matches && this.onPlayer) this.onPlayer = false; this.applyScreen(); });
+    // Atras del sistema en el reproductor movil = volver a la biblioteca (Android: onBackPressed)
+    addEventListener('popstate', () => { if (this.onPlayer) { this.onPlayer = false; this.applyScreen(); } });
   }
 
   async start() {
@@ -103,6 +112,7 @@ export class App {
     this.nebula?.destroy();
     clearTimeout(this.pollTimer);
     this.shell = this.sidebar = null;
+    this.mini?.destroy(); this.mini = null;
     this.root.replaceChildren(loginView(this.api, (s) => this.enter(s), notice));
   }
 
@@ -124,12 +134,25 @@ export class App {
         onTourReset: () => this.maybeLibraryTour() }),
       cover: (hash) => this.cover(hash),
       rowMenu: (r) => this.rowMenu(r),
+      sortAsc: () => this.settings.get('sortAsc'),
+      onSort: (asc) => this.settings.set('sortAsc', asc),
+    });
+    this.mini?.destroy();
+    this.mini = new MiniPlayer({
+      onOpen: () => this.showPlayer(true),
+      onToggle: () => void this.current?.view.toggle(),
+      onStep: (dir) => this.step(dir, true),
+      adjacent: (dir) => this.adjacentSong(dir),
+      state: () => this.current?.player ?? null,
     });
     this.nebula?.destroy();
     this.nebula = new Nebula();
     this.nebula.setColors(accentPalette(ACCENTS[this.settings.get('accentId')]));
     this.nebula.setEnabled(this.settings.get('nebula'));
-    this.shell = h('div', { class: 'app' }, this.nebula.el, this.sidebar.el, this.hintMain(t('web_pick_song')), idleBar());
+    this.shell = h('div', { class: 'app' });
+    this.layout(this.hintMain(t('web_pick_song')), idleBar());
+    this.onPlayer = false;
+    this.applyScreen();
     this.root.replaceChildren(this.shell);
     // Playlists al entrar (y tras cada cambio), no en cada sondeo de jobs
     void this.refreshLibrary().then(() => this.syncPlaylists()).finally(() => this.maybeLibraryTour());
@@ -140,6 +163,35 @@ export class App {
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resync(); });
       addEventListener('online', resync); // onConnectivityChanged(true)
     }
+  }
+
+  /** Hijos del esqueleto: nebulosa, lateral, centro (+ barra) y el mini-player del movil. */
+  private layout(...center: HTMLElement[]) {
+    this.shell?.replaceChildren(this.nebula!.el, this.sidebar!.el, ...center, this.mini!.el);
+  }
+
+  get mobile() { return this.mq.matches; }
+
+  /** Movil: reproductor a pantalla completa (true) o biblioteca con mini-player. En escritorio no cambia nada. */
+  private showPlayer(on: boolean) {
+    if (on === this.onPlayer || !this.mobile || (on && !this.current && !this.opening)) return;
+    if (on) { this.onPlayer = true; history.pushState({ fisionPlayer: true }, ''); this.applyScreen(); }
+    else history.back(); // popstate lo cierra
+  }
+
+  private applyScreen() {
+    this.shell?.classList.toggle('mob', this.mobile);
+    this.shell?.classList.toggle('onplayer', this.mobile && this.onPlayer);
+    this.sidebar?.setMobile(this.mobile);
+  }
+
+  private miniSong(e: LibraryEntry, cover: string | null): MiniSong { return { title: e.title || e.filename, artist: e.artist ?? '', cover }; }
+
+  private adjacentSong(dir: 1 | -1): MiniSong | null {
+    if (!this.current) return null;
+    const next = adjacent(this.current.entry.hash, dir, this.rows, this.queue);
+    const e = next ? this.entries.find((x) => x.hash === next) : null;
+    return e ? this.miniSong(e, null) : null;
   }
 
   /** Tour de la biblioteca: al entrar con la lista ya pintada, y tras "Ver tour". Nunca sobre un dialogo. */
@@ -378,7 +430,7 @@ export class App {
       // La que suena: se para y el centro vuelve a la pantalla sin cancion
       if (this.current?.entry.hash === e.hash) {
         this.stopSong();
-        this.shell?.replaceChildren(this.nebula!.el, this.sidebar!.el, this.hintMain(t('web_pick_song')), idleBar());
+        this.layout(this.hintMain(t('web_pick_song')), idleBar());
         this.nebula?.setOrbitBlobsVisible(true);
         void this.applySongColors();
       }
@@ -450,13 +502,16 @@ export class App {
     return p;
   }
 
-  private async open(e: LibraryEntry) {
+  /** `stay`: movil, cambio desde el mini-player: suena sin abrir el reproductor ni telon. */
+  private async open(e: LibraryEntry, stay = false) {
     if (this.opening || !this.shell) return;
     this.opening = true;
+    const quiet = stay && this.mobile && !this.onPlayer;
+    if (!quiet) this.showPlayer(true);
     // Telon con la marca (LoadingCurtain): opaco al abrir; con fundido de 220 ms al cambiar de cancion
     const curtain = new Curtain(this.current ? 220 : 0);
     curtain.el.setAttribute('aria-label', t('web_loading_song'));
-    this.shell.append(curtain.el);
+    if (!quiet) this.shell.append(curtain.el);
     await curtain.covered;
     try {
       // AudioContext tras el gesto del usuario (este clic)
@@ -497,6 +552,7 @@ export class App {
           reprocess: () => setLyr({ kind: 'picker', reprocess: true }),
         },
         onPrev: () => this.step(-1), onNext: () => this.step(1),
+        onCollapse: () => this.showPlayer(false),
         onEnded: () => this.step(1), onPlayState: () => this.render(),
         onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
         nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
@@ -513,7 +569,10 @@ export class App {
         onPitch: () => { if (this.settings.get('chordTranspose')) view.reformatChords(); },
       });
       this.current = { entry: e, player, view };
-      this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, view.main, view.bar, curtain.el);
+      this.layout(view.main, view.bar, ...(quiet ? [] : [curtain.el]));
+      const cover = await this.cover(e.hash);
+      this.mini!.set(this.miniSong(e, cover));
+      if (!this.onPlayer && !quiet) this.showPlayer(true);
       this.idle?.destroy(); this.idle = null;
       await this.applySongColors(); // como Android: revelar con la paleta ya puesta
       this.render();
@@ -550,7 +609,7 @@ export class App {
       curtain.finish(() => {}, () => {}, false);
       const msg = err instanceof Error && err.message === 'engine_needs_isolation' ? t('web_engine_isolation') : t('err_song_missing_files');
       console.error('open', err);
-      if (!this.current) this.shell.replaceChildren(this.nebula!.el, this.sidebar!.el, this.hintMain(msg), idleBar());
+      if (!this.current) { this.layout(this.hintMain(msg), idleBar()); if (this.onPlayer) this.showPlayer(false); if (this.mobile) toast(msg); }
     } finally { this.opening = false; }
   }
 
@@ -703,11 +762,11 @@ export class App {
   }
 
   /** Anterior / siguiente entre las descargadas, en el orden de la lista. */
-  private step(dir: 1 | -1) {
+  private step(dir: 1 | -1, stay = false) {
     if (!this.current) return;
     const next = adjacent(this.current.entry.hash, dir, this.rows, this.queue);
     const e = next ? this.entries.find((x) => x.hash === next) : null;
-    if (e) this.open(e);
+    if (e) this.open(e, stay);
   }
 
   private stopSong() {
@@ -716,5 +775,7 @@ export class App {
     this.current.player.pause();
     this.current.view.destroy();
     this.current = null;
+    this.mini?.set(null);
+    if (this.onPlayer) this.showPlayer(false);
   }
 }

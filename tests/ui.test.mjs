@@ -1213,6 +1213,69 @@ test('10 idiomas a 1280x800: sin solapes, recortes ni scroll con los textos de c
   return seen.join(', ');
 });
 
+test('movil 412x915: biblioteca de Android, pestanas, reproductor a pantalla completa, atras y mini-player', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const box = (sel) => p.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e || !e.checkVisibility()) return null; const r = e.getBoundingClientRect(); return { t: r.top, b: r.bottom, l: r.left, r: r.right, h: r.height }; })()`);
+  try {
+    await p.size(412, 915);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    // Biblioteca: bloques en orden, sin solapes ni scroll horizontal; el reproductor no se ve
+    const order = ['.mhd', '.mtitle', '.pane > .frow', '.chiprow', '.pane > .list', '.mnav'];
+    const boxes = await Promise.all(order.map(box));
+    order.forEach((s, i) => expect(boxes[i], `no se ve ${s}`));
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i].t >= boxes[i - 1].b - 0.5, `${order[i]} pisa a ${order[i - 1]}: ${boxes[i].t} < ${boxes[i - 1].b}`);
+    expect(boxes.at(-1).b <= 915.5, `pestanas fuera: ${boxes.at(-1).b}`);
+    const st = await p.eval(`({ hs: document.documentElement.scrollWidth > innerWidth, main: !!document.querySelector('.main')?.checkVisibility(), side: ['.pane .hd', '.pane .me'].some(s => document.querySelector(s)?.checkVisibility()),
+      ph: document.querySelector('.find input').placeholder, more: getComputedStyle(document.querySelector('.drw .more')).opacity, row: document.querySelector('.dr').getBoundingClientRect().height,
+      cv: document.querySelector('.dr .cv').getBoundingClientRect().width })`);
+    expect(!st.hs && !st.main && !st.side, `biblioteca movil: ${JSON.stringify(st)}`);
+    expect(st.ph === 'Buscar en la biblioteca' && st.more === '1' && st.row === 75 && st.cv === 54, `filas / buscador: ${JSON.stringify(st)}`);
+    // Pestana Playlists y vuelta
+    await p.eval(`document.querySelectorAll('.mnav button')[1].click()`);
+    const pl = await p.eval(`({ title: document.querySelector('.mtitle').textContent, pls: document.querySelector('.plsec').checkVisibility(), list: document.querySelector('.pane > .list').checkVisibility(), ph: document.querySelector('.mpl input').placeholder })`);
+    expect(pl.title === 'Playlists' && pl.pls && !pl.list && pl.ph === 'Buscar en tus playlists', `pestana playlists: ${JSON.stringify(pl)}`);
+    await p.eval(`document.querySelectorAll('.mnav button')[0].click()`);
+    // Abrir: reproductor a pantalla completa, sin lateral ni mini
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+    const pv = await p.eval(`({ pane: document.querySelector('.pane').checkVisibility(), mini: document.querySelector('.mini').checkVisibility(), back: !!document.querySelector('.mback')?.checkVisibility(),
+      hs: document.documentElement.scrollWidth > innerWidth, bar: document.querySelector('.pbar').getBoundingClientRect().bottom })`);
+    expect(!pv.pane && !pv.mini && pv.back && !pv.hs && pv.bar <= 915.5, `reproductor movil: ${JSON.stringify(pv)}`);
+    // ⌄ = a la biblioteca; el mini-player lleva la cancion y no tapa las pestanas
+    await p.eval(`document.querySelector('.mback').click()`);
+    await p.waitFor(`!document.querySelector('.app.onplayer') && document.querySelector('.mini').checkVisibility()`);
+    const [mini, nav] = [await box('.mini'), await box('.mnav')];
+    expect(mini.b <= nav.t && mini.h === 64, `mini ${JSON.stringify(mini)} / pestanas ${JSON.stringify(nav)}`);
+    expect(await p.eval(`document.querySelector('.mini .mtx:nth-child(2) b').textContent === 'Cancion buena'`), 'mini sin titulo');
+    // Play/pausa desde el mini
+    const playing0 = await p.eval(`document.querySelector('.main').player.playing`);
+    await p.eval(`document.querySelector('.mplay').click()`);
+    await p.waitFor(`document.querySelector('.main').player.playing === ${!playing0}`);
+    // Tocar el mini = reproductor; atras del sistema = biblioteca
+    const sw = await box('.mswipe');
+    const tap = async (type, x) => p.send('Input.dispatchMouseEvent', { type, x, y: sw.t + sw.h / 2, button: 'left', clickCount: 1 });
+    await tap('mousePressed', sw.l + 60); await tap('mouseReleased', sw.l + 60);
+    await p.waitFor(`document.querySelector('.app.onplayer')`);
+    await p.eval(`history.back()`);
+    await p.waitFor(`!document.querySelector('.app.onplayer')`);
+    // Arrastre sin cancion al lado: vuelve a su sitio y sigue la misma
+    await tap('mousePressed', sw.l + 200);
+    for (let x = 200; x >= 40; x -= 20) await p.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: sw.l + x, y: sw.t + sw.h / 2, button: 'left', buttons: 1 });
+    await tap('mouseReleased', sw.l + 40);
+    await new Promise((r) => setTimeout(r, 400));
+    const after = await p.eval(`({ open: !!document.querySelector('.app.onplayer'), x: getComputedStyle(document.querySelector('.mini .mtx:nth-child(2)')).transform, t: document.querySelector('.mini .mtx:nth-child(2) b').textContent })`);
+    expect(!after.open && after.t === 'Cancion buena' && /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/.test(after.x), `arrastre sin vecina: ${JSON.stringify(after)}`);
+    // Volver a escritorio: todo como estaba
+    await p.size(1440, 900);
+    await p.waitFor(`!document.querySelector('.app.mob')`);
+    const desk = await p.eval(`({ mob: !!document.querySelector('.app.mob'), main: document.querySelector('.main').checkVisibility(), pane: document.querySelector('.pane .hd').checkVisibility(), mini: document.querySelector('.mini').checkVisibility() })`);
+    expect(!desk.mob && desk.main && desk.pane && !desk.mini, `escritorio tras movil: ${JSON.stringify(desk)}`);
+    return `bloques ${order.length} en orden, mini ${mini.t}-${mini.b} sobre pestanas ${nav.t}`;
+  } finally { await p.size(1440, 900); }
+});
+
 test('sin excepciones en la pagina', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const errs = [...c.page.errors];

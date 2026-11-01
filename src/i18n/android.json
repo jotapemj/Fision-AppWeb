@@ -337,7 +337,14 @@
   "licenses_intro": "Open-source components used by Fision.",
   "license_meta_fmt": "{1} · {2}",
   "license_detail_visit": "Visit project",
-  "about_view_licenses": "View licenses"
+  "about_view_licenses": "View licenses",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Find in library",
+  "te_find_playlist": "Find in your playlists",
+  "playlist_count": {
+   "one": "{n} playlist",
+   "other": "{n} playlists"
+  }
  },
  "es": {
   "tab_songs": "Canciones",
@@ -678,7 +685,15 @@
   "licenses_intro": "Componentes open source utilizados por Fision.",
   "license_meta_fmt": "{1} · {2}",
   "license_detail_visit": "Visitar proyecto",
-  "about_view_licenses": "Ver licencias"
+  "about_view_licenses": "Ver licencias",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Buscar en la biblioteca",
+  "te_find_playlist": "Buscar en tus playlists",
+  "playlist_count": {
+   "one": "{n} playlist",
+   "many": "{n} playlists",
+   "other": "{n} playlists"
+  }
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -1018,7 +1033,15 @@
   "licenses_intro": "Components open source utilitzats per Fision.",
   "license_meta_fmt": "{1} · {2}",
   "license_detail_visit": "Visitar projecte",
-  "about_view_licenses": "Veure llicències"
+  "about_view_licenses": "Veure llicències",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Troba a la biblioteca",
+  "te_find_playlist": "Troba a les teves playlists",
+  "playlist_count": {
+   "one": "{n} playlist",
+   "many": "{n} playlists",
+   "other": "{n} playlists"
+  }
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -1361,7 +1384,16 @@
   "licenses_intro": "Відкриті компоненти, які використовує Fision.",
   "license_meta_fmt": "{1} · {2}",
   "license_detail_visit": "Відкрити проєкт",
-  "about_view_licenses": "Переглянути ліцензії"
+  "about_view_licenses": "Переглянути ліцензії",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Знайти в бібліотеці",
+  "te_find_playlist": "Знайти у ваших плейлистах",
+  "playlist_count": {
+   "one": "{n} плейлист",
+   "few": "{n} плейлисти",
+   "many": "{n} плейлистів",
+   "other": "{n} плейлиста"
+  }
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -1693,7 +1725,15 @@
   "licenses_title": "Licenças",
   "licenses_intro": "Componentes de código aberto usados pelo Fision.",
   "license_detail_visit": "Visitar o projeto",
-  "about_view_licenses": "Ver licenças"
+  "about_view_licenses": "Ver licenças",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Buscar na biblioteca",
+  "te_find_playlist": "Buscar nas suas playlists",
+  "playlist_count": {
+   "one": "{n} playlist",
+   "many": "{n} playlists",
+   "other": "{n} playlists"
+  }
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -2025,7 +2065,15 @@
   "licenses_title": "Licences",
   "licenses_intro": "Composants open source utilisés par Fision.",
   "license_detail_visit": "Visiter le projet",
-  "about_view_licenses": "Voir les licences"
+  "about_view_licenses": "Voir les licences",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Rechercher dans la bibliothèque",
+  "te_find_playlist": "Rechercher dans tes playlists",
+  "playlist_count": {
+   "one": "{n} playlist",
+   "many": "{n} playlists",
+   "other": "{n} playlists"
+  }
  },
  "de": {
   "tab_songs": "Songs",
@@ -2353,7 +2401,14 @@
   "licenses_title": "Lizenzen",
   "licenses_intro": "Von Fision verwendete Open-Source-Komponenten.",
   "license_detail_visit": "Projekt besuchen",
-  "about_view_licenses": "Lizenzen anzeigen"
+  "about_view_licenses": "Lizenzen anzeigen",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "In der Bibliothek suchen",
+  "te_find_playlist": "In deinen Playlists suchen",
+  "playlist_count": {
+   "one": "{n} Playlist",
+   "other": "{n} Playlists"
+  }
  },
  "it": {
   "tab_songs": "Brani",
@@ -2685,7 +2740,15 @@
   "licenses_title": "Licenze",
   "licenses_intro": "Componenti open source usati da Fision.",
   "license_detail_visit": "Visita il progetto",
-  "about_view_licenses": "Vedi licenze"
+  "about_view_licenses": "Vedi licenze",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Cerca nella libreria",
+  "te_find_playlist": "Cerca nelle tue playlist",
+  "playlist_count": {
+   "one": "{n} playlist",
+   "many": "{n} playlist",
+   "other": "{n} playlist"
+  }
  },
  "ru": {
   "tab_songs": "Песни",
@@ -3019,7 +3082,16 @@
   "licenses_title": "Лицензии",
   "licenses_intro": "Компоненты с открытым исходным кодом, которые использует Fision.",
   "license_detail_visit": "Открыть проект",
-  "about_view_licenses": "Лицензии"
+  "about_view_licenses": "Лицензии",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "Поиск в библиотеке",
+  "te_find_playlist": "Поиск в ваших плейлистах",
+  "playlist_count": {
+   "one": "{n} плейлист",
+   "few": "{n} плейлиста",
+   "many": "{n} плейлистов",
+   "other": "{n} плейлиста"
+  }
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -3347,6 +3419,12 @@
   "licenses_title": "许可证",
   "licenses_intro": "Fision 使用的开源组件。",
   "license_detail_visit": "访问项目",
-  "about_view_licenses": "查看许可证"
+  "about_view_licenses": "查看许可证",
+  "library_filter_chip": "{1}  {2}",
+  "te_find": "在曲库中搜索",
+  "te_find_playlist": "在你的歌单中搜索",
+  "playlist_count": {
+   "other": "{n} 个歌单"
+  }
  }
 }
