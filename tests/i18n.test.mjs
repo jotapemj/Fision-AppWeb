@@ -14,10 +14,14 @@ test('cada clave de keys.json esta en ingles', () => {
   expect(!miss.length, `faltan en en: ${miss} (reimporta con tools/import-strings.mjs)`);
 });
 
-test('las claves web existen en ingles y espanol', () => {
-  const en = Object.keys(web.en), es = Object.keys(web.es);
-  const miss = [...en.filter((k) => !es.includes(k)).map((k) => `es:${k}`), ...es.filter((k) => !en.includes(k)).map((k) => `en:${k}`)];
-  expect(!miss.length, `faltan: ${miss}`);
+test('las claves web existen en los 10 idiomas', () => {
+  const en = Object.keys(web.en), miss = [];
+  for (const lang of Object.keys(android)) {
+    const tab = web[lang] ?? {};
+    for (const k of en) if (!(k in tab)) miss.push(`${lang}:${k}`);
+    for (const k of Object.keys(tab)) if (!(k in web.en)) miss.push(`en:${k}`);
+  }
+  expect(!miss.length, `faltan ${miss.length}: ${miss.slice(0, 12).join(', ')}`);
 });
 
 test('cada t(\'clave\') del codigo existe (si no, se ve la clave en pantalla)', () => {
@@ -37,7 +41,7 @@ test('mismos placeholders en todos los idiomas', () => {
   for (const [lang, tab] of Object.entries({ ...android, ...{} })) {
     for (const [k, v] of Object.entries(tab)) if (holes(v) !== holes(android.en[k])) bad.push(`${lang}:${k} ${holes(v)}≠${holes(android.en[k])}`);
   }
-  for (const [k, v] of Object.entries(web.es)) if (holes(v) !== holes(web.en[k] ?? '')) bad.push(`es:${k}`);
+  for (const [lang, tab] of Object.entries(web)) for (const [k, v] of Object.entries(tab)) if (holes(v) !== holes(web.en[k] ?? '')) bad.push(`${lang}:${k}`);
   expect(!bad.length, bad.join('; '));
   return `${Object.keys(android).length} idiomas`;
 });
@@ -50,7 +54,8 @@ test('t(): placeholders, plurales y caida a ingles', async () => {
   expect(t('search_result_count', { n: 3 }) === '3 resultados', t('search_result_count', { n: 3 }));
   setLang('ru');
   expect(t('search_result_count', { n: 3 }).startsWith('3 результата'), t('search_result_count', { n: 3 }));
-  expect(t('web_search') === 'Search', `caida a en: ${t('web_search')}`);
+  setLang('de');
+  expect(t('pan_l') === 'L', `caida a en: ${t('pan_l')}`); // pan_l no existe en de
   expect(t('no_existe') === 'no_existe', 'clave desconocida');
   expect(pickLang(['pt-BR']) === 'pt-BR' && pickLang(['zh-CN']) === 'zh-Hans' && pickLang(['es-MX']) === 'es' && pickLang(['ja']) === 'en', 'pickLang');
 });

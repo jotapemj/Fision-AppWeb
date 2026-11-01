@@ -1094,6 +1094,33 @@ test('licencias: lista desde Ajustes, detalle con texto y enlace, volver', async
   return `${rows.length} entradas; detalle con texto y enlace`;
 });
 
+test('10 idiomas a 1280x800: sin solapes, recortes ni scroll con los textos de cada uno', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.size(1280, 800);
+  const setLangPref = (l) => p.eval(`(() => { const s = JSON.parse(localStorage.getItem('fision.settings') || '{}'); s.lang = ${JSON.stringify(l)}; localStorage.setItem('fision.settings', JSON.stringify(s)); })()`);
+  const bad = [], seen = [];
+  try {
+    for (const lang of ['en', 'es', 'ca', 'uk', 'pt-BR', 'fr', 'de', 'it', 'ru', 'zh-Hans']) {
+      await setLangPref(lang);
+      await p.goto(c.url);
+      await p.waitFor(`document.querySelectorAll('.dr').length === 3`, 20000);
+      await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+      await p.waitFor(`document.querySelectorAll('.stem').length === 3 && document.querySelectorAll('.act').length === 4`, 20000);
+      await new Promise((r) => setTimeout(r, 400));
+      const m = await p.eval(MEASURE);
+      const htmlLang = await p.eval(`document.documentElement.lang`);
+      const issues = [...m.overlap, ...m.clipped.map((x) => `recortado ${x}`), ...(m.hscroll || m.vscroll ? ['scroll'] : [])];
+      if (htmlLang !== lang) issues.push(`lang=${htmlLang}`);
+      if (m.measured < 30) issues.push(`solo ${m.measured} textos`);
+      if (issues.length) bad.push(`${lang}: ${issues.join('; ')}`);
+      seen.push(`${lang} ${m.measured}`);
+    }
+  } finally { await setLangPref(''); }
+  expect(!bad.length, bad.join(' | '));
+  return seen.join(', ');
+});
+
 test('sin excepciones en la pagina', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const errs = [...c.page.errors];
