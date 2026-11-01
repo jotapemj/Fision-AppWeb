@@ -13,3 +13,6 @@ settings.subscribe((_, k) => {
   if (k === 'lang') location.reload();
 });
 new App(document.getElementById('app')!, settings).start();
+
+// PWA: service worker solo en el build (en desarrollo chocaria con la recarga de Vite). Sin HTTPS no registra.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
