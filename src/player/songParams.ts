@@ -12,6 +12,8 @@ export interface SongParams {
   metroSpeed: MetroSpeed;  // Selected metronome (default 1 = 1x)
   metroVolume: number;     // default 100
   metroHalfB: boolean;     // Metronome half variant (0 = A)
+  metroPan?: number;       // Metronome pan -100..100
+  chordsActive?: boolean;  // Chords view active (default true)
   chordsBasic?: boolean;   // Chords basic mode
   chordsOnLyrics?: boolean; // Chords on lyrics
   audio3d?: boolean;       // 3D enabled
@@ -27,7 +29,7 @@ export function capture(p: Player): SongParams {
     if (Object.keys(e).length) stems[s.stem] = e;
   }
   return { stems, pitch: p.pitch, tempoMilli: Math.round(p.tempoMult * 1000), metroOn: p.metroOn,
-    metroSpeed: p.metroSpeed, metroVolume: p.metroVolume, metroHalfB: p.metroHalfB, chordsBasic: p.chordsBasic, chordsOnLyrics: p.chordsOnLyrics, audio3d: p.audio3d };
+    metroSpeed: p.metroSpeed, metroVolume: p.metroVolume, metroHalfB: p.metroHalfB, metroPan: p.metroPan, chordsActive: p.chordsActive, chordsBasic: p.chordsBasic, chordsOnLyrics: p.chordsOnLyrics, audio3d: p.audio3d };
 }
 
 const n = (v: unknown, def: number) => (typeof v === 'number' && Number.isFinite(v) ? v : def);
@@ -47,7 +49,9 @@ export function restore(p: Player, saved: unknown) {
   const tm = n(sp.tempoMilli, 1000);
   if (tm !== 1000) p.setTempoMult(tm / 1000);
   const speed = [0, 1, 2].includes(sp.metroSpeed as number) ? (sp.metroSpeed as MetroSpeed) : 1;
+  p.metroPan = Math.max(-100, Math.min(100, n(sp.metroPan, 0)));
   p.setMetronome(sp.metroOn === true, speed, n(sp.metroVolume, 100));
+  if (sp.chordsActive === false) p.chordsActive = false;
   if (sp.metroHalfB === true) p.setHalfVariantB(true);
   if (sp.chordsBasic === true) p.chordsBasic = true;
   if (sp.chordsOnLyrics === true) p.chordsOnLyrics = true;

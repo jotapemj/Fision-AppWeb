@@ -1,6 +1,18 @@
 // Reglas del reproductor (app_spec §3) contra un motor falso que apunta las llamadas.
 import { test, expect, near } from './lib/harness.mjs';
-import { Player, Repeat, parseBpm, parseBeats, localBeatIntervalMs, filterCutoffHz } from '../src/player/player.ts';
+import { Player, Repeat, parseBpm, parseBeats, localBeatIntervalMs, filterCutoffHz, windowBpm, localBpmAt } from '../src/player/player.ts';
+
+test('BPM local: rotulo con media de 6 intervalos y tempo de esta parte (PlayerActivity)', () => {
+  // 120 BPM los 8 primeros beats, luego 150 (0.4 s)
+  const beats = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 3.9, 4.3, 4.7, 5.1, 5.5, 5.9];
+  expect(windowBpm(beats, 0) === null && windowBpm([1], 3) === null, 'sin intervalo: no cambia');
+  expect(windowBpm(beats, 1) === 120 && windowBpm(beats, 6) === 120, `inicio: ${windowBpm(beats, 6)}`);
+  expect(windowBpm(beats, 10) === 133, `mezcla de tempos (6 intervalos de 2 a 4.7 s): ${windowBpm(beats, 10)}`);
+  expect(windowBpm(beats, 13) === 150 && windowBpm(beats, 99) === 150, `final: ${windowBpm(beats, 13)}`);
+  expect(localBpmAt(beats, 1.2, 167) === 120 && localBpmAt(beats, 4.0, 167) === 150, 'por intervalo al beat siguiente');
+  expect(localBpmAt(beats, -1, 167) === 167 && localBpmAt(beats, 9, 167) === 167, 'fuera de los beats: global');
+  expect(localBpmAt([], 1, null) === 0 && localBpmAt([], 1, 99.6) === 100, 'sin beats: global o 0');
+});
 
 function fakeEngine() {
   const e = { pos: 0, vol: {}, pitch: {}, solo: {}, tempo: 1, played: 0, paused: 0,

@@ -108,6 +108,7 @@ class CoachMark {
   }
 
   private onResize = () => {
+    if (this.index < 0) return; // aun no se ha pintado el primer paso
     const r = this.holeFor(this.steps[this.index]);
     if (!r) return;
     cancelAnimationFrame(this.raf);

@@ -248,8 +248,13 @@ test('metronomo: encender y elegir 2x desde su desplegable', async () => {
   await p.eval(`[...document.querySelectorAll('.pop .seg button')].find(b => b.textContent === '2×').click()`);
   const after = await p.eval(`${metro}.querySelector('b').textContent`);
   const abHidden = await p.eval(`document.querySelectorAll('.pop .seg')[1].hidden`);
+  // Balance: a la izquierda y doble clic = centro
+  const pan = await p.eval(`(async () => { const s = document.querySelector('.pop .mpan'), pl = document.querySelector('.main').player;
+    s.value = '-30'; s.dispatchEvent(new Event('input', { bubbles: true })); const a = [pl.metroPan, s.closest('.pop').textContent.includes('L 30')];
+    s.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); return [...a, pl.metroPan]; })()`);
   await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
   expect(after === '2×' && before !== after && abHidden, `antes ${before}, despues ${after}, A/B oculto ${abHidden}`);
+  expect(pan[0] === -30 && pan[1] && pan[2] === 0, `balance del metronomo: ${pan}`);
   return `${before} -> ${after}`;
 });
 
@@ -1219,6 +1224,7 @@ test('movil 412x915: biblioteca de Android, pestanas, reproductor a pantalla com
   const box = (sel) => p.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e || !e.checkVisibility()) return null; const r = e.getBoundingClientRect(); return { t: r.top, b: r.bottom, l: r.left, r: r.right, h: r.height }; })()`);
   try {
     await p.size(412, 915);
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`); // sin tours encima
     await p.goto(c.url);
     await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
     // Biblioteca: bloques en orden, sin solapes ni scroll horizontal; el reproductor no se ve
@@ -1274,6 +1280,116 @@ test('movil 412x915: biblioteca de Android, pestanas, reproductor a pantalla com
     expect(!desk.mob && desk.main && desk.pane && !desk.mini, `escritorio tras movil: ${JSON.stringify(desk)}`);
     return `bloques ${order.length} en orden, mini ${mini.t}-${mini.b} sobre pestanas ${nav.t}`;
   } finally { await p.size(1440, 900); }
+});
+
+test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono / metronomo / stem, solo, pildora de acordes)', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const P = `document.querySelector('.main').player`;
+  const vis = (sel) => `!!document.querySelector(${JSON.stringify(sel)})?.checkVisibility()`;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await p.size(412, 915);
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`); // sin tours encima
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+    await p.waitFor(vis('.mstrip .strip'));
+    // Disposicion: titulo, tira, mezcla y abajo BPM, posicion, transporte y 6 botones; sin pestanas de escritorio
+    const lay = await p.eval(`(() => { const b = (s) => document.querySelector(s).getBoundingClientRect();
+      return { title: document.querySelector('.mtt').textContent, tabs: ${vis('.vbar')}, acts: ${vis('.pbar .acts')}, opts: document.querySelectorAll('.mopts .mo').length,
+        bpm: document.querySelector('.mbpm').textContent, more: document.querySelectorAll('.stem .mmore').length, name: ${vis('.stem .nm')},
+        order: ['.top', '.mstrip', '.view', '.mbpm', '.pbar .seek', '.pbar .btns', '.mopts'].map(s => [b(s).top, b(s).bottom]),
+        hs: document.documentElement.scrollWidth > innerWidth, rowH: b('.stem').height }; })()`);
+    expect(lay.title === 'Prueba - Cancion buena' && !lay.tabs && !lay.acts && lay.opts === 6 && lay.more === 3 && !lay.name && !lay.hs, `disposicion: ${JSON.stringify(lay)}`);
+    expect(/^BPM: \d+$/.test(lay.bpm) && lay.rowH === 78, `BPM / filas: ${lay.bpm} ${lay.rowH}`);
+    for (let i = 1; i < lay.order.length; i++) expect(lay.order[i][0] >= lay.order[i - 1][1] - 0.5, `bloque ${i} pisa al anterior: ${JSON.stringify(lay.order)}`);
+    expect(lay.order.at(-1)[1] <= 915.5, `botones fuera: ${lay.order.at(-1)[1]}`);
+    // Letra y 3D: se encienden y apagan desde su boton, con el boton en acento
+    await p.eval(`document.querySelector('.mo-lyrics').click()`);
+    expect(await p.eval(`document.querySelector('.view.lyr') && document.querySelector('.mo-lyrics').classList.contains('on')`), 'letra no se abre');
+    await p.eval(`document.querySelector('.mo-lyrics').click()`);
+    expect(await p.eval(`document.querySelectorAll('.view .stem').length === 3`), 'letra no vuelve a la mezcla');
+    // Pildora de acordes: diagramas arriba, carrusel abajo; diagramas abiertos y el boton los cierra
+    await p.eval(`document.querySelector('.mo-chords').click()`);
+    await p.waitFor(`document.querySelector('.cpill')`);
+    const pill = await p.eval(`(() => { const [a, b] = [...document.querySelectorAll('.cpill .mo')].map(x => x.getBoundingClientRect().top); return a < b; })()`);
+    expect(pill, 'diagramas no estan arriba en la pildora');
+    await p.eval(`document.querySelector('.cpill .mo').click()`);
+    await p.waitFor(`document.querySelector('.view.chv .cdg')`);
+    expect(await p.eval(`${vis('.mstrip .strip')} && !${vis('.cdside')}`), 'diagramas: tira arriba y sin vocabulario');
+    await p.eval(`document.querySelector('.mo-chords').click()`);
+    await p.waitFor(`document.querySelectorAll('.view .stem').length === 3`);
+    // Carrusel fuera desde la pildora (por cancion) y de vuelta
+    await p.eval(`document.querySelector('.mo-chords').click()`);
+    await p.eval(`document.querySelectorAll('.cpill .mo')[1].click()`);
+    expect(await p.eval(`!${vis('.mstrip')} && ${P}.chordsActive === false`), 'carrusel no se oculta');
+    await p.eval(`document.querySelector('.mo-chords').click()`);
+    await p.eval(`document.querySelectorAll('.cpill .mo')[1].click()`);
+    expect(await p.eval(`${vis('.mstrip .strip')} && ${P}.chordsActive`), 'carrusel no vuelve');
+    // Hoja de tono: regla con teclado; restaurar anima hasta 0
+    await p.eval(`document.querySelector('.mo-pitch').click()`);
+    await p.waitFor(`document.querySelector('dialog.sheet[open] canvas.ruler')`);
+    await p.eval(`(() => { const r = document.querySelector('dialog.sheet canvas.ruler'); r.focus(); for (let i = 0; i < 2; i++) r.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); })()`);
+    expect(await p.eval(`${P}.pitch === 2 && document.querySelector('dialog.sheet .rval').textContent === '+2' && document.querySelector('.mo-pitch').classList.contains('on')`), 'tono +2 desde la regla');
+    await p.eval(`document.querySelector('dialog.sheet .rrs').click()`);
+    await p.waitFor(`${P}.pitch === 0`, 3000);
+    await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); document.querySelector('dialog.sheet').close()`);
+    await p.waitFor(`!document.querySelector('dialog.sheet')`);
+    // Hoja del metronomo: apagado atenua; encendido, balance, velocidad y "esta parte va a"
+    await p.eval(`document.querySelector('.mo-metro').click()`);
+    await p.waitFor(`document.querySelector('dialog.sheet[open] .switch')`);
+    // Puede venir encendido de la mezcla guardada por otra prueba: se parte de apagado
+    if (await p.eval(`${P}.metroOn`)) await p.eval(`document.querySelector('dialog.sheet .switch').click()`);
+    const off = await p.eval(`document.querySelector('dialog.sheet .seg button').disabled`);
+    await p.eval(`document.querySelector('dialog.sheet .switch').click()`);
+    const metro = await p.eval(`(() => { const d = document.querySelector('dialog.sheet'); const pan = d.querySelectorAll('input[type=range]')[1];
+      pan.value = '-40'; pan.dispatchEvent(new Event('input', { bubbles: true }));
+      const r = d.querySelector('canvas.ruler'); r.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      return { on: ${P}.metroOn, en: !d.querySelector('.seg button').disabled, pan: ${P}.metroPan, bpm: ${P}.targetBpm, val: d.querySelector('.rval').textContent, hud: d.querySelector('.hud').textContent,
+        btn: document.querySelector('.mo-metro').classList.contains('on') }; })()`);
+    expect(off && metro.on && metro.en && metro.pan === -40 && metro.bpm === 119 && metro.val === '119 BPM' && metro.btn, `metronomo: ${JSON.stringify({ off, ...metro })}`);
+    expect(metro.hud === 'Esta parte de la canción va a 120 BPM', `hud: ${metro.hud}`);
+    await p.eval(`document.querySelector('dialog.sheet').close()`);
+    await p.waitFor(`!document.querySelector('dialog.sheet')`);
+    // Pulsacion larga del metronomo = apagar sin abrir la hoja
+    const mb = await p.eval(`(() => { const r = document.querySelector('.mo-metro').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+    await p.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: mb[0], y: mb[1], button: 'left', clickCount: 1 });
+    await wait(1000); // mas que LONG_PRESS_MS (450) con margen para la carga
+    await p.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: mb[0], y: mb[1], button: 'left', clickCount: 1 });
+    await wait(200);
+    const lp = await p.eval(`({ on: ${P}.metroOn, sheet: !!document.querySelector('dialog.sheet') })`);
+    expect(!lp.on && !lp.sheet, `pulsacion larga: ${JSON.stringify(lp)}`);
+    // Icono del stem: menu Solo / Silenciar; solo = acento, el resto atenuado
+    await p.eval(`document.querySelector('.stem .s.btn-ic').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
+    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    const solo = await p.eval(`[...document.querySelectorAll('.stem')].map(r => (r.classList.contains('soloed') ? 'S' : '') + (r.classList.contains('soloout') ? 'o' : '')).join(',')`);
+    expect(solo === 'S,o,o', `solo: ${solo}`);
+    await p.eval(`document.querySelector('.stem .s.btn-ic').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
+    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    // ⋮ = hoja del stem con balance y FX
+    await p.eval(`document.querySelector('.stem .mmore').click()`);
+    await p.waitFor(`document.querySelector('dialog.sheet.in .fxpanel')`);
+    await wait(300); // la hoja termina de subir
+    const sh = await p.eval(`(() => { const d = document.querySelector('dialog.sheet').getBoundingClientRect(); return [d.bottom <= innerHeight + 0.5, d.left >= 0, d.right <= innerWidth + 0.5, document.querySelectorAll('dialog.sheet input[type=range]').length]; })()`);
+    expect(sh[0] && sh[1] && sh[2] && sh[3] === 4, `hoja del stem: ${sh}`);
+    await p.eval(`document.querySelector('dialog.sheet').close()`);
+    // Repetir: acento salvo apagado
+    await p.eval(`document.querySelector('.mo-repeat').click()`);
+    expect(await p.eval(`${P}.repeat === 1 && document.querySelector('.mo-repeat').classList.contains('on')`), 'repetir');
+    await p.eval(`document.querySelector('.mo-repeat').click(); document.querySelector('.mo-repeat').click()`);
+    // Escritorio otra vez: pestanas y barra de ajustes de vuelta
+    await p.size(1440, 900);
+    await p.waitFor(`!document.querySelector('.app.mob')`);
+    expect(await p.eval(`${vis('.vbar')} && ${vis('.pbar .acts')} && !${vis('.mopts')} && !${vis('.mstrip')}`), 'escritorio tras el reproductor movil');
+    return `${lay.opts} botones, ${lay.bpm}, solo ${solo}, hud "${metro.hud}"`;
+  } finally {
+    await p.eval(`document.querySelector('dialog.sheet')?.close()`).catch(() => {});
+    await p.size(1440, 900);
+  }
 });
 
 test('sin excepciones en la pagina', async () => {

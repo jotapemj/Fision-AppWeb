@@ -334,5 +334,18 @@
  "library_filter_chip",
  "te_find",
  "te_find_playlist",
- "playlist_count"
+ "playlist_count",
+ "tv_metronome_speed",
+ "tempo_local_hud_html",
+ "tv_pitch_title",
+ "tv_pitch_semitones",
+ "stem_menu_solo",
+ "stem_menu_mute",
+ "tv_bpm",
+ "cd_chords_toggle",
+ "b_repeat_description",
+ "lyrics_button_description",
+ "cd_audio_3d",
+ "coach_pl_bar_metronome",
+ "coach_pl_icon_body"
 ]

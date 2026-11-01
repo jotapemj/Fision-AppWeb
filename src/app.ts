@@ -183,6 +183,7 @@ export class App {
     this.shell?.classList.toggle('mob', this.mobile);
     this.shell?.classList.toggle('onplayer', this.mobile && this.onPlayer);
     this.sidebar?.setMobile(this.mobile);
+    this.current?.view.setMobile(this.mobile);
   }
 
   private miniSong(e: LibraryEntry, cover: string | null): MiniSong { return { title: e.title || e.filename, artist: e.artist ?? '', cover }; }
@@ -569,6 +570,7 @@ export class App {
         onPitch: () => { if (this.settings.get('chordTranspose')) view.reformatChords(); },
       });
       this.current = { entry: e, player, view };
+      view.setMobile(this.mobile);
       this.layout(view.main, view.bar, ...(quiet ? [] : [curtain.el]));
       const cover = await this.cover(e.hash);
       this.mini!.set(this.miniSong(e, cover));

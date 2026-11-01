@@ -1,7 +1,9 @@
 // Reproductor de escritorio (maquetas player.html y mix.html).
+// Movil (setMobile): calco de PlayerActivity con las mismas piezas: tira arriba, mezcla como vista principal,
+// letra / diagramas / 3D desde la fila de 6 botones, hojas inferiores de tono, metronomo y stem.
 import type { LibraryEntry } from '../api/client.ts';
 import { t } from '../i18n/i18n.ts';
-import { BPM_MAX, BPM_MIN, ECHO_BEATS, ECHO_LABELS, FX_FALLBACK_BPM, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, filterCutoffHz, fxActive, newFx, type MetroSpeed, type Player, type StemState } from '../player/player.ts';
+import { BPM_MAX, BPM_MIN, ECHO_BEATS, localBpmAt, windowBpm, Repeat, ECHO_LABELS, FX_FALLBACK_BPM, MULT_MAX, MULT_MIN, MULT_STEP, PITCH_MAX, PITCH_MIN, filterCutoffHz, fxActive, newFx, type MetroSpeed, type Player, type StemState } from '../player/player.ts';
 import { DEFAULT_VOLUME, isDrumPart, titleKey } from '../player/stems.ts';
 import { iconOf } from './stemIcons.ts';
 import { LyricsView, type LyricsActions, type LyricsState } from './lyricsView.ts';
@@ -27,6 +29,10 @@ import icRestore from '../assets/icons/ic_restore_stem.svg';
 import icDrumset from '../assets/icons/ic_drumset.png';
 import icMenu from '../assets/icons/ic_menu.svg';
 import icCollapse from '../assets/icons/ic_back_downside.svg';
+import icRepeatOne from '../assets/icons/ic_repeat_one.svg';
+import icDiagram from '../assets/icons/ic_chord_diagram.svg';
+import { openSheet } from './sheet.ts';
+import { Ruler } from './ruler.ts';
 import type { Scene3D } from './scene3d.ts';
 import type { Flat3D } from './flat3d.ts';
 
@@ -72,6 +78,11 @@ function saveChordView(grid: boolean) { try { localStorage.setItem(CHORD_VIEW_PR
 function loadView(): View { try { const v = localStorage.getItem(VIEW_PREF); return v === 'lyrics' || v === 'chords' || v === '3d' ? v : 'mix'; } catch { return 'mix'; } }
 
 const withSvg = (el: HTMLElement, markup: string) => { el.insertAdjacentHTML('afterbegin', markup); return el; };
+/** Icono tintable (MaterialButton iconTint): mascara con el color del texto. */
+const maskIcon = (url: string, cls = 'mi') => { const e = h('span', { class: cls, attrs: { 'aria-hidden': 'true' } }); e.style.setProperty('--ic', `url("${url}")`); return e; };
+const MORE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="5.5" r="2" fill="#fff"/><circle cx="12" cy="12" r="2" fill="#fff"/><circle cx="12" cy="18.5" r="2" fill="#fff"/></svg>';
+const LONG_PRESS_MS = 450;
+type MOpt = 'repeat' | 'lyrics' | 'pitch' | 'metro' | 'chords' | '3d';
 
 /** Barra inferior sin cancion: todo desactivado. */
 export function idleBar(): HTMLElement {
@@ -113,6 +124,13 @@ export class PlayerView {
   private acts: HTMLElement;
   private menuBtn: HTMLElement;
   private tourWanted = false; // el tour espera a la vista Mezcla
+  // --- movil ---
+  private mobile = false;
+  private stripSlot = h('div', { class: 'mstrip', hidden: true });
+  private mBpm = h('p', { class: 'mbpm' });
+  private mOpts = new Map<MOpt, HTMLButtonElement>();
+  private bpmBeat = -2;
+  private moptsEl!: HTMLElement;
 
   constructor(p: Player, song: LibraryEntry, cover: string | null, hooks: PlayerHooks) {
     this.p = p; this.hooks = hooks;
@@ -126,6 +144,7 @@ export class PlayerView {
     const top = h('div', { class: 'top' }, collapse,
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
       h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })),
+      h('span', { class: 'mtt', textContent: song.artist ? `${song.artist} - ${song.title || song.filename}` : song.title || song.filename }),
       h('span', { class: 'sp' }));
     const menuBtn = h('button', { class: 'ib', attrs: { 'aria-label': t('web_menu'), 'aria-haspopup': 'dialog' } }, img(icMenu, '', ''));
     menuBtn.onclick = () => this.menuPop(menuBtn, top);
@@ -143,7 +162,7 @@ export class PlayerView {
     tab('mix', t('web_view_mix'), null, MIX_SVG);
     tab('3d', t('web_view_3d'), icItd);
     this.tabs.get('3d')!.classList.toggle('on3d', p.audio3d);
-    this.main = h('section', { class: 'main' }, top, h('div', { class: 'vbar' }, seg), this.viewBox);
+    this.main = h('section', { class: 'main' }, top, this.stripSlot, h('div', { class: 'vbar' }, seg), this.viewBox);
     (this.main as HTMLElement & { player?: Player }).player = p; // acceso de las pruebas
 
     // --- barra inferior ---
@@ -166,13 +185,194 @@ export class PlayerView {
       act(icPitch, '', t('cd_pitch'), this.pitchVal, (b) => this.pitchPop(b, acts)),
       p.hasMetronome ? act(icMetronome, '', t('cd_metronome'), this.metroVal, (b) => this.metroPop(b, acts)) : null,
       act(null, SPEED_SVG, t('web_tempo'), this.tempoVal, (b) => this.tempoPop(b, acts)));
-    this.bar = h('div', { class: 'pbar' }, seek, btns, acts);
+    // Movil: "BPM: N" (tempo local) arriba y la fila de 6 botones (optionsLayout) abajo
+    const opt = (k: MOpt, icon: string, label: string, fn: (b: HTMLButtonElement) => void) => {
+      const b = h('button', { class: `mo mo-${k}`, attrs: { 'aria-label': label } }, maskIcon(icon));
+      b.onclick = () => fn(b);
+      this.mOpts.set(k, b);
+      return b;
+    };
+    const metroBtn = opt('metro', icMetronome, t('cd_metronome'), () => this.metroSheet());
+    this.longPress(metroBtn, () => { p.setMetronome(!p.metroOn); this.refreshActs(); }); // pulsacion larga = encender / apagar
+    metroBtn.disabled = !p.hasMetronome;
+    const mopts = this.moptsEl = h('div', { class: 'mopts' },
+      opt('repeat', icRepeat, t('b_repeat_description'), () => { p.cycleRepeat(); this.refreshActs(); }),
+      opt('lyrics', icLyrics, t('lyrics_button_description'), () => this.setView(this.view === 'lyrics' ? 'mix' : 'lyrics')),
+      opt('pitch', icPitch, t('cd_pitch'), () => this.pitchSheet()),
+      metroBtn,
+      opt('chords', icChords, t('cd_chords_toggle'), (b) => this.chordButton(b)),
+      opt('3d', icItd, t('cd_audio_3d'), () => this.setView(this.view === '3d' ? 'mix' : '3d')));
+    this.mBpm.hidden = !p.bpm && !p.beats.length;
+    this.mBpm.textContent = `${t('tv_bpm')} ${p.bpm ? Math.round(p.bpm) : ''}`;
+    this.bar = h('div', { class: 'pbar' }, this.mBpm, seek, btns, acts, mopts);
 
     this.refreshActs();
     this.refreshPlay();
     this.renderView();
     hooks.onView?.(this.view);
     this.loop();
+  }
+
+  /** Movil (calco de Android) o escritorio: misma vista, otra disposicion. La vista de escritorio no se pisa. */
+  setMobile(on: boolean) {
+    if (on === this.mobile) return;
+    this.mobile = on;
+    // Android abre en la mezcla (o en 3D si la cancion tiene el 3D encendido)
+    this.view = on ? (this.p.audio3d ? '3d' : 'mix') : loadView();
+    for (const [k, b] of this.tabs) b.setAttribute('aria-selected', String(k === this.view));
+    this.hooks.onView?.(this.view);
+    this.renderView();
+  }
+
+  private longPress(b: HTMLElement, fn: () => void) {
+    let timer = 0, fired = false;
+    b.addEventListener('pointerdown', () => { fired = false; timer = window.setTimeout(() => { fired = true; fn(); }, LONG_PRESS_MS); });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => clearTimeout(timer));
+    b.addEventListener('click', (e) => { if (fired) { e.stopImmediatePropagation(); fired = false; } }, true);
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  /** Tinte de los 6 botones (acento = activo), icono de repetir uno y de diagramas abiertos. */
+  private refreshMOpts() {
+    const p = this.p, on = (k: MOpt, v: boolean) => this.mOpts.get(k)?.classList.toggle('on', v);
+    on('repeat', p.repeat !== Repeat.Off);
+    on('lyrics', this.view === 'lyrics');
+    on('pitch', p.pitch !== 0);
+    on('metro', p.metroOn);
+    on('chords', this.view === 'chords' || (!!this.chords && p.chordsActive));
+    on('3d', this.view === '3d');
+    this.mOpts.get('repeat')?.firstElementChild?.setAttribute('style', `--ic: url("${p.repeat === Repeat.One ? icRepeatOne : icRepeat}")`);
+    this.mOpts.get('chords')?.firstElementChild?.setAttribute('style', `--ic: url("${this.view === 'chords' ? icDiagram : icChords}")`);
+    const ch = this.mOpts.get('chords');
+    if (ch) ch.disabled = !this.chords;
+  }
+
+  /** Tira de acordes arriba (rv_chords): con acordes, carrusel activo o diagramas abiertos; nunca en 3D ni con la cuadricula. */
+  private placeStrip() {
+    const c = this.chords;
+    const show = this.mobile && !!c && this.view !== '3d' && !(this.view === 'chords' && this.chordGrid) && (this.p.chordsActive || this.view === 'chords');
+    if (show && c.strip.el.parentElement !== this.stripSlot) { this.stripSlot.replaceChildren(c.strip.el); c.strip.invalidate(); this.chordBeat = -2; }
+    if (!show && this.stripSlot.firstChild) this.stripSlot.replaceChildren();
+    this.stripSlot.hidden = !show;
+  }
+
+  /** Boton de acordes (onChordButton): con diagramas abiertos los cierra; si no, pildora carrusel / diagramas. */
+  private chordButton(b: HTMLButtonElement) {
+    if (this.view === 'chords') { this.setView('mix'); return; }
+    if (b.getAttribute('aria-expanded') === 'true') return;
+    const pill = h('div', { class: 'cpill', attrs: { role: 'menu' } });
+    const diag = h('button', { class: 'mo', attrs: { role: 'menuitem', 'aria-label': t('chord_view_diagrams') } }, maskIcon(icDiagram));
+    diag.disabled = this.view === 'lyrics' || this.view === '3d'; // otra vista completa abierta
+    const car = h('button', { class: `mo${this.p.chordsActive ? ' on' : ''}`, attrs: { role: 'menuitemcheckbox', 'aria-checked': String(this.p.chordsActive), 'aria-label': t('cd_chords_toggle') } }, maskIcon(icChords));
+    diag.onclick = () => { close(); this.setView('chords'); };
+    car.onclick = () => { close(); this.p.setChordsActive(!this.p.chordsActive); this.placeStrip(); this.refreshMOpts(); };
+    pill.append(diag, car);
+    document.body.append(pill);
+    const r = b.getBoundingClientRect();
+    pill.style.left = `${r.left}px`; pill.style.width = `${r.width}px`; pill.style.bottom = `${innerHeight - r.bottom}px`;
+    b.setAttribute('aria-expanded', 'true');
+    const close = dismissable(pill, () => b.setAttribute('aria-expanded', 'false'), [b]);
+    (diag.disabled ? car : diag).focus();
+  }
+
+  /** Hoja de tono (pitch_modal_sheet_dialog): regla -12..+12 con referencia en 0 y restaurar. */
+  private pitchSheet() {
+    const p = this.p;
+    openSheet(t('tv_pitch_title'), (body) => {
+      const show = h('b', { class: 'rval' });
+      const fmt = (v: number) => (v > 0 ? `+${v}` : String(v));
+      const ruler = new Ruler({ min: PITCH_MIN, max: PITCH_MAX, step: 1, value: p.pitch, spacing: 28, neutral: 0, label: t('cd_pitch'),
+        onChange: (v) => { const before = p.pitch; p.setPitch(v); if (p.pitch !== before) this.hooks.onPitch?.(); show.textContent = fmt(p.pitch); this.refreshActs(); } });
+      show.textContent = fmt(p.pitch);
+      const rs = h('button', { class: 'rrs', attrs: { 'aria-label': t('cd_restore_volume') }, onclick: () => ruler.restore() }, img(icRestore, '', ''));
+      body.append(h('h2', { class: 'sht', textContent: t('tv_pitch_title') }), h('p', { class: 'shsub', textContent: t('tv_pitch_semitones') }),
+        h('div', { class: 'rhead' }, show, rs), ruler.el);
+    }, undefined, this.main);
+  }
+
+  /** Hoja del metronomo (metronome_modal_sheet_dialog): encendido, 0.5x/1x/2x (A/B), volumen, balance y velocidad. */
+  private metroSheet() {
+    const p = this.p;
+    openSheet(t('tv_metronome_title'), (body) => {
+      const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-label': t('tv_metronome_title') } });
+      const speeds = h('div', { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': t('tv_metronome_title') } });
+      const ab = h('div', { class: 'seg ab', attrs: { role: 'radiogroup' } });
+      const vol = slider(0, 100, 1, p.metroVolume, t('tv_metronome_volume'));
+      const pan = slider(-100, 100, 1, p.metroPan, t('pan_title'));
+      pan.classList.add('bi');
+      const panRs = h('button', { class: 'rrs', attrs: { 'aria-label': t('pan_title') } }, img(icRestore, '', ''));
+      const sync = () => {
+        sw.setAttribute('aria-checked', String(p.metroOn));
+        speeds.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-checked', String(i === p.metroSpeed)));
+        ab.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-checked', String(i === Number(p.metroHalfB))));
+        ab.hidden = p.metroSpeed !== 0;
+        // Apagado: el resto queda atenuado y sin tocar (enableMetronome)
+        for (const c of [...speeds.querySelectorAll('button'), ...ab.querySelectorAll('button'), vol, pan, panRs]) (c as HTMLButtonElement).disabled = !p.metroOn;
+        panRs.style.visibility = p.metroPan ? 'visible' : 'hidden';
+        this.refreshActs();
+      };
+      sw.onclick = () => { p.setMetronome(!p.metroOn); sync(); };
+      [t('b_metronomeHalf'), t('b_metronome'), t('b_metronomeDouble')].forEach((l, i) => speeds.append(h('button', { textContent: l, attrs: { role: 'radio' }, onclick: () => { p.setMetronome(true, i as MetroSpeed); sync(); } })));
+      [t('metronome_half_variant_a'), t('metronome_half_variant_b')].forEach((l, i) => ab.append(h('button', { textContent: l, attrs: { role: 'radio' }, onclick: () => { p.setHalfVariantB(i === 1); sync(); } })));
+      vol.addEventListener('input', () => { p.setMetronome(p.metroOn, p.metroSpeed, +vol.value); });
+      pan.addEventListener('input', () => { p.setMetroPan(+pan.value); sync(); });
+      panRs.onclick = () => { p.setMetroPan(0); setSlider(pan, 0); sync(); };
+      // Velocidad en BPM absolutos (50..200, referencia = BPM global) o multiplicador sin BPM (0.50..1.50)
+      const bpm = p.bpm, show = h('b', { class: 'rval' });
+      const label = () => (bpm ? `${p.targetBpm} BPM` : `${p.tempoMult.toFixed(2)}×`);
+      const ruler = bpm
+        ? new Ruler({ min: BPM_MIN, max: BPM_MAX, step: 1, value: p.targetBpm!, neutral: Math.round(bpm), label: t('tv_metronome_speed'), onChange: (v) => { p.setTempoBpm(v); show.textContent = label(); this.refreshActs(); } })
+        : new Ruler({ min: 50, max: 150, step: 5, value: Math.round(p.tempoMult * 100), neutral: 100, label: t('tv_metronome_speed'), onChange: (v) => { p.setTempoMult(v / 100); show.textContent = label(); this.refreshActs(); } });
+      show.textContent = label();
+      const tempoRs = h('button', { class: 'rrs', attrs: { 'aria-label': t('tv_metronome_speed') }, onclick: () => ruler.restore() }, img(icRestore, '', ''));
+      // "Esta parte de la cancion va a N BPM" (tempo del beat actual, al abrir)
+      const local = localBpmAt(p.beats, p.positionMs / 1000, bpm);
+      const hud = h('p', { class: 'hud', hidden: !local });
+      // Texto de Android con el numero en negrita: <b>N BPM</b>
+      const m = t('tempo_local_hud_html', String(local)).match(/^([\s\S]*)<b>([\s\S]*)<\/b>([\s\S]*)$/);
+      if (m) hud.append(m[1], h('b', { textContent: m[2] }), m[3]); else hud.textContent = t('tempo_local_hud_html', String(local)).replace(/<\/?b>/g, '');
+      body.append(h('div', { class: 'shrow' }, h('h2', { class: 'sht', textContent: t('tv_metronome_title') }), sw), speeds, ab,
+        h('h3', { class: 'shl', textContent: t('tv_metronome_volume') }), h('div', { class: 'shsl' }, vol),
+        h('h3', { class: 'shl', textContent: t('pan_title') }), h('div', { class: 'shsl lr' }, h('span', { textContent: t('pan_l') }), pan, h('span', { textContent: t('pan_r') }), panRs),
+        h('h3', { class: 'shl sp', textContent: t('tv_metronome_speed') }), h('div', { class: 'rhead' }, show, tempoRs), ruler.el, hud);
+      sync();
+    }, undefined, this.main);
+  }
+
+  /** Hoja del stem (⋮ de la fila = player_modal_sheet_dialog): balance, FX y exportar. */
+  private stemSheet(s: StemState) {
+    const v2 = this.p.hasVocals2;
+    openSheet(t(titleKey(s.stem, v2)) || s.stem, (body) => {
+      const fill = () => body.replaceChildren(this.fxPanel(s, v2, fill));
+      fill();
+    }, undefined, this.main);
+  }
+
+  /** Menu del icono del stem (stem_context_menu): Solo / Silenciar. */
+  private stemMenu(anchor: HTMLElement, s: StemState, sync: () => void) {
+    if (anchor.getAttribute('aria-expanded') === 'true') return;
+    const item = (label: string, on: boolean, fn: () => void) => h('button', { textContent: label, attrs: { role: 'menuitemcheckbox', 'aria-checked': String(on) }, onclick: () => { close(); fn(); } });
+    const menu = h('div', { class: 'menu rowmenu', attrs: { role: 'menu' } },
+      item(t('stem_menu_solo'), s.solo, () => { this.p.toggleSolo(s.stem); this.refreshSolo(); }),
+      item(t('stem_menu_mute'), s.volume === 0, () => { this.p.toggleMute(s.stem); sync(); this.refreshSolo(); }));
+    document.body.append(menu);
+    const r = anchor.getBoundingClientRect(), m = menu.getBoundingClientRect();
+    menu.style.left = `${r.left}px`;
+    menu.style.top = `${r.bottom + 4 + m.height > innerHeight - 8 ? r.top - 4 - m.height : r.bottom + 4}px`;
+    anchor.setAttribute('aria-expanded', 'true');
+    const close = dismissable(menu, () => anchor.setAttribute('aria-expanded', 'false'), [anchor]);
+    (menu.querySelector('button') as HTMLButtonElement).focus();
+  }
+
+  /** Solo: icono en acento; los demas, icono .35 y slider .5 (sin bloquear). */
+  private refreshSolo() {
+    const any = this.p.stems.some((x) => x.solo);
+    this.viewBox.querySelectorAll<HTMLElement>('.stem').forEach((row) => {
+      const st = this.p.stems.find((x) => x.stem === row.dataset.stem);
+      row.classList.toggle('soloed', !!st?.solo);
+      row.classList.toggle('soloout', any && !st?.solo);
+      row.querySelector('.solo')?.setAttribute('aria-pressed', String(!!st?.solo));
+    });
   }
 
   destroy() { this.dead = true; cancelAnimationFrame(this.raf); this.scene3d?.destroy(); this.scene3d = null; }
@@ -209,6 +409,7 @@ export class PlayerView {
     this.chords = { cells, beatsPerBar, strip: new ChordStrip(cells, beatsPerBar, seek, fmt), diagrams, grid: new ChordGrid(cells, seek, fmt) };
     this.chordBeat = -2;
     if (this.view === 'chords') this.renderView();
+    else { this.placeStrip(); this.refreshMOpts(); } // movil: tira arriba y boton de acordes en cuanto llegan
   }
 
   async toggle() { await this.p.toggle(); this.refreshPlay(); }
@@ -225,6 +426,7 @@ export class PlayerView {
     const speed = ['0.5×', '1×', '2×'][this.p.metroSpeed];
     this.metroVal.textContent = this.p.metroOn ? (this.p.metroSpeed === 0 ? `${speed} ${this.p.metroHalfB ? 'B' : 'A'}` : speed) : t('fx_off');
     this.tempoVal.textContent = this.p.targetBpm ? `${this.p.targetBpm} BPM` : `${this.p.tempoMult.toFixed(2)}×`;
+    this.refreshMOpts();
   }
 
   private loop = () => {
@@ -243,11 +445,17 @@ export class PlayerView {
         if (forward && b >= 0 && this.p.playing) this.hooks.onBeat(this.beats.cells[b].pos, this.beats.beatsPerBar, this.p.bpm ? this.p.bpm * this.p.tempoMult : null);
       }
     }
+    if (this.beat !== this.bpmBeat) {
+      this.bpmBeat = this.beat;
+      const n = windowBpm(this.p.beats, this.beat);
+      if (n !== null) this.mBpm.textContent = `${t('tv_bpm')} ${n}`;
+    }
     if (this.chords) {
       const b = this.beat;
       if (b !== this.chordBeat) {
         this.chordBeat = b;
-        if (this.chordGrid) this.chords.grid.setBeat(b); else this.chords.strip.setBeat(b);
+        if (this.chordGrid) this.chords.grid.setBeat(b);
+        if (!this.chordGrid || this.stripSlot.firstChild) this.chords.strip.setBeat(b);
         if (!this.chordGrid) this.chords.diagrams.setBeat(b);
       }
     }
@@ -264,7 +472,7 @@ export class PlayerView {
 
   private tourSteps(): Step[] {
     const row = this.viewBox.querySelector('.stem');
-    const icon = (b: Element | null | undefined) => b?.querySelector('img, svg')?.cloneNode(true) ?? null;
+    const icon = (b: Element | null | undefined) => b?.querySelector('img, svg, .mi')?.cloneNode(true) ?? null;
     const legend = (pairs: [Element | null | undefined, string][]) => pairs.flatMap(([b, label]): LegendRow[] => {
       const ic = icon(b);
       return ic && b?.checkVisibility() ? [{ icon: ic, label }] : [];
@@ -274,9 +482,12 @@ export class PlayerView {
     return [
       { target: views(this.seg), title: t('web_coach_views_title'), corner: 20, legend: legend([[tab('lyrics'), t('coach_pl_bar_lyrics')],
         [tab('chords'), t('coach_pl_bar_chords')], [tab('mix'), t('web_coach_view_mix')], [tab('3d'), t('coach_pl_bar_3d')]]) },
-      { target: views(row?.querySelector('.btn-ic'), row?.querySelector('.solo')), title: t('coach_pl_icon_title'), body: t('web_coach_icon_body'), corner: 14 },
+      // Movil: textos de Android (icono = Solo / Silenciar, ⋮ = opciones, fila de 6 botones); views() solo une lo visible
+      { target: views(row?.querySelector('.btn-ic'), row?.querySelector('.solo')), title: t('coach_pl_icon_title'), body: t(this.mobile ? 'coach_pl_icon_body' : 'web_coach_icon_body'), corner: 14 },
       { target: views(row?.querySelector('.sl'), row?.querySelector('.rs')), title: t('coach_pl_volume_title'), body: t('coach_pl_volume_body'), corner: 14 },
-      { target: views(row?.querySelector('.nm')), title: t('coach_pl_options_title'), body: t('web_coach_options_body'), corner: 10 },
+      { target: views(row?.querySelector('.nm'), row?.querySelector('.mmore')), title: t('coach_pl_options_title'), body: t(this.mobile ? 'coach_pl_options_body' : 'web_coach_options_body'), corner: 10 },
+      this.mobile ? { target: views(this.moptsEl), title: t('coach_pl_bar_title'), corner: 24, legend: legend(([['repeat', 'coach_pl_bar_repeat'], ['lyrics', 'coach_pl_bar_lyrics'], ['pitch', 'coach_pl_bar_pitch'],
+        ['metro', 'coach_pl_bar_metronome'], ['chords', 'coach_pl_bar_chords'], ['3d', 'coach_pl_bar_3d']] as [MOpt, string][]).map(([k, key]) => [this.mOpts.get(k), t(key)])) } :
       { target: views(this.acts), title: t('coach_pl_bar_title'), corner: 24, legend: legend([[act(0), t('coach_pl_bar_repeat')], [act(1), t('coach_pl_bar_pitch')],
         ...(this.p.hasMetronome ? [[act(2), t('web_coach_bar_metronome')] as [Element, string]] : []), [act(this.acts.children.length - 1), t('web_coach_bar_tempo')]]) },
       { target: views(this.menuBtn), title: t('coach_pl_menu_title'), body: t('web_coach_menu_body') },
@@ -285,7 +496,7 @@ export class PlayerView {
 
   private setView(v: View) {
     this.view = v;
-    try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
+    if (!this.mobile) try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
     for (const [k, b] of this.tabs) b.setAttribute('aria-selected', String(k === v));
     this.hooks.onView?.(v);
     this.renderView();
@@ -293,6 +504,12 @@ export class PlayerView {
   }
 
   private renderView() {
+    this.renderBody();
+    this.placeStrip();
+    this.refreshMOpts();
+  }
+
+  private renderBody() {
     this.viewBox.className = this.view === 'lyrics' ? 'view lyr' : 'view';
     if (this.view === 'lyrics') { this.viewBox.replaceChildren(this.lyrics.el); return; }
     if (this.view !== '3d') this.scene3d?.watchAccent(this.main); // sigue al acento aunque no se vea
@@ -305,7 +522,8 @@ export class PlayerView {
         b.onclick = () => { if (this.chordGrid === (i === 1)) return; this.chordGrid = i === 1; saveChordView(this.chordGrid); this.renderView(); };
         pill.append(b);
       });
-      const body = this.chordGrid ? [this.chords.grid.el] : [this.chords.strip.el, this.chords.diagrams.el];
+      // Movil: la tira va arriba (placeStrip), aqui solo diagramas o cuadricula
+      const body = this.chordGrid ? [this.chords.grid.el] : this.mobile ? [this.chords.diagrams.el] : [this.chords.strip.el, this.chords.diagrams.el];
       for (const el of body) { el.classList.remove('swap'); void el.offsetWidth; el.classList.add('swap'); } // fundido + desliz
       this.viewBox.className = `view chv${this.chordGrid ? ' grid' : ''}`;
       this.viewBox.replaceChildren(h('div', { class: 'chhead' }, pill, meta), ...body);
@@ -333,6 +551,7 @@ export class PlayerView {
     if (this.p.audio3d) mix.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.stem input, .stem .s, .stem .rs').forEach((c) => (c.disabled = true));
     const note = this.p.audio3d ? h('p', { class: 'note3d', textContent: t('web_3d_locked') }) : '';
     this.viewBox.replaceChildren(note, h('div', { class: 'mixwrap' }, mix, sel ? this.fxPanel(sel, v2) : ''));
+    this.refreshSolo();
   }
 
   /** Vista 3D: three.js se carga aparte, la primera vez que hace falta. */
@@ -356,7 +575,7 @@ export class PlayerView {
   }
 
   /** Panel derecho (mix.html): balance, filtro, eco con division, reverb con sala (player_modal_sheet_dialog). */
-  private fxPanel(s: StemState, v2: boolean): HTMLElement {
+  private fxPanel(s: StemState, v2: boolean, redo?: () => void): HTMLElement {
     const p = this.p, name = t(titleKey(s.stem, v2)) || s.stem;
     const val = () => h('span', { class: 'fxv' });
     const panV = val(), filV = val(), echoV = val(), revV = val();
@@ -388,7 +607,7 @@ export class PlayerView {
     echo.addEventListener('input', () => { p.setFx(s.stem, { echo: +echo.value / 100 }); sync(); });
     rev.addEventListener('input', () => { p.setFx(s.stem, { reverb: +rev.value / 100 }); sync(); });
     const clear = h('button', { class: 'btn ghost', textContent: t('fx_clear') });
-    clear.onclick = () => { const z = newFx(); p.setFx(s.stem, { filter: 0, echo: 0, reverb: 0, echoDivision: z.echoDivision, room: z.room }); this.renderView(); };
+    clear.onclick = () => { const z = newFx(); p.setFx(s.stem, { filter: 0, echo: 0, reverb: 0, echoDivision: z.echoDivision, room: z.room }); this.renderView(); redo?.(); };
     // Exportar esta pista (ic_export del bottom sheet de Android; "Exportar" en mix.html)
     const exp = h('button', { class: 'expb', attrs: { 'aria-label': t('export_stem_button_desc') } });
     exp.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 19h14" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>';
@@ -417,14 +636,17 @@ export class PlayerView {
     const sync = () => { val.textContent = String(s.volume); setSlider(r, s.volume); row.classList.toggle('muted', s.volume === 0); };
     r.addEventListener('input', () => { this.p.setVolume(s.stem, +r.value); sync(); });
     // Icono = mute/unmute (slider a 0)
-    const icon = h('button', { class: 's btn-ic', attrs: { 'aria-label': `${t('cd_stem_mute')}: ${name}` }, onclick: () => { this.p.toggleMute(s.stem); sync(); } }, img(iconOf(s.stem, v2), 's', ''));
+    const icon = h('button', { class: 's btn-ic', attrs: { 'aria-label': `${t('cd_stem_mute')}: ${name}` } }, img(iconOf(s.stem, v2), 's', ''), maskIcon(iconOf(s.stem, v2), 'mi s'));
+    icon.onclick = () => { if (this.mobile) this.stemMenu(icon, s, sync); else { this.p.toggleMute(s.stem); sync(); } };
     const solo = h('button', { class: 'solo', textContent: 'S', attrs: { 'aria-pressed': String(s.solo), 'aria-label': `${t('web_solo')}: ${name}` } });
-    solo.onclick = () => { this.p.toggleSolo(s.stem); solo.setAttribute('aria-pressed', String(s.solo)); };
+    solo.onclick = () => { this.p.toggleSolo(s.stem); this.refreshSolo(); };
     const rs = h('button', { class: 'rs', attrs: { 'aria-label': `${t('cd_restore_volume')}: ${name}` }, onclick: () => this.animateTo(s, DEFAULT_VOLUME, sync) }, img(icRestore, '', ''));
     // Nombre = elegir el stem del panel de FX
     const nm = h('button', { class: 'nm', textContent: name, attrs: { 'aria-label': `${t('cd_stem_options')}: ${name}` } });
     nm.onclick = () => { this.fxStem = s.stem; this.renderView(); };
-    row.append(icon, nm, r, val, solo, rs);
+    const more = h('button', { class: 'mmore', attrs: { 'aria-label': `${t('cd_stem_options')}: ${name}` }, onclick: () => this.stemSheet(s) });
+    more.innerHTML = MORE_SVG;
+    row.append(icon, nm, r, val, solo, rs, more);
     return row;
   }
 
@@ -535,8 +757,17 @@ export class PlayerView {
       [t('metronome_half_variant_a'), t('metronome_half_variant_b')].forEach((label, i) => ab.append(h('button', { textContent: label, attrs: { role: 'radio' },
         onclick: () => { p.setHalfVariantB(i === 1); sync(); } })));
       vol.addEventListener('input', () => { p.setMetronome(p.metroOn, p.metroSpeed, +vol.value); sync(); });
+      // Balance (s_metronomePan): doble clic = centro, como el de los stems
+      const pan = slider(-100, 100, 1, p.metroPan, t('pan_title'));
+      pan.classList.add('bi', 'mpan');
+      const panV = h('span', { class: 'val' });
+      const syncPan = () => { panV.textContent = p.metroPan === 0 ? t('web_center') : p.metroPan < 0 ? `${t('pan_l')} ${-p.metroPan}` : `${t('pan_r')} ${p.metroPan}`; };
+      pan.addEventListener('input', () => { p.setMetroPan(+pan.value); syncPan(); });
+      pan.ondblclick = () => { p.setMetroPan(0); setSlider(pan, 0); syncPan(); };
+      syncPan();
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_title') }), sw), speeds, ab,
-        h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_volume') }), volV), vol);
+        h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_volume') }), volV), vol,
+        h('div', { class: 'hd' }, h('span', { textContent: t('pan_title') }), panV), pan);
       sync();
     });
   }

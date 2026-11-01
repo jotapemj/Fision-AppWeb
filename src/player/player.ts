@@ -67,6 +67,30 @@ export function localBeatIntervalMs(beats: number[], posMs: number, bpm: number 
   return Math.trunc(f(iv * 1000));
 }
 
+const LOCAL_BPM_WINDOW = 6;
+
+/** Rotulo "BPM: N" (updateLocalBpmDisplay): media de los ultimos 6 intervalos hasta el beat `idx`; null = no cambia. */
+export function windowBpm(beats: number[], idx: number): number | null {
+  if (idx < 1 || beats.length < 2) return null;
+  const end = Math.min(beats.length - 1, idx), start = Math.max(0, end - LOCAL_BPM_WINDOW);
+  const f = Math.fround, n = end - start;
+  if (n < 1) return null;
+  const span = f(f(beats[end]) - f(beats[start]));
+  return span > 0 ? Math.round(60 / f(span / n)) : null;
+}
+
+/** Tempo de esta parte (computeLocalBpmAtCurrentPosition): 60 / intervalo al beat siguiente;
+ *  antes del primero o tras el ultimo, el global; 0 = sin datos. */
+export function localBpmAt(beats: number[], sec: number, bpm: number | null): number {
+  const global = bpm && bpm > 0 ? Math.round(bpm) : 0;
+  if (beats.length < 2) return global;
+  let i = -1;
+  while (i + 1 < beats.length && beats[i + 1] <= sec) i++;
+  if (i < 0 || i >= beats.length - 1) return global;
+  const d = Math.fround(Math.fround(beats[i + 1]) - Math.fround(beats[i]));
+  return d > 0 ? Math.round(60 / d) : global;
+}
+
 export const PITCH_MIN = -12, PITCH_MAX = 12;
 export const BPM_MIN = 50, BPM_MAX = 200;
 export const MULT_MIN = 0.5, MULT_MAX = 1.5, MULT_STEP = 0.05; // sin BPM
@@ -83,6 +107,8 @@ export class Player {
   metroSpeed: MetroSpeed = 1;
   metroVolume = 100;
   metroHalfB = false; // variante B del 0.5x: desfase de un beat local
+  metroPan = 0; // Metronome pan -100..100 (balance como los stems)
+  chordsActive = true; // Chords view active: carrusel de acordes visible (movil)
   chordsBasic = false; // chords_basic.txt en vez de chords.txt (por cancion)
   chordsOnLyrics = false; // nombres de acorde sobre la letra (por cancion)
   pitch = 0;
@@ -220,11 +246,20 @@ export class Player {
     // Solo suena el elegido, a metronomeVol/100
     METRO_STEM.forEach((m, i) => {
       const id = this.metronomeIds[m];
-      if (id !== undefined) this.engine.setVolume(id, on && i === speed ? this.metroVolume : 0);
+      if (id !== undefined) this.engine.setVolume(id, on && i === speed ? this.metroVolume : 0, this.metroPan);
     });
     this.applyClick();
     this.onChange?.();
   }
+
+  /** Balance del metronomo (s_metronomePan): se guarda y se aplica al que suena. */
+  setMetroPan(pan: number) {
+    this.metroPan = Math.round(Math.min(100, Math.max(-100, pan)));
+    this.setMetronome(this.metroOn);
+  }
+
+  /** Carrusel de acordes visible o no (por cancion). */
+  setChordsActive(on: boolean) { this.chordsActive = on; this.onChange?.(); }
 
   /** Downbeats de la cancion (celdas isDownbeat, en ms como (long)(time*1000f)). */
   setDownbeats(sec: number[]) {

@@ -344,7 +344,20 @@
   "playlist_count": {
    "one": "{n} playlist",
    "other": "{n} playlists"
-  }
+  },
+  "tv_metronome_speed": "Playback speed",
+  "tempo_local_hud_html": "This section plays at <b>{1} BPM</b>",
+  "tv_pitch_title": "Transposition",
+  "tv_pitch_semitones": "semitones",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Mute",
+  "tv_bpm": "BPM:",
+  "cd_chords_toggle": "Show or hide chords",
+  "b_repeat_description": "Repeat mode",
+  "lyrics_button_description": "Show lyrics",
+  "cd_audio_3d": "3D spatial audio",
+  "coach_pl_bar_metronome": "Dynamic metronome and tempo",
+  "coach_pl_icon_body": "Tap a stem's icon to solo or mute it. Several stems can be soloed at once."
  },
  "es": {
   "tab_songs": "Canciones",
@@ -693,7 +706,20 @@
    "one": "{n} playlist",
    "many": "{n} playlists",
    "other": "{n} playlists"
-  }
+  },
+  "tv_metronome_speed": "Velocidad de reproducción",
+  "tempo_local_hud_html": "Esta parte de la canción va a <b>{1} BPM</b>",
+  "tv_pitch_title": "Transposición",
+  "tv_pitch_semitones": "semitonos",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Silenciar",
+  "tv_bpm": "BPM:",
+  "cd_chords_toggle": "Mostrar u ocultar acordes",
+  "b_repeat_description": "Modo repetición",
+  "lyrics_button_description": "Mostrar letra",
+  "cd_audio_3d": "Audio espacial 3D",
+  "coach_pl_bar_metronome": "Metrónomo dinámico y tempo",
+  "coach_pl_icon_body": "Toca el icono de una pista para ponerla en solo o silenciarla. Puedes tener varias en solo a la vez."
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -1041,7 +1067,20 @@
    "one": "{n} playlist",
    "many": "{n} playlists",
    "other": "{n} playlists"
-  }
+  },
+  "tv_metronome_speed": "Velocitat de reproducció",
+  "tempo_local_hud_html": "Aquesta part de la cançó va a <b>{1} BPM</b>",
+  "tv_pitch_title": "Transposició",
+  "tv_pitch_semitones": "semitons",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Silenciar",
+  "tv_bpm": "BPM: ",
+  "cd_chords_toggle": "Mostra o amaga els acords",
+  "b_repeat_description": "Mode de repetició",
+  "lyrics_button_description": "Mostrar lletra",
+  "cd_audio_3d": "Àudio espacial 3D",
+  "coach_pl_bar_metronome": "Metrònom dinàmic i tempo",
+  "coach_pl_icon_body": "Toca la icona d'una pista per posar-la en solo o silenciar-la. Pots tenir-ne diverses en solo alhora."
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -1393,7 +1432,20 @@
    "few": "{n} плейлисти",
    "many": "{n} плейлистів",
    "other": "{n} плейлиста"
-  }
+  },
+  "tv_metronome_speed": "Швидкість відтворення",
+  "tempo_local_hud_html": "Ця частина пісні йде на <b>{1} BPM</b>",
+  "tv_pitch_title": "Транспозиція",
+  "tv_pitch_semitones": "півтони",
+  "stem_menu_solo": "Соло",
+  "stem_menu_mute": "Тиша",
+  "tv_bpm": "BPM: ",
+  "cd_chords_toggle": "Показати або сховати акорди",
+  "b_repeat_description": "Режим повтору",
+  "lyrics_button_description": "Показати текст",
+  "cd_audio_3d": "Просторовий 3D-звук",
+  "coach_pl_bar_metronome": "Динамічний метроном і темп",
+  "coach_pl_icon_body": "Торкніться значка доріжки, щоб увімкнути соло або вимкнути її. Соло можна ввімкнути на кількох одразу."
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -1733,7 +1785,19 @@
    "one": "{n} playlist",
    "many": "{n} playlists",
    "other": "{n} playlists"
-  }
+  },
+  "tv_metronome_speed": "Velocidade de reprodução",
+  "tempo_local_hud_html": "Esta seção está a <b>{1} BPM</b>",
+  "tv_pitch_title": "Transposição",
+  "tv_pitch_semitones": "semitons",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Mudo",
+  "cd_chords_toggle": "Mostrar ou ocultar acordes",
+  "b_repeat_description": "Modo de repetição",
+  "lyrics_button_description": "Mostrar letra",
+  "cd_audio_3d": "Áudio espacial 3D",
+  "coach_pl_bar_metronome": "Metrônomo dinâmico e andamento",
+  "coach_pl_icon_body": "Toque no ícone de uma faixa para deixá-la em solo ou mudá-la. Várias faixas podem ficar em solo ao mesmo tempo."
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -2073,7 +2137,19 @@
    "one": "{n} playlist",
    "many": "{n} playlists",
    "other": "{n} playlists"
-  }
+  },
+  "tv_metronome_speed": "Vitesse de lecture",
+  "tempo_local_hud_html": "Cette section est à <b>{1} BPM</b>",
+  "tv_pitch_title": "Transposition",
+  "tv_pitch_semitones": "demi-tons",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Muet",
+  "cd_chords_toggle": "Afficher ou masquer les accords",
+  "b_repeat_description": "Mode répétition",
+  "lyrics_button_description": "Afficher les paroles",
+  "cd_audio_3d": "Audio spatial 3D",
+  "coach_pl_bar_metronome": "Métronome dynamique et tempo",
+  "coach_pl_icon_body": "Touchez l'icône d'une piste pour la mettre en solo ou la couper. Plusieurs pistes peuvent être en solo à la fois."
  },
  "de": {
   "tab_songs": "Songs",
@@ -2408,7 +2484,19 @@
   "playlist_count": {
    "one": "{n} Playlist",
    "other": "{n} Playlists"
-  }
+  },
+  "tv_metronome_speed": "Wiedergabetempo",
+  "tempo_local_hud_html": "Dieser Abschnitt läuft mit <b>{1} BPM</b>",
+  "tv_pitch_title": "Transposition",
+  "tv_pitch_semitones": "Halbtöne",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Stumm",
+  "cd_chords_toggle": "Akkorde ein- oder ausblenden",
+  "b_repeat_description": "Wiederholungsmodus",
+  "lyrics_button_description": "Songtext anzeigen",
+  "cd_audio_3d": "3D-Raumklang",
+  "coach_pl_bar_metronome": "Dynamisches Metronom und Tempo",
+  "coach_pl_icon_body": "Tippe auf das Symbol eines Stems, um ihn solo oder stumm zu schalten. Mehrere Stems können gleichzeitig solo sein."
  },
  "it": {
   "tab_songs": "Brani",
@@ -2748,7 +2836,19 @@
    "one": "{n} playlist",
    "many": "{n} playlist",
    "other": "{n} playlist"
-  }
+  },
+  "tv_metronome_speed": "Velocità di riproduzione",
+  "tempo_local_hud_html": "Questa sezione va a <b>{1} BPM</b>",
+  "tv_pitch_title": "Trasposizione",
+  "tv_pitch_semitones": "semitoni",
+  "stem_menu_solo": "Solo",
+  "stem_menu_mute": "Muto",
+  "cd_chords_toggle": "Mostra o nascondi gli accordi",
+  "b_repeat_description": "Modalità ripetizione",
+  "lyrics_button_description": "Mostra il testo",
+  "cd_audio_3d": "Audio spaziale 3D",
+  "coach_pl_bar_metronome": "Metronomo dinamico e tempo",
+  "coach_pl_icon_body": "Tocca l'icona di una traccia per metterla in solo o silenziarla. Più tracce possono essere in solo insieme."
  },
  "ru": {
   "tab_songs": "Песни",
@@ -3091,7 +3191,19 @@
    "few": "{n} плейлиста",
    "many": "{n} плейлистов",
    "other": "{n} плейлиста"
-  }
+  },
+  "tv_metronome_speed": "Скорость воспроизведения",
+  "tempo_local_hud_html": "Этот фрагмент идёт в <b>{1} BPM</b>",
+  "tv_pitch_title": "Транспонирование",
+  "tv_pitch_semitones": "полутонов",
+  "stem_menu_solo": "Соло",
+  "stem_menu_mute": "Без звука",
+  "cd_chords_toggle": "Показать или скрыть аккорды",
+  "b_repeat_description": "Режим повтора",
+  "lyrics_button_description": "Показать текст",
+  "cd_audio_3d": "Пространственный 3D-звук",
+  "coach_pl_bar_metronome": "Динамический метроном и темп",
+  "coach_pl_icon_body": "Нажмите на значок дорожки, чтобы включить соло или заглушить её. Соло можно включить сразу на нескольких."
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -3425,6 +3537,18 @@
   "te_find_playlist": "在你的歌单中搜索",
   "playlist_count": {
    "other": "{n} 个歌单"
-  }
+  },
+  "tv_metronome_speed": "播放速度",
+  "tempo_local_hud_html": "本段速度为 <b>{1} BPM</b>",
+  "tv_pitch_title": "移调",
+  "tv_pitch_semitones": "半音",
+  "stem_menu_solo": "独奏",
+  "stem_menu_mute": "静音",
+  "cd_chords_toggle": "显示或隐藏和弦",
+  "b_repeat_description": "循环模式",
+  "lyrics_button_description": "显示歌词",
+  "cd_audio_3d": "3D 空间音频",
+  "coach_pl_bar_metronome": "动态节拍器和速度",
+  "coach_pl_icon_body": "点按分轨图标可将其独奏或静音。可同时独奏多个分轨。"
  }
 }
