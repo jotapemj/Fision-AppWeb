@@ -8,6 +8,7 @@ import { CoverWave } from './coverWave.ts';
 import type { Playlist, PlaylistSummary } from '../api/client.ts';
 import { playlistRows } from '../library/playlists.ts';
 import { jobErrorKey } from '../library/importConfig.ts';
+import { views, type Step } from './coachMark.ts';
 
 /** Opcion del menu ⋯ de una fila. */
 export interface RowMenuItem { label: string; danger?: boolean; disabled?: boolean; run(): void }
@@ -80,7 +81,23 @@ export class Sidebar {
     addBtn.append(t('b_add'));
     this.plHead.hidden = true;
     this.el = h('aside', { class: 'pane' }, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision'), addBtn), find, h('div', {}, bar, this.plHead), this.list, plSec, me);
+    // Tour de la biblioteca (MainActivity.maybeStartLibraryTour)
+    this.tourSteps = () => {
+      const first = this.list.querySelector('.drw');
+      return [
+        { target: views(addBtn), title: t('coach_lib_add_title'), body: t('web_coach_add_body') },
+        { target: views(find, this.flt), title: t('coach_lib_search_title'), body: t('coach_lib_search_body'), corner: 16 },
+        first // biblioteca vacia: el aviso hace de primera cancion
+          ? { target: views(first), title: t('coach_lib_song_title'), body: t('web_coach_song_body'), corner: 16 }
+          : { target: views(this.list.querySelector('.empty')), title: t('coach_lib_song_title'), body: t('coach_lib_song_empty_body'), corner: 16 },
+        { target: views(plSec.firstElementChild), title: t('coach_lib_playlists_title'), body: t('coach_lib_playlists_body'), corner: 16 },
+        { target: views(this.srv), title: t('coach_lib_cloud_title'), body: t('coach_lib_cloud_body'), corner: 10 },
+        { target: views(me.lastElementChild), title: t('coach_lib_settings_title'), body: t('coach_lib_settings_body') },
+      ];
+    };
   }
+
+  readonly tourSteps: () => Step[];
 
   /** Servidor inalcanzable: lo dice en rojo (nube roja de Android); lo descargado suena igual. */
   setOnline(on: boolean) {

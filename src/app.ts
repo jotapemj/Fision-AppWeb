@@ -26,6 +26,7 @@ import { IdleMain } from './ui/idleMain.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
 import { ACCENTS, DOWNBEAT_SOUNDS, type SettingsStore } from './settings.ts';
 import { openSettings } from './ui/settingsView.ts';
+import { startTour } from './ui/coachMark.ts';
 import { cssRgb, songColors, type SongColors } from './player/songPalette.ts';
 import { formatChord } from './player/chords.ts';
 import pkg from '../package.json' with { type: 'json' };
@@ -119,7 +120,8 @@ export class App {
       playlistCover: (p) => this.playlistCover(p),
       onAdd: () => void this.addSong(),
       onSettings: () => openSettings(this.settings, { user: s.user, server: location.host, webVersion: pkg.version,
-        serverInfo: () => this.api.serverInfo().catch(() => null), onLogout: () => { this.api.logout(); this.showLogin(); } }),
+        serverInfo: () => this.api.serverInfo().catch(() => null), onLogout: () => { this.api.logout(); this.showLogin(); },
+        onTourReset: () => this.maybeLibraryTour() }),
       cover: (hash) => this.cover(hash),
       rowMenu: (r) => this.rowMenu(r),
     });
@@ -130,7 +132,7 @@ export class App {
     this.shell = h('div', { class: 'app' }, this.nebula.el, this.sidebar.el, this.hintMain(t('web_pick_song')), idleBar());
     this.root.replaceChildren(this.shell);
     // Playlists al entrar (y tras cada cambio), no en cada sondeo de jobs
-    void this.refreshLibrary().then(() => this.syncPlaylists());
+    void this.refreshLibrary().then(() => this.syncPlaylists()).finally(() => this.maybeLibraryTour());
     // Volver a la pestana = onStart de Android: biblioteca al dia (y acordes nuevos)
     if (!this.visHooked) {
       this.visHooked = true;
@@ -138,6 +140,11 @@ export class App {
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') resync(); });
       addEventListener('online', resync); // onConnectivityChanged(true)
     }
+  }
+
+  /** Tour de la biblioteca: al entrar con la lista ya pintada, y tras "Ver tour". Nunca sobre un dialogo. */
+  private maybeLibraryTour() {
+    setTimeout(() => { if (this.sidebar && !this.opening) startTour('library', this.sidebar.tourSteps()); }, 400);
   }
 
   /** Centro sin cancion: nebulosa relajada + marca (una sola viva a la vez). */
@@ -537,7 +544,8 @@ export class App {
         setLyr(st);
       });
       // Al empezar el fundido arranca la musica (abrir = reproducir, como Android)
-      curtain.finish(() => { void view.toggle(); }, () => {});
+      // Tour del reproductor cuando las filas ya se ven (Android: tras asentarse los sliders)
+      curtain.finish(() => { void view.toggle(); }, () => { setTimeout(() => { if (this.current?.view === view) view.maybeTour(); }, 900); });
     } catch (err) {
       curtain.finish(() => {}, () => {}, false);
       const msg = err instanceof Error && err.message === 'engine_needs_isolation' ? t('web_engine_isolation') : t('err_song_missing_files');

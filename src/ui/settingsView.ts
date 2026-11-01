@@ -2,6 +2,8 @@
 import { LANGS, t, type Lang } from '../i18n/i18n.ts';
 import { ACCENTS, type Settings, type SettingsStore } from '../settings.ts';
 import { h } from './dom.ts';
+import { resetTours } from './coachMark.ts';
+import { openLicenses } from './licenses.ts';
 
 // Nombre de cada idioma en su idioma (R.array.lang_entries)
 const LANG_NAMES: Record<Lang, string> = { en: 'English', es: 'Español', ca: 'Català', uk: 'Українська', 'pt-BR': 'Português (Brasil)',
@@ -13,6 +15,8 @@ export interface SettingsContext {
   serverInfo: () => Promise<{ version?: string; gpu_name?: string } | null>;
   webVersion: string;
   onLogout(): void;
+  /** "Ver tour": los tours vuelven; al cerrar los ajustes empieza el de la biblioteca. */
+  onTourReset(): void;
 }
 
 const sw = (on: boolean, label: string, onToggle: (v: boolean) => void) => {
@@ -55,6 +59,11 @@ export function openSettings(store: SettingsStore, ctx: SettingsContext) {
 
   const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
   const out = h('button', { class: 'btn ghost', textContent: t('settings_logout_title') });
+  const tourBtn = h('button', { class: 'btn ghost', textContent: t('settings_tour_title') });
+  const licBtn = h('button', { class: 'btn ghost', textContent: t('about_view_licenses') });
+  // Aviso en la fila (un toast quedaria debajo del dialogo modal)
+  const tourNote = h('small', { hidden: true, textContent: t('settings_tour_reset'), attrs: { role: 'status' } });
+  let tourAgain = false;
   const dlg = h('dialog', { class: 'settings', attrs: { 'aria-label': t('settings_toolbar_title') } },
     h('div', { class: 'shd' }, h('h2', { textContent: t('settings_toolbar_title') }), close),
     h('section', {}, h('h3', { textContent: t('settings_section_server') }),
@@ -73,10 +82,14 @@ export function openSettings(store: SettingsStore, ctx: SettingsContext) {
     h('section', {}, h('h3', { textContent: t('performance_title') }),
       row(t('audio3d_title'), seg([[t('performance_audio3d_scene'), s.audio3dScene], [t('performance_audio3d_flat'), !s.audio3dScene]], (i) => store.set('audio3dScene', i === 0), t('audio3d_title')))),
     h('section', {}, h('h3', { textContent: t('settings_section_about') }),
-      h('p', { class: 'muted', textContent: `Fision Web ${t('about_version_fmt', ctx.webVersion)}` })));
+      h('p', { class: 'muted', textContent: `Fision Web ${t('about_version_fmt', ctx.webVersion)}` }),
+      h('div', { class: 'srow' }, h('span', { class: 'stx' }, h('b', { textContent: t('settings_tour_title') }), tourNote), tourBtn),
+      row(t('licenses_title'), licBtn)));
   close.onclick = () => dlg.close();
   out.onclick = () => { if (confirm(t('settings_logout_confirm'))) { dlg.close(); ctx.onLogout(); } };
-  dlg.addEventListener('close', () => dlg.remove());
+  tourBtn.onclick = () => { resetTours(); tourAgain = true; tourNote.hidden = false; };
+  licBtn.onclick = () => openLicenses();
+  dlg.addEventListener('close', () => { dlg.remove(); if (tourAgain) ctx.onTourReset(); });
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // clic fuera
   document.body.append(dlg);
   dlg.showModal();

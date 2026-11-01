@@ -12,6 +12,7 @@ import { ChordStrip } from './chordStrip.ts';
 import { ChordDiagrams } from './chordDiagrams.ts';
 import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
 import { DOWNBEAT_SOUNDS } from '../settings.ts';
+import { startTour, views, type LegendRow, type Step } from './coachMark.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
 import icChords from '../assets/icons/ic_chord_carousel.svg';
 import icItd from '../assets/icons/ic_itd.png';
@@ -105,6 +106,10 @@ export class PlayerView {
   private scene3dLoading = false;
   private dead = false;
   private card: { cover: string | null; title: string; artist: string };
+  private seg: HTMLElement;
+  private acts: HTMLElement;
+  private menuBtn: HTMLElement;
+  private tourWanted = false; // el tour espera a la vista Mezcla
 
   constructor(p: Player, song: LibraryEntry, cover: string | null, hooks: PlayerHooks) {
     this.p = p; this.hooks = hooks;
@@ -121,8 +126,9 @@ export class PlayerView {
     const menuBtn = h('button', { class: 'ib', attrs: { 'aria-label': t('web_menu'), 'aria-haspopup': 'dialog' } }, img(icMenu, '', ''));
     menuBtn.onclick = () => this.menuPop(menuBtn, top);
     top.append(menuBtn);
+    this.menuBtn = menuBtn;
 
-    const seg = h('div', { class: 'seg2', attrs: { role: 'tablist' } });
+    const seg = this.seg = h('div', { class: 'seg2', attrs: { role: 'tablist' } });
     const tab = (v: View, label: string, icon: string | null, svgMarkup = '') => {
       const b = h('button', { attrs: { role: 'tab', 'aria-selected': String(v === this.view) }, onclick: () => this.setView(v) }, icon ? img(icon, '', '') : '', label);
       if (svgMarkup) withSvg(b, svgMarkup);
@@ -151,7 +157,7 @@ export class PlayerView {
       b.onclick = () => fn(b);
       return b;
     };
-    const acts = h('div', { class: 'acts' },
+    const acts = this.acts = h('div', { class: 'acts' },
       act(icRepeat, '', t('web_repeat'), this.repeatVal, () => { p.cycleRepeat(); this.refreshActs(); }),
       act(icPitch, '', t('cd_pitch'), this.pitchVal, (b) => this.pitchPop(b, acts)),
       p.hasMetronome ? act(icMetronome, '', t('cd_metronome'), this.metroVal, (b) => this.metroPop(b, acts)) : null,
@@ -244,12 +250,42 @@ export class PlayerView {
     this.raf = requestAnimationFrame(this.loop);
   };
 
+  /** Tour del reproductor (maybeStartPlayerTour): primera cancion abierta, solo sobre la vista Mezcla.
+   *  Si se abre en otra vista, espera a que se elija Mezcla. */
+  maybeTour() {
+    this.tourWanted = true;
+    if (this.dead || this.view !== 'mix' || !this.p.stems.length) return;
+    if (startTour('player', this.tourSteps())) this.tourWanted = false;
+  }
+
+  private tourSteps(): Step[] {
+    const row = this.viewBox.querySelector('.stem');
+    const icon = (b: Element | null | undefined) => b?.querySelector('img, svg')?.cloneNode(true) ?? null;
+    const legend = (pairs: [Element | null | undefined, string][]) => pairs.flatMap(([b, label]): LegendRow[] => {
+      const ic = icon(b);
+      return ic && b?.checkVisibility() ? [{ icon: ic, label }] : [];
+    });
+    const tab = (v: View) => this.tabs.get(v);
+    const act = (i: number) => this.acts.children[i];
+    return [
+      { target: views(this.seg), title: t('web_coach_views_title'), corner: 20, legend: legend([[tab('lyrics'), t('coach_pl_bar_lyrics')],
+        [tab('chords'), t('coach_pl_bar_chords')], [tab('mix'), t('web_coach_view_mix')], [tab('3d'), t('coach_pl_bar_3d')]]) },
+      { target: views(row?.querySelector('.btn-ic'), row?.querySelector('.solo')), title: t('coach_pl_icon_title'), body: t('web_coach_icon_body'), corner: 14 },
+      { target: views(row?.querySelector('.sl'), row?.querySelector('.rs')), title: t('coach_pl_volume_title'), body: t('coach_pl_volume_body'), corner: 14 },
+      { target: views(row?.querySelector('.nm')), title: t('coach_pl_options_title'), body: t('web_coach_options_body'), corner: 10 },
+      { target: views(this.acts), title: t('coach_pl_bar_title'), corner: 24, legend: legend([[act(0), t('coach_pl_bar_repeat')], [act(1), t('coach_pl_bar_pitch')],
+        ...(this.p.hasMetronome ? [[act(2), t('web_coach_bar_metronome')] as [Element, string]] : []), [act(this.acts.children.length - 1), t('web_coach_bar_tempo')]]) },
+      { target: views(this.menuBtn), title: t('coach_pl_menu_title'), body: t('web_coach_menu_body') },
+    ];
+  }
+
   private setView(v: View) {
     this.view = v;
     try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
     for (const [k, b] of this.tabs) b.setAttribute('aria-selected', String(k === v));
     this.hooks.onView?.(v);
     this.renderView();
+    if (v === 'mix' && this.tourWanted) setTimeout(() => this.maybeTour(), 400); // tras las filas
   }
 
   private renderView() {

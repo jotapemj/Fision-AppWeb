@@ -20,6 +20,18 @@ test('las claves web existen en ingles y espanol', () => {
   expect(!miss.length, `faltan: ${miss}`);
 });
 
+test('cada t(\'clave\') del codigo existe (si no, se ve la clave en pantalla)', () => {
+  const files = fs.readdirSync(path.join(ROOT, 'src'), { recursive: true }).filter((f) => /\.ts$/.test(f));
+  const used = new Set();
+  // Literales dentro de t(...): tambien t(on ? 'a_on' : 'a_off') y t(['x_a', 'x_b'][i])
+  for (const f of files) for (const m of fs.readFileSync(path.join(ROOT, 'src', f), 'utf8').matchAll(/\bt\(([^()]*)/g)) {
+    for (const k of m[1].matchAll(/(?<!===?\s*)'([a-z0-9]+_[a-z0-9_]+)'/g)) used.add(k[1]); // no las comparaciones
+  }
+  const miss = [...used].filter((k) => !(k in android.en) && !(k in web.en));
+  expect(!miss.length, `sin texto: ${miss.join(', ')}`);
+  return `${used.size} claves usadas`;
+});
+
 test('mismos placeholders en todos los idiomas', () => {
   const bad = [];
   for (const [lang, tab] of Object.entries({ ...android, ...{} })) {

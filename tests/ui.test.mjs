@@ -188,6 +188,8 @@ test('login, estados de la lista, descarga y apertura', async () => {
   try {
     await p.goto(c.url);
     await p.waitFor(`document.querySelector('.login form')`, 30000);
+    // Tours ya vistos: el resto de pruebas no los quiere encima (los mira su propia prueba)
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`);
     await p.eval(`(()=>{const [u,w]=document.querySelectorAll('.login input');u.value='demo';w.value='pw';document.querySelector('.login form').requestSubmit();})()`);
     await p.waitFor(`document.querySelectorAll('.dr').length === 3`);
     const rows = await p.eval(`[...document.querySelectorAll('.dr')].map(r => [r.querySelector('b').textContent, !!r.querySelector('.spin'), !!r.querySelector('.bad'), r.classList.contains('cld')])`);
@@ -1004,6 +1006,92 @@ test('sin red: entra con la sesion guardada, biblioteca y playlists de la copia 
   await p.eval(`dispatchEvent(new Event('online'))`);
   await p.waitFor(`!document.querySelector('.me .who span.off')`, 8000);
   return `${st.srv}; ${st.rows.split('|').length} filas; suena una descargada`;
+});
+
+test('tour: biblioteca al entrar (Escape lo repite, Omitir lo cierra); reproductor sobre Mezcla con leyendas; Ver tour', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`localStorage.removeItem('fision.onboarding'); localStorage.setItem('fision.view', 'mix')`);
+  await p.goto(c.url);
+  await p.waitFor(`document.querySelector('.coach.in .coach-card')`, 15000);
+  await new Promise((r) => setTimeout(r, 300));
+  // Paso 1: el hueco rodea "Anadir", la tarjeta no lo tapa, y el clic no llega a lo de debajo
+  const s1 = await p.eval(`(() => {
+    const ring = document.querySelector('.coach-ring').getBoundingClientRect(), add = document.querySelector('.addb').getBoundingClientRect();
+    const card = document.querySelector('.coach-card').getBoundingClientRect();
+    const inside = ring.left <= add.left && ring.top <= add.top && ring.right >= add.right && ring.bottom >= add.bottom;
+    const hit = card.left < ring.right && ring.left < card.right && card.top < ring.bottom && ring.top < card.bottom;
+    const top = document.elementFromPoint(add.left + add.width / 2, add.top + add.height / 2);
+    return { n: document.querySelector('.coach-n').textContent, inside, hit, blocked: !!top?.closest('.coach'), clip: getComputedStyle(document.querySelector('.coach-veil')).clipPath.startsWith('path') };
+  })()`);
+  expect(s1.n === '1/6' && s1.inside && !s1.hit && s1.blocked && s1.clip, `paso 1: ${JSON.stringify(s1)}`);
+  // Clic dentro del hueco = siguiente; el hueco se desliza al buscador
+  await p.eval(`(() => { const r = document.querySelector('.addb').getBoundingClientRect(); document.querySelector('.coach').dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + 5, clientY: r.top + 5 })); })()`);
+  await new Promise((r) => setTimeout(r, 600));
+  const s2 = await p.eval(`(() => { const ring = document.querySelector('.coach-ring').getBoundingClientRect(), f = document.querySelector('.find').getBoundingClientRect();
+    return { n: document.querySelector('.coach-n').textContent, inside: ring.left <= f.left && ring.top <= f.top && ring.right >= f.right && ring.bottom >= f.bottom }; })()`);
+  expect(s2.n === '2/6' && s2.inside, `paso 2: ${JSON.stringify(s2)}`);
+  // Escape = salir a medias: se va y no queda hecho
+  await p.eval(`document.querySelector('.coach').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await p.waitFor(`!document.querySelector('.coach')`, 3000);
+  const afterEsc = await p.eval(`localStorage.getItem('fision.onboarding')`);
+  expect(afterEsc === null, `Escape no lo da por hecho: ${afterEsc}`);
+  await p.goto(c.url);
+  await p.waitFor(`document.querySelector('.coach.in .coach-skip')`, 15000);
+  await p.eval(`document.querySelector('.coach-skip').click()`);
+  await p.waitFor(`!document.querySelector('.coach')`, 3000);
+  const lib = await p.eval(`JSON.parse(localStorage.getItem('fision.onboarding')).library`);
+  expect(lib === true, 'Omitir lo da por hecho');
+  // Reproductor: al abrir la descargada, sobre Mezcla
+  await p.eval(`[...document.querySelectorAll('.dr')].find((r) => !r.classList.contains('cld')).click()`);
+  await p.waitFor(`document.querySelector('.coach.in .coach-card')`, 20000);
+  await new Promise((r) => setTimeout(r, 300));
+  const pl1 = await p.eval(`({ n: document.querySelector('.coach-n').textContent, t: document.querySelector('.coach-t').textContent,
+    legend: [...document.querySelectorAll('.coach-lg > div')].map((d) => !!d.querySelector('img, svg') + ':' + d.textContent) })`);
+  expect(pl1.n === '1/6' && pl1.legend.length === 4 && pl1.legend.every((l) => l.startsWith('true:')), `reproductor paso 1: ${JSON.stringify(pl1)}`);
+  const seen = [pl1.t];
+  for (let i = 0; i < 6 && await p.eval(`!!document.querySelector('.coach-next')`); i++) {
+    const n = await p.eval(`document.querySelector('.coach-n').textContent`);
+    if (n === '5/6') seen.push(`barra con ${await p.eval(`document.querySelectorAll('.coach-lg > div').length`)} leyendas`);
+    await p.eval(`document.querySelector('.coach-next').click()`);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  await p.waitFor(`!document.querySelector('.coach')`, 3000);
+  const done = await p.eval(`JSON.parse(localStorage.getItem('fision.onboarding'))`);
+  expect(done.player === true && seen.includes('barra con 4 leyendas'), `reproductor: ${JSON.stringify(done)} ${seen}`);
+  // Ver tour (Ajustes): aviso en la fila, y al cerrar empieza el de la biblioteca
+  await p.eval(`document.querySelector('.me .gear').click()`);
+  await p.waitFor(`document.querySelector('dialog.settings[open]')`, 3000);
+  await p.eval(`[...document.querySelectorAll('dialog.settings .btn.ghost')].find((b) => /Ver tour|View tour/.test(b.textContent)).click()`);
+  const note = await p.eval(`[...document.querySelectorAll('dialog.settings small[role=status]')].some((s) => !s.hidden && s.checkVisibility())`);
+  await p.eval(`document.querySelector('dialog.settings .xbtn').click()`);
+  await p.waitFor(`document.querySelector('.coach.in')`, 5000);
+  await p.eval(`document.querySelector('.coach-skip').click()`);
+  await p.waitFor(`!document.querySelector('.coach')`, 3000);
+  expect(note, 'aviso de Ver tour');
+  return `biblioteca 6 pasos (Escape repite, Omitir cierra); reproductor: ${seen.join(' · ')}; Ver tour vuelve a empezar`;
+});
+
+test('licencias: lista desde Ajustes, detalle con texto y enlace, volver', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`document.querySelector('.me .gear').click()`);
+  await p.waitFor(`document.querySelector('dialog.settings[open]')`, 3000);
+  await p.eval(`[...document.querySelectorAll('dialog.settings .btn.ghost')].find((b) => /licencias|licenses/i.test(b.textContent)).click()`);
+  await p.waitFor(`document.querySelector('dialog.licenses[open] .lic-row')`, 3000);
+  const rows = await p.eval(`[...document.querySelectorAll('.lic-row b')].map((b) => b.textContent)`);
+  await p.eval(`[...document.querySelectorAll('.lic-row')].find((r) => r.textContent.startsWith('three.js')).click()`);
+  const det = await p.eval(`({ title: document.querySelector('dialog.licenses h2').textContent, text: document.querySelector('.lic-text').textContent,
+    href: document.querySelector('.lic-visit').href, rel: document.querySelector('.lic-visit').rel,
+    hscroll: document.querySelector('dialog.licenses').scrollWidth > document.querySelector('dialog.licenses').clientWidth })`);
+  await p.eval(`document.querySelector('dialog.licenses .btn.ghost').click()`);
+  const back = await p.eval(`document.querySelectorAll('dialog.licenses .lic-row').length`);
+  await p.eval(`document.querySelector('dialog.licenses .xbtn').click(); document.querySelector('dialog.settings .xbtn').click()`);
+  for (const need of ['SoundTouch', 'three.js', 'mp4-muxer', 'Emscripten', 'KEMAR HRTF dataset', 'Noto Sans']) expect(rows.includes(need), `falta ${need}: ${rows}`);
+  expect(det.title === 'three.js' && det.text.includes('three.js authors') && det.href === 'https://threejs.org/' && det.rel.includes('noopener') && !det.hscroll,
+    `detalle: ${JSON.stringify({ ...det, text: det.text.slice(0, 40) })}`);
+  expect(back === rows.length, `volver: ${back}`);
+  return `${rows.length} entradas; detalle con texto y enlace`;
 });
 
 test('sin excepciones en la pagina', async () => {

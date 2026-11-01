@@ -598,3 +598,38 @@ dialog.expdlg { width: min(460px, calc(100% - 32px)); }
 .menu-pop .dblist button { text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--text-soft); }
 .menu-pop .dblist button:hover { background: rgba(255,255,255,.06); color: var(--text); }
 .menu-pop .dblist button[aria-checked=true] { color: var(--accent); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ---------- Tour guiado (CoachMarkOverlay): velo desenfocado con hueco, aro de acento, tarjeta ---------- */
+.coach { position: fixed; inset: 0; z-index: 1000; opacity: 0; transition: opacity 200ms; }
+.coach.in { opacity: 1; }
+.coach-veil { position: absolute; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(10px); }
+.coach-ring { position: absolute; border: 2px solid var(--accent); pointer-events: none; outline: 2px solid transparent; outline-offset: 0; }
+.coach-ring.pulse { animation: coach-pulse 700ms linear; }
+@keyframes coach-pulse { from { outline-color: color-mix(in srgb, var(--accent) 78%, transparent); outline-offset: 0; } to { outline-color: transparent; outline-offset: 14px; } }
+.coach-card { position: absolute; left: 0; top: 0; width: min(360px, calc(100vw - 32px)); padding: 18px 22px 10px; border-radius: var(--r-card);
+  background: var(--surface-1); box-shadow: 0 8px 28px rgba(0,0,0,.5); transition: opacity 160ms; }
+.coach-card.out { opacity: 0; transition-duration: 120ms; }
+.coach-n { display: block; color: rgba(255,255,255,.6); font-size: 12px; }
+.coach-t { display: block; margin-top: 4px; font-size: 18px; font-weight: 700; }
+.coach-b { margin-top: 6px; color: rgba(255,255,255,.85); font-size: 14px; line-height: 1.45; }
+.coach-lg { margin-top: 4px; }
+.coach-lg > div { display: flex; align-items: center; gap: 14px; padding: 5px 0; color: rgba(255,255,255,.85); font-size: 14px; }
+.coach-lg img, .coach-lg svg { width: 24px; height: 24px; flex: none; }
+.coach-row { display: flex; align-items: center; justify-content: space-between; margin: 10px -10px 0; }
+.coach-skip { padding: 8px 10px; border-radius: 18px; color: rgba(255,255,255,.7); font-size: 14px; }
+.coach-skip:hover { background: var(--press); color: var(--text); }
+.coach-next { padding: 8px 18px; border-radius: 20px; background: var(--accent); color: var(--on-accent); font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .coach, .coach-card { transition: none; } .coach-ring.pulse { animation: none; } }
+
+/* ---------- Licencias (LicensesActivity / LicenseDetailActivity) ---------- */
+.lic-list { display: flex; flex-direction: column; margin-top: 8px; }
+.lic-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 10px; border-radius: var(--r-row); text-align: left; }
+.lic-row:hover { background: var(--hover); }
+.lic-row small, .lic-meta { color: var(--text-muted); font-size: 13px; }
+.lic-meta { margin-top: 14px; }
+.lic-text { margin-top: 14px; padding: 14px; border-radius: var(--r-input); background: var(--surface-2); color: var(--text-soft);
+  font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lic-visit { display: inline-flex; align-items: center; margin-top: 14px; height: 36px; padding: 0 14px; border-radius: var(--r-input);
+  background: rgba(255,255,255,.08); color: var(--text); font-size: 13px; text-decoration: none; }
+.lic-visit:hover { background: rgba(255,255,255,.14); }
+.settings .srow .btn.ghost { flex: none; }

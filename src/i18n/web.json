@@ -47,7 +47,17 @@
   "web_upload_failed_status": "Upload failed ({1})",
   "web_upload_cancel": "Cancel upload",
   "web_upload_progress": "{1} of {2}",
-  "web_upload_sent": "Song sent to the server"
+  "web_upload_sent": "Song sent to the server",
+  "web_coach_add_body": "Pick an audio file and choose how to split it.",
+  "web_coach_song_body": "Click a song to play it. The ⋯ button holds its options: retry or delete.",
+  "web_coach_views_title": "Views",
+  "web_coach_view_mix": "Stem mixer",
+  "web_coach_icon_body": "Click a stem's icon to mute it. S solos it; several stems can be soloed at once.",
+  "web_coach_options_body": "Click the name: pan, effects and export of that stem.",
+  "web_coach_bar_metronome": "Dynamic metronome",
+  "web_coach_bar_tempo": "Tempo in BPM",
+  "web_coach_menu_body": "Animated background, downbeat sound, chord version, reprocess and export.",
+  "web_licenses_back": "Back"
  },
  "es": {
   "web_search": "Buscar",
@@ -97,6 +107,16 @@
   "web_upload_failed_status": "Error al subir ({1})",
   "web_upload_cancel": "Cancelar subida",
   "web_upload_progress": "{1} de {2}",
-  "web_upload_sent": "Canción enviada al servidor"
+  "web_upload_sent": "Canción enviada al servidor",
+  "web_coach_add_body": "Elige un archivo de audio y cómo separarlo.",
+  "web_coach_song_body": "Haz clic en una canción para reproducirla. El botón ⋯ tiene sus opciones: reintentar o borrar.",
+  "web_coach_views_title": "Vistas",
+  "web_coach_view_mix": "Mezclador de stems",
+  "web_coach_icon_body": "Haz clic en el icono de un stem para silenciarlo. S lo deja solo; puede haber varios en solo a la vez.",
+  "web_coach_options_body": "Haz clic en el nombre: balance, efectos y exportación de ese stem.",
+  "web_coach_bar_metronome": "Metrónomo dinámico",
+  "web_coach_bar_tempo": "Velocidad en BPM",
+  "web_coach_menu_body": "Fondo animado, sonido en downbeat, versión de acordes, reprocesar y exportar.",
+  "web_licenses_back": "Volver"
  }
 }
