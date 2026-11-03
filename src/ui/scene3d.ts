@@ -15,6 +15,8 @@ import {
 } from '../player/audio3d.ts';
 import { iconOf } from './stemIcons.ts';
 import { addPanels, addStudioWall, addTraps, PANEL_COLOR, SongScreen, TRAP_COLOR } from './scene3dDecor.ts';
+import { sceneSpinner } from './curtain.ts';
+import { danceTabPill, fillDancePanel } from './dancePanel.ts';
 import { h, img, setSlider, slider } from './dom.ts';
 
 // Camara inicial (DEF_* de Android): detras de la cabeza, mirando la pared frontal
@@ -180,7 +182,7 @@ export class Scene3D {
   // chrome
   private canvasBox = h('div', { class: 'd3c' });
   private veil = h('div', { class: 'd3veil' });
-  private loading = h('div', { class: 'd3load', attrs: { role: 'status', 'aria-label': t('web_3d_loading') } }, h('span', { class: 'spin' }));
+  private loading = sceneSpinner(t('web_3d_loading'));
   private sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-label': t('audio3d_title') } });
   private dist = slider(MIN_DISTANCE, MAX_DISTANCE, 0.05, 1.5, t('stems_dance_distance'));
   private distTip = h('span', { class: 'd3tip' });
@@ -287,7 +289,7 @@ export class Scene3D {
     this.danceBtn.onclick = () => (this.dance.active ? this.stopDance() : this.danceDialog());
     const btns = h('div', { class: 'd3btns' }, this.danceBtn, this.resetBtn);
     const bottom = h('div', { class: 'd3bottom' }, legend, h('span', { class: 'sp' }), this.panel, btns);
-    this.el.append(this.canvasBox, this.veil, h('div', { class: 'd3chrome' }, head, side, bottom), this.loading);
+    this.el.append(this.canvasBox, this.veil, h('div', { class: 'd3chrome' }, head, side, bottom), this.loading.el);
   }
 
   private buildRoom() {
@@ -366,8 +368,7 @@ export class Scene3D {
       console.warn('head.glb', e);
     }
     this.dirty = true;
-    this.loading.classList.add('out');
-    setTimeout(() => this.loading.remove(), 320);
+    this.loading.finish();
   }
 
   private buildSprites() {
@@ -500,6 +501,8 @@ export class Scene3D {
     if (!r || !w || !hh) return;
     r.setSize(w, hh, false);
     this.camera.aspect = w / hh;
+    // En vertical, la lente de Filament (sensor de 24 mm en alto) = la de Android; en horizontal, 35 mm en el lado largo
+    this.camera.filmGauge = w < hh ? 24 : 35;
     this.camera.setFocalLength(FOCAL_MM); // la lente fija el campo con el nuevo aspecto
     this.dirty = true;
   }
@@ -718,15 +721,16 @@ export class Scene3D {
   }
 
   /** Panel del baile: pestanas Velocidad / Distancia / Swing; slider + valor con unidad. */
-  private renderPanel() {
+  private renderPanel(fromTab = -1) {
     this.panel.hidden = !this.dance.active;
     if (!this.dance.active) { this.panel.replaceChildren(); return; }
     const hasSwing = this.dance.swingIds.size > 0;
     if (!hasSwing && this.danceTab === 'swing') this.danceTab = 'speed';
-    const tabs = h('div', { class: 'seg', attrs: { role: 'tablist' } });
+    const tabs = h('div', { class: 'seg dtabs', attrs: { role: 'tablist' } });
     const tabsDef: [DanceTab, string][] = [['speed', t('stems_dance_speed')], ['distance', t('stems_dance_distance')]];
     if (hasSwing) tabsDef.push(['swing', t('dance_tab_swing')]);
-    for (const [k, label] of tabsDef) tabs.append(h('button', { textContent: label, attrs: { role: 'tab', 'aria-checked': String(k === this.danceTab) }, onclick: () => { this.danceTab = k; this.renderPanel(); } }));
+    const tabIndex = (k: DanceTab) => tabsDef.findIndex(([d]) => d === k);
+    for (const [k, label] of tabsDef) tabs.append(h('button', { textContent: label, attrs: { role: 'tab', 'aria-checked': String(k === this.danceTab) }, onclick: () => { const from = tabIndex(this.danceTab); this.danceTab = k; this.renderPanel(from); } }));
     const val = h('span', { class: 'fxv' });
     let row: HTMLElement;
     if (this.danceTab === 'speed') {
@@ -751,7 +755,9 @@ export class Scene3D {
       who.onclick = () => { this.swingStem = ids[(ids.indexOf(stem) + 1) % ids.length]; this.select(this.swingStem); this.renderPanel(); };
       sync(); row = h('div', { class: 'drow' }, who, r, val);
     }
-    this.panel.replaceChildren(tabs, row);
+    const now = tabIndex(this.danceTab);
+    danceTabPill(tabs, fromTab < 0 ? now : fromTab, now);
+    fillDancePanel(this.panel, tabs, row);
   }
 
   private infoDialog() {

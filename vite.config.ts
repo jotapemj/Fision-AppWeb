@@ -42,9 +42,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    allowedHosts: ['.ts.net'], // movil por tailscale serve
     headers: isolation,
     proxy,
   },
-  preview: { port: 4173, headers: isolation, proxy },
+  preview: { port: 4173, allowedHosts: ['.ts.net'], headers: isolation, proxy },
   build: { target: 'es2022' },
 });

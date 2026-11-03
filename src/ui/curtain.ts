@@ -1,17 +1,17 @@
 // Telon de carga de cancion (brand/FisionLoadingSurface de Android): negro con el
 // nucleo-spinner blanco; al terminar la carga el anillo se cierra, se reproduce la
 // fision, se mantiene la marca y el telon se funde. Carga muy rapida: solo fundido.
-import { APPEAR, ATOM_RM, ATOM_SW, ATOM_X, ATOM_Y, MIN_SPIN, NO_TF, SETTLED, c01, closeArc, closePlan, drawMark, steady, warp, type ClosePlan, type MarkState } from '../brand/fisionMotion.ts';
+import { APPEAR, MARK_MAX, MARK_MIN, ATOM_RM, ATOM_SW, ATOM_X, ATOM_Y, MIN_SPIN, NO_TF, SETTLED, c01, closeArc, closePlan, drawMark, steady, warp, type ClosePlan, type MarkState } from '../brand/fisionMotion.ts';
 
 const FADE_OUT_MS = 280, QUICK_FADE_MS = 180, HOLD_MS = 250, QUICK_MS = 250;
 const NUCLEUS_PX = 64;
-const MARK_MIN = -20, MARK_MAX = 532; // limites de la marca asentada, para el fundido
 
 export class Curtain {
   readonly el = document.createElement('canvas');
   private ctx = this.el.getContext('2d')!;
   private mark = document.createElement('canvas'); // fundido de la marca entera (sin solapes de alpha)
   private start = -1;
+  private nucleus = NUCLEUS_PX;
   private fadeIn: number;
   private onCovered: (() => void) | null;
   private readyAt = -1;
@@ -24,8 +24,10 @@ export class Curtain {
   readonly covered: Promise<void>;
 
   /** fadeInMs 0 = opaco desde el principio (apertura); 220 al cambiar de cancion. */
-  constructor(fadeInMs: number) {
-    this.el.className = 'curtain-c';
+  constructor(fadeInMs: number, opts: { nucleus?: number; cls?: string; start?: number } = {}) {
+    this.el.className = opts.cls ?? 'curtain-c';
+    this.nucleus = opts.nucleus ?? NUCLEUS_PX;
+    this.start = opts.start ?? -1;
     this.el.setAttribute('role', 'status');
     this.fadeIn = fadeInMs;
     let res!: () => void;
@@ -81,7 +83,7 @@ export class Curtain {
     if (a <= 0) return;
     ctx.fillStyle = `rgba(0,0,0,${a})`;
     ctx.fillRect(0, 0, w, h);
-    const k = NUCLEUS_PX * dpr / (2 * (ATOM_RM + ATOM_SW / 2));
+    const k = this.nucleus * dpr / (2 * (ATOM_RM + ATOM_SW / 2));
     // Marca opaca en un lienzo aparte y luego con el alpha del telon
     const size = Math.ceil((MARK_MAX - MARK_MIN) * k);
     const m = this.mark, mc = m.getContext('2d')!;
@@ -94,4 +96,20 @@ export class Curtain {
     ctx.drawImage(m, w / 2 - (ATOM_X - MARK_MIN) * k, h / 2 - (ATOM_Y - MARK_MIN) * k);
     ctx.globalAlpha = 1;
   }
+}
+
+// Spinner de la vista 3D (sceneSpinner de Android): 48 px, sin resolver. Dos seguidos (carga del
+// modulo y de la escena) comparten fase para no dar un salto.
+let spinT0 = 0, spinLast = -1e9;
+export function sceneSpinner(label: string): { el: HTMLElement; finish: () => void } {
+  const now = performance.now();
+  if (now - spinLast > 500) spinT0 = now;
+  spinLast = now;
+  const c = new Curtain(0, { nucleus: 48, cls: 'd3spin', start: spinT0 });
+  const el = document.createElement('div');
+  el.className = 'd3load';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-label', label);
+  el.append(c.el);
+  return { el, finish: () => { spinLast = performance.now(); c.finish(() => {}, () => el.remove(), false); } };
 }

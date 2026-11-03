@@ -3,6 +3,10 @@ import { t } from '../i18n/i18n.ts';
 import { activeRow, CHORD_LAG_SEC, hasWords, KARAOKE_FADE_SEC, rowWords, switchAt, wordProgress, type LyricRow, type RowChord } from '../player/lyrics.ts';
 import { h, img } from './dom.ts';
 import icChordsOnLyrics from '../assets/icons/ic_chords_on_lyrics.svg';
+import icOverflow from '../assets/icons/ic_lyrics_overflow.svg';
+import icKaraoke from '../assets/icons/ic_karaoke.svg';
+import icReprocess from '../assets/icons/ic_reprocess.svg';
+import { openSheet } from './sheet.ts';
 import { LYRICS_LANGS, type LyricsLang } from '../player/lyricsLangs.ts';
 
 const KARAOKE_PREF = 'fision.lyrics_karaoke_mode'; // lyrics_karaoke_mode, default false
@@ -95,13 +99,29 @@ export class LyricsView {
     const karaokeOk = hasWords(this.rows);
     const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(this.karaoke && karaokeOk), 'aria-label': t('lyrics_karaoke_mode') }, disabled: !karaokeOk,
       title: karaokeOk ? '' : t('lyrics_karaoke_unavailable') });
-    sw.onclick = () => { this.karaoke = !this.karaoke; saveKaraoke(this.karaoke); sw.setAttribute('aria-checked', String(this.karaoke)); this.scroller.classList.toggle('kar', this.karaoke); this.active = -2; };
-    const opts = h('div', { class: 'lyopts' }, h('label', {}, t('lyrics_karaoke_mode'), sw));
+    const setKaraoke = (on: boolean) => { this.karaoke = on; saveKaraoke(on); sw.setAttribute('aria-checked', String(on)); this.scroller.classList.toggle('kar', on); this.active = -2; };
+    sw.onclick = () => setKaraoke(!this.karaoke);
+    const opts = h('div', { class: 'lyopts' }, h('label', { class: 'lykar' }, t('lyrics_karaoke_mode'), sw));
     if (this.actions) {
-      const rp = h('button', { class: 'btn ghost', textContent: t('lyrics_reprocess') });
+      const rp = h('button', { class: 'btn ghost lyrp', textContent: t('lyrics_reprocess') });
       rp.onclick = () => this.actions?.reprocess();
       opts.append(rp);
     }
+    // Movil: ⋮ (b_lyricsOptions) = hoja de opciones (LyricsOptionsBottomSheet): karaoke y reprocesar
+    const more = h('button', { class: 'lymore', attrs: { 'aria-label': t('lyrics_options_title'), 'aria-haspopup': 'dialog' } }, img(icOverflow, '', ''));
+    more.onclick = () => openSheet(t('lyrics_options_title'), (body, close) => {
+      const ksw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(this.karaoke && karaokeOk), 'aria-label': t('lyrics_karaoke_mode') }, disabled: !karaokeOk });
+      ksw.onclick = () => { setKaraoke(!this.karaoke); ksw.setAttribute('aria-checked', String(this.karaoke)); };
+      const kRow = h('div', { class: 'lyorow' }, img(icKaraoke, '', ''), h('span', { class: 'lyot' }, h('b', { textContent: t('lyrics_karaoke_mode') }),
+        karaokeOk ? '' : h('small', { textContent: t('lyrics_karaoke_unavailable') })), ksw);
+      body.append(h('h2', { class: 'lyoh', textContent: t('lyrics_options_title') }), kRow);
+      if (this.actions) {
+        const rRow = h('button', { class: 'lyorow' }, img(icReprocess, '', ''), h('span', { class: 'lyot' }, h('b', { textContent: t('lyrics_reprocess') })));
+        rRow.onclick = () => { close(); this.actions?.reprocess(); };
+        body.append(rRow);
+      }
+    }, undefined, this.el);
+    opts.append(more);
     this.lines = []; this.words = [];
     const fmt = state.fmt ?? ((c: string | null) => c ?? '');
     this.chords = state.chords ?? [];

@@ -12,7 +12,8 @@ import { currentBeat, type BeatCell } from '../player/chords.ts';
 import { ChordGrid } from './chordGrid.ts';
 import { ChordStrip } from './chordStrip.ts';
 import { ChordDiagrams } from './chordDiagrams.ts';
-import { dismissable, fmtTime, h, img, setSlider, slider } from './dom.ts';
+import { sceneSpinner } from './curtain.ts';
+import { animateSlider, dismissable, fmtTime, h, img, reducedMotion, setSlider, slider } from './dom.ts';
 import { DOWNBEAT_SOUNDS } from '../settings.ts';
 import { startTour, views, type LegendRow, type Step } from './coachMark.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
@@ -79,7 +80,26 @@ function loadView(): View { try { const v = localStorage.getItem(VIEW_PREF); ret
 
 const withSvg = (el: HTMLElement, markup: string) => { el.insertAdjacentHTML('afterbegin', markup); return el; };
 /** Icono tintable (MaterialButton iconTint): mascara con el color del texto. */
-const maskIcon = (url: string, cls = 'mi') => { const e = h('span', { class: cls, attrs: { 'aria-hidden': 'true' } }); e.style.setProperty('--ic', `url("${url}")`); return e; };
+// Iconos por mascara ya en memoria (data:): cada vuelta a la mezcla rehace las filas y la mascara por url
+// se queda en blanco mientras la red responde
+const iconData = new Map<string, string>();
+async function cacheIcon(url: string) {
+  if (iconData.has(url) || url.startsWith('data:')) return;
+  iconData.set(url, url); // no pedirlo dos veces
+  try {
+    const blob = await (await fetch(url)).blob();
+    const data = await new Promise<string>((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result as string); fr.onerror = rej; fr.readAsDataURL(blob); });
+    iconData.set(url, data);
+    document.querySelectorAll<HTMLElement>('[data-ic]').forEach((e) => { if (e.dataset.ic === url) e.style.setProperty('--ic', `url("${data}")`); });
+  } catch { iconData.delete(url); }
+}
+const maskIcon = (url: string, cls = 'mi') => {
+  const e = h('span', { class: cls, attrs: { 'aria-hidden': 'true' } });
+  e.dataset.ic = url;
+  e.style.setProperty('--ic', `url("${iconData.get(url) ?? url}")`);
+  void cacheIcon(url);
+  return e;
+};
 const MORE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="5.5" r="2" fill="#fff"/><circle cx="12" cy="12" r="2" fill="#fff"/><circle cx="12" cy="18.5" r="2" fill="#fff"/></svg>';
 const LONG_PRESS_MS = 450;
 type MOpt = 'repeat' | 'lyrics' | 'pitch' | 'metro' | 'chords' | '3d';
@@ -126,7 +146,9 @@ export class PlayerView {
   private tourWanted = false; // el tour espera a la vista Mezcla
   // --- movil ---
   private mobile = false;
-  private stripSlot = h('div', { class: 'mstrip', hidden: true });
+  private stripSlot = h('div', { class: 'mstrip off', hidden: true });
+  private stripTimer = 0;
+  private cascadeOn = true;
   private mBpm = h('p', { class: 'mbpm' });
   private mOpts = new Map<MOpt, HTMLButtonElement>();
   private bpmBeat = -2;
@@ -163,7 +185,8 @@ export class PlayerView {
     tab('3d', t('web_view_3d'), icItd);
     this.tabs.get('3d')!.classList.toggle('on3d', p.audio3d);
     this.main = h('section', { class: 'main' }, top, this.stripSlot, h('div', { class: 'vbar' }, seg), this.viewBox);
-    (this.main as HTMLElement & { player?: Player }).player = p; // acceso de las pruebas
+    (this.main as HTMLElement & { player?: Player; view?: PlayerView }).player = p; // acceso de las pruebas
+    (this.main as HTMLElement & { view?: PlayerView }).view = this;
 
     // --- barra inferior ---
     this.seekEl = slider(0, 1000, 1, 0, t('web_position'));
@@ -251,9 +274,20 @@ export class PlayerView {
   private placeStrip() {
     const c = this.chords;
     const show = this.mobile && !!c && this.view !== '3d' && !(this.view === 'chords' && this.chordGrid) && (this.p.chordsActive || this.view === 'chords');
-    if (show && c.strip.el.parentElement !== this.stripSlot) { this.stripSlot.replaceChildren(c.strip.el); c.strip.invalidate(); this.chordBeat = -2; }
-    if (!show && this.stripSlot.firstChild) this.stripSlot.replaceChildren();
-    this.stripSlot.hidden = !show;
+    const slot = this.stripSlot, was = !slot.hidden && !slot.classList.contains('off');
+    // Siempre la tira actual: los acordes pueden recargarse con la tira ya visible
+    if (show && c!.strip.el.parentElement !== slot) { slot.replaceChildren(c!.strip.el); c!.strip.invalidate(); this.chordBeat = -2; }
+    if (show === was) return;
+    clearTimeout(this.stripTimer);
+    if (show) {
+      slot.hidden = false;
+      void slot.offsetHeight; // parte de la altura 0
+      slot.classList.remove('off');
+    } else {
+      slot.classList.add('off');
+      const end = () => { slot.hidden = true; slot.replaceChildren(); };
+      if (!this.mobile || reducedMotion()) end(); else this.stripTimer = window.setTimeout(end, 460);
+    }
   }
 
   /** Boton de acordes (onChordButton): con diagramas abiertos los cierra; si no, pildora carrusel / diagramas. */
@@ -316,7 +350,7 @@ export class PlayerView {
       [t('metronome_half_variant_a'), t('metronome_half_variant_b')].forEach((l, i) => ab.append(h('button', { textContent: l, attrs: { role: 'radio' }, onclick: () => { p.setHalfVariantB(i === 1); sync(); } })));
       vol.addEventListener('input', () => { p.setMetronome(p.metroOn, p.metroSpeed, +vol.value); });
       pan.addEventListener('input', () => { p.setMetroPan(+pan.value); sync(); });
-      panRs.onclick = () => { p.setMetroPan(0); setSlider(pan, 0); sync(); };
+      panRs.onclick = () => { p.setMetroPan(0); animateSlider(pan, 0); sync(); };
       // Velocidad en BPM absolutos (50..200, referencia = BPM global) o multiplicador sin BPM (0.50..1.50)
       const bpm = p.bpm, show = h('b', { class: 'rval' });
       const label = () => (bpm ? `${p.targetBpm} BPM` : `${p.tempoMult.toFixed(2)}×`);
@@ -364,6 +398,21 @@ export class PlayerView {
     (menu.querySelector('button') as HTMLButtonElement).focus();
   }
 
+  /** Cabecera de bateria: Solo de todas las piezas (si ya estan todas, se quitan). */
+  private drumSoloMenu(anchor: HTMLElement, drums: StemState[]) {
+    if (anchor.getAttribute('aria-expanded') === 'true') return;
+    const all = drums.every((d) => d.solo);
+    const b = h('button', { textContent: t('stem_menu_solo'), attrs: { role: 'menuitemcheckbox', 'aria-checked': String(all) } });
+    const menu = h('div', { class: 'menu rowmenu', attrs: { role: 'menu' } }, b);
+    b.onclick = () => { close(); for (const d of drums) if (d.solo === all) this.p.toggleSolo(d.stem); this.refreshSolo(); };
+    document.body.append(menu);
+    const r = anchor.getBoundingClientRect();
+    menu.style.left = `${r.left}px`; menu.style.top = `${r.bottom + 4}px`;
+    anchor.setAttribute('aria-expanded', 'true');
+    const close = dismissable(menu, () => anchor.setAttribute('aria-expanded', 'false'), [anchor]);
+    b.focus();
+  }
+
   /** Solo: icono en acento; los demas, icono .35 y slider .5 (sin bloquear). */
   private refreshSolo() {
     const any = this.p.stems.some((x) => x.solo);
@@ -373,6 +422,8 @@ export class PlayerView {
       row.classList.toggle('soloout', any && !st?.solo);
       row.querySelector('.solo')?.setAttribute('aria-pressed', String(!!st?.solo));
     });
+    const drums = this.p.stems.filter((x) => isDrumPart(x.stem));
+    this.viewBox.querySelector('.gsolo')?.classList.toggle('on', drums.length > 0 && drums.every((d) => d.solo));
   }
 
   destroy() { this.dead = true; cancelAnimationFrame(this.raf); this.scene3d?.destroy(); this.scene3d = null; }
@@ -494,12 +545,40 @@ export class PlayerView {
     ];
   }
 
+  /** La vista saliente sigue en pantalla, fundiendose, mientras entra la nueva (transitionInto* de Android). */
+  private viewOut() {
+    const kids = [...this.viewBox.childNodes];
+    if (!kids.length || reducedMotion()) return;
+    const b = this.viewBox.getBoundingClientRect();
+    const g = h('div', { class: `${this.viewBox.className} vghost`, attrs: { 'aria-hidden': 'true', inert: '' } }, ...kids);
+    Object.assign(g.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.width}px`, height: `${b.height}px` });
+    this.main.append(g);
+    g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(18px)' }], { duration: 200, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).onfinish = () => g.remove();
+  }
+
+  private viewIn() {
+    if (reducedMotion()) return;
+    this.viewBox.animate([{ opacity: 0, transform: 'scale(.94)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: 120, easing: 'cubic-bezier(0,0,.2,1)', fill: 'backwards' });
+  }
+
+  /** Al revelar la cancion: los sliders suben desde 0 en cascada, 150 ms entre filas (como Android). */
+  revealStems() {
+    if (!this.cascadeOn) return;
+    this.cascadeOn = false;
+    if (this.view !== 'mix' || reducedMotion()) return;
+    const rows = [...this.viewBox.querySelectorAll<HTMLInputElement>('.stem > .sl')];
+    rows.forEach((r, i) => { const to = +r.value; setSlider(r, 0); setTimeout(() => { if (r.isConnected) animateSlider(r, to); }, 150 * i); });
+  }
+
   private setView(v: View) {
+    const changed = v !== this.view;
+    if (changed) this.viewOut();
     this.view = v;
     if (!this.mobile) try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
     for (const [k, b] of this.tabs) b.setAttribute('aria-selected', String(k === v));
     this.hooks.onView?.(v);
     this.renderView();
+    if (changed) this.viewIn();
     if (v === 'mix' && this.tourWanted) setTimeout(() => this.maybeTour(), 400); // tras las filas
   }
 
@@ -543,7 +622,10 @@ export class PlayerView {
       const head = h('button', { class: 'group', attrs: { 'aria-expanded': String(this.drumsOpen) } },
         img(icDrumset, '', ''), `${t('title_drumset')} · ${drums.length}`, h('span', { class: 'chev', textContent: '▾', attrs: { 'aria-hidden': 'true' } }));
       head.onclick = () => { this.drumsOpen = !this.drumsOpen; body.hidden = !this.drumsOpen; head.setAttribute('aria-expanded', String(this.drumsOpen)); };
-      mix.append(head, body);
+      // Movil: el icono de la cabecera abre el menu solo con Solo (todas las piezas a la vez); el resto pliega
+      const gIcon = h('button', { class: 'gsolo', attrs: { 'aria-label': `${t('stem_menu_solo')}: ${t('title_drumset')}` } }, maskIcon(icDrumset, 'mi s'));
+      gIcon.onclick = () => this.drumSoloMenu(gIcon, drums);
+      mix.append(h('div', { class: 'ghead' }, gIcon, head), body);
     }
     const sel = this.p.stems.find((s) => s.stem === this.fxStem) ?? this.p.stems[0];
     this.fxStem = sel?.stem ?? null;
@@ -558,7 +640,7 @@ export class PlayerView {
   private show3D() {
     this.viewBox.className = 'view v3d';
     if (this.scene3d) { this.viewBox.replaceChildren(this.scene3d.el); this.scene3d.watchAccent(this.main); return; }
-    this.viewBox.replaceChildren(h('div', { class: 'd3load', attrs: { role: 'status', 'aria-label': t('web_3d_loading') } }, h('span', { class: 'spin' })));
+    this.viewBox.replaceChildren(sceneSpinner(t('web_3d_loading')).el);
     if (this.scene3dLoading) return;
     this.scene3dLoading = true;
     const hooks = { onEnabled: (on: boolean) => this.tabs.get('3d')!.classList.toggle('on3d', on) };
@@ -602,12 +684,12 @@ export class PlayerView {
       this.viewBox.querySelector(`.stem[data-stem="${s.stem}"]`)?.classList.toggle('fx', fxActive(s.fx));
     };
     pan.addEventListener('input', () => { p.setPan(s.stem, +pan.value); sync(); });
-    pan.ondblclick = () => { p.setPan(s.stem, 0); setSlider(pan, 0); sync(); };
+    pan.ondblclick = () => { p.setPan(s.stem, 0); animateSlider(pan, 0); sync(); };
     fil.addEventListener('input', () => { p.setFx(s.stem, { filter: +fil.value / 100 }); sync(); });
     echo.addEventListener('input', () => { p.setFx(s.stem, { echo: +echo.value / 100 }); sync(); });
     rev.addEventListener('input', () => { p.setFx(s.stem, { reverb: +rev.value / 100 }); sync(); });
     const clear = h('button', { class: 'btn ghost', textContent: t('fx_clear') });
-    clear.onclick = () => { const z = newFx(); p.setFx(s.stem, { filter: 0, echo: 0, reverb: 0, echoDivision: z.echoDivision, room: z.room }); this.renderView(); redo?.(); };
+    clear.onclick = () => { const z = newFx(); p.setFx(s.stem, { filter: 0, echo: 0, reverb: 0, echoDivision: z.echoDivision, room: z.room }); sync(); for (const x of [fil, echo, rev]) animateSlider(x, 0); setTimeout(() => { if (clear.isConnected) { this.renderView(); redo?.(); } }, reducedMotion() ? 0 : 320); };
     // Exportar esta pista (ic_export del bottom sheet de Android; "Exportar" en mix.html)
     const exp = h('button', { class: 'expb', attrs: { 'aria-label': t('export_stem_button_desc') } });
     exp.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 19h14" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>';
@@ -633,14 +715,16 @@ export class PlayerView {
     const r = slider(0, 100, 1, s.volume, name);
     const row = h('div', { class: `stem${s.volume === 0 ? ' muted' : ''}${fxActive(s.fx) ? ' fx' : ''}` });
     row.dataset.stem = s.stem;
-    const sync = () => { val.textContent = String(s.volume); setSlider(r, s.volume); row.classList.toggle('muted', s.volume === 0); };
+    const mark = () => { val.textContent = String(s.volume); row.classList.toggle('muted', s.volume === 0); };
+    const sync = () => { mark(); setSlider(r, s.volume); };
+    const glide = () => { mark(); animateSlider(r, s.volume); }; // el motor ya tiene el valor final
     r.addEventListener('input', () => { this.p.setVolume(s.stem, +r.value); sync(); });
     // Icono = mute/unmute (slider a 0)
     const icon = h('button', { class: 's btn-ic', attrs: { 'aria-label': `${t('cd_stem_mute')}: ${name}` } }, img(iconOf(s.stem, v2), 's', ''), maskIcon(iconOf(s.stem, v2), 'mi s'));
-    icon.onclick = () => { if (this.mobile) this.stemMenu(icon, s, sync); else { this.p.toggleMute(s.stem); sync(); } };
+    icon.onclick = () => { if (this.mobile) this.stemMenu(icon, s, glide); else { this.p.toggleMute(s.stem); glide(); } };
     const solo = h('button', { class: 'solo', textContent: 'S', attrs: { 'aria-pressed': String(s.solo), 'aria-label': `${t('web_solo')}: ${name}` } });
     solo.onclick = () => { this.p.toggleSolo(s.stem); this.refreshSolo(); };
-    const rs = h('button', { class: 'rs', attrs: { 'aria-label': `${t('cd_restore_volume')}: ${name}` }, onclick: () => this.animateTo(s, DEFAULT_VOLUME, sync) }, img(icRestore, '', ''));
+    const rs = h('button', { class: 'rs', attrs: { 'aria-label': `${t('cd_restore_volume')}: ${name}` }, onclick: () => { this.p.setVolume(s.stem, DEFAULT_VOLUME); glide(); } }, img(icRestore, '', ''));
     // Nombre = elegir el stem del panel de FX
     const nm = h('button', { class: 'nm', textContent: name, attrs: { 'aria-label': `${t('cd_stem_options')}: ${name}` } });
     nm.onclick = () => { this.fxStem = s.stem; this.renderView(); };
@@ -648,18 +732,6 @@ export class PlayerView {
     more.innerHTML = MORE_SVG;
     row.append(icon, nm, r, val, solo, rs, more);
     return row;
-  }
-
-  /** Restore: anima el slider hasta 75 (~250 ms). */
-  private animateTo(s: StemState, target: number, sync: () => void) {
-    const from = s.volume, t0 = performance.now();
-    const step = (now: number) => {
-      const k = Math.min(1, (now - t0) / 250), e = 1 - (1 - k) * (1 - k);
-      this.p.setVolume(s.stem, from + (target - from) * e);
-      sync();
-      if (k < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
   }
 
   private popover(anchor: HTMLButtonElement, host: HTMLElement, build: (pop: HTMLElement) => void) {
@@ -763,7 +835,7 @@ export class PlayerView {
       const panV = h('span', { class: 'val' });
       const syncPan = () => { panV.textContent = p.metroPan === 0 ? t('web_center') : p.metroPan < 0 ? `${t('pan_l')} ${-p.metroPan}` : `${t('pan_r')} ${p.metroPan}`; };
       pan.addEventListener('input', () => { p.setMetroPan(+pan.value); syncPan(); });
-      pan.ondblclick = () => { p.setMetroPan(0); setSlider(pan, 0); syncPan(); };
+      pan.ondblclick = () => { p.setMetroPan(0); animateSlider(pan, 0); syncPan(); };
       syncPan();
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_title') }), sw), speeds, ab,
         h('div', { class: 'hd' }, h('span', { textContent: t('tv_metronome_volume') }), volV), vol,

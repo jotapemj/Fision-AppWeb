@@ -2,6 +2,7 @@
 // Arrastrar con el raton (o la rueda) explora sin hacer seek; al soltar se ajusta a una celda y un
 // iman la devuelve al beat actual (scheduleChordsMagnet). Solo el clic en una celda hace seek.
 import { soundingChord, type BeatCell } from '../player/chords.ts';
+import { chordLabel } from './chordLabel.ts';
 import { h } from './dom.ts';
 
 const SLOP_PX = 6;              // menos = clic
@@ -29,7 +30,7 @@ export class ChordStrip {
       // Compas sin acorde propio: se recuerda el sostenido, pequeno y tenue
       let label = c.chord, ghost = false;
       if (!label && c.isDownbeat) { label = soundingChord(cells, i - 1); ghost = !!label; }
-      const el = h('button', { class: `c${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}`, textContent: fmt(label), attrs: { role: 'listitem', tabindex: '-1' } });
+      const el = h('button', { class: `c${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}`, attrs: { role: 'listitem', tabindex: '-1' } }, chordLabel(fmt(label)));
       el.onclick = () => { this.stopBrowsing(); onSeek(c.time); };
       this.cellEls.push(el);
       this.track.append(el);

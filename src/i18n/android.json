@@ -357,7 +357,8 @@
   "lyrics_button_description": "Show lyrics",
   "cd_audio_3d": "3D spatial audio",
   "coach_pl_bar_metronome": "Dynamic metronome and tempo",
-  "coach_pl_icon_body": "Tap a stem's icon to solo or mute it. Several stems can be soloed at once."
+  "coach_pl_icon_body": "Tap a stem's icon to solo or mute it. Several stems can be soloed at once.",
+  "lyrics_options_title": "Options"
  },
  "es": {
   "tab_songs": "Canciones",
@@ -719,7 +720,8 @@
   "lyrics_button_description": "Mostrar letra",
   "cd_audio_3d": "Audio espacial 3D",
   "coach_pl_bar_metronome": "Metrónomo dinámico y tempo",
-  "coach_pl_icon_body": "Toca el icono de una pista para ponerla en solo o silenciarla. Puedes tener varias en solo a la vez."
+  "coach_pl_icon_body": "Toca el icono de una pista para ponerla en solo o silenciarla. Puedes tener varias en solo a la vez.",
+  "lyrics_options_title": "Opciones"
  },
  "ca": {
   "tab_songs": "Cançons",
@@ -1080,7 +1082,8 @@
   "lyrics_button_description": "Mostrar lletra",
   "cd_audio_3d": "Àudio espacial 3D",
   "coach_pl_bar_metronome": "Metrònom dinàmic i tempo",
-  "coach_pl_icon_body": "Toca la icona d'una pista per posar-la en solo o silenciar-la. Pots tenir-ne diverses en solo alhora."
+  "coach_pl_icon_body": "Toca la icona d'una pista per posar-la en solo o silenciar-la. Pots tenir-ne diverses en solo alhora.",
+  "lyrics_options_title": "Opcions"
  },
  "uk": {
   "tab_songs": "Пісні",
@@ -1445,7 +1448,8 @@
   "lyrics_button_description": "Показати текст",
   "cd_audio_3d": "Просторовий 3D-звук",
   "coach_pl_bar_metronome": "Динамічний метроном і темп",
-  "coach_pl_icon_body": "Торкніться значка доріжки, щоб увімкнути соло або вимкнути її. Соло можна ввімкнути на кількох одразу."
+  "coach_pl_icon_body": "Торкніться значка доріжки, щоб увімкнути соло або вимкнути її. Соло можна ввімкнути на кількох одразу.",
+  "lyrics_options_title": "Опції"
  },
  "pt-BR": {
   "tab_songs": "Músicas",
@@ -1797,7 +1801,8 @@
   "lyrics_button_description": "Mostrar letra",
   "cd_audio_3d": "Áudio espacial 3D",
   "coach_pl_bar_metronome": "Metrônomo dinâmico e andamento",
-  "coach_pl_icon_body": "Toque no ícone de uma faixa para deixá-la em solo ou mudá-la. Várias faixas podem ficar em solo ao mesmo tempo."
+  "coach_pl_icon_body": "Toque no ícone de uma faixa para deixá-la em solo ou mudá-la. Várias faixas podem ficar em solo ao mesmo tempo.",
+  "lyrics_options_title": "Opções"
  },
  "fr": {
   "tab_songs": "Morceaux",
@@ -2149,7 +2154,8 @@
   "lyrics_button_description": "Afficher les paroles",
   "cd_audio_3d": "Audio spatial 3D",
   "coach_pl_bar_metronome": "Métronome dynamique et tempo",
-  "coach_pl_icon_body": "Touchez l'icône d'une piste pour la mettre en solo ou la couper. Plusieurs pistes peuvent être en solo à la fois."
+  "coach_pl_icon_body": "Touchez l'icône d'une piste pour la mettre en solo ou la couper. Plusieurs pistes peuvent être en solo à la fois.",
+  "lyrics_options_title": "Options"
  },
  "de": {
   "tab_songs": "Songs",
@@ -2496,7 +2502,8 @@
   "lyrics_button_description": "Songtext anzeigen",
   "cd_audio_3d": "3D-Raumklang",
   "coach_pl_bar_metronome": "Dynamisches Metronom und Tempo",
-  "coach_pl_icon_body": "Tippe auf das Symbol eines Stems, um ihn solo oder stumm zu schalten. Mehrere Stems können gleichzeitig solo sein."
+  "coach_pl_icon_body": "Tippe auf das Symbol eines Stems, um ihn solo oder stumm zu schalten. Mehrere Stems können gleichzeitig solo sein.",
+  "lyrics_options_title": "Optionen"
  },
  "it": {
   "tab_songs": "Brani",
@@ -2848,7 +2855,8 @@
   "lyrics_button_description": "Mostra il testo",
   "cd_audio_3d": "Audio spaziale 3D",
   "coach_pl_bar_metronome": "Metronomo dinamico e tempo",
-  "coach_pl_icon_body": "Tocca l'icona di una traccia per metterla in solo o silenziarla. Più tracce possono essere in solo insieme."
+  "coach_pl_icon_body": "Tocca l'icona di una traccia per metterla in solo o silenziarla. Più tracce possono essere in solo insieme.",
+  "lyrics_options_title": "Opzioni"
  },
  "ru": {
   "tab_songs": "Песни",
@@ -3203,7 +3211,8 @@
   "lyrics_button_description": "Показать текст",
   "cd_audio_3d": "Пространственный 3D-звук",
   "coach_pl_bar_metronome": "Динамический метроном и темп",
-  "coach_pl_icon_body": "Нажмите на значок дорожки, чтобы включить соло или заглушить её. Соло можно включить сразу на нескольких."
+  "coach_pl_icon_body": "Нажмите на значок дорожки, чтобы включить соло или заглушить её. Соло можно включить сразу на нескольких.",
+  "lyrics_options_title": "Параметры"
  },
  "zh-Hans": {
   "tab_songs": "歌曲",
@@ -3549,6 +3558,7 @@
   "lyrics_button_description": "显示歌词",
   "cd_audio_3d": "3D 空间音频",
   "coach_pl_bar_metronome": "动态节拍器和速度",
-  "coach_pl_icon_body": "点按分轨图标可将其独奏或静音。可同时独奏多个分轨。"
+  "coach_pl_icon_body": "点按分轨图标可将其独奏或静音。可同时独奏多个分轨。",
+  "lyrics_options_title": "选项"
  }
 }

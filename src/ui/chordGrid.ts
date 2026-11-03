@@ -3,6 +3,7 @@
 // irregulares dejan huecos). Mismos colores que la tira. Sigue la cancion con la fila actual al 30 %
 // del alto; explorar con la rueda o arrastrando la separa y un iman la devuelve.
 import { soundingChord, type BeatCell } from '../player/chords.ts';
+import { chordLabel } from './chordLabel.ts';
 import { h } from './dom.ts';
 
 const FOLLOW_AT = 0.3;          // fila actual al 30 % del alto
@@ -50,7 +51,7 @@ export class ChordGrid {
       const c = cells[ci];
       let label = c.chord, ghost = false;
       if (!label && c.isDownbeat) { label = soundingChord(cells, ci - 1); ghost = !!label; }
-      const el = h('button', { class: `g${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}${second ? ' b2' : ''}`, textContent: fmt(label), attrs: { role: 'listitem', tabindex: '-1' } });
+      const el = h('button', { class: `g${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}${second ? ' b2' : ''}`, attrs: { role: 'listitem', tabindex: '-1' } }, chordLabel(fmt(label)));
       el.onclick = () => { this.stopBrowsing(); onSeek(c.time); };
       this.cellEls[ci] = place(el);
     });

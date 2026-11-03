@@ -38,7 +38,7 @@ async function fakeServer() {
     // 120 BPM: un beat cada 0.5 s, compas de 4 (downbeat cada 2 s)
     { name: 'beats.txt', data: Buffer.from(['120.0', ...Array.from({ length: 40 }, (_, i) => (0.5 + i * 0.5).toFixed(2))].join('\n')), deflate: true },
     { name: 'downbeats.txt', data: Buffer.from(Array.from({ length: 10 }, (_, i) => (0.5 + i * 2).toFixed(2)).join('\n')) },
-    { name: 'chords.txt', data: Buffer.from('N 0.000\nC 0.500\nG 2.500\nAm 12.000\n') },
+    { name: 'chords.txt', data: Buffer.from('N 0.000\nC 0.500\nG 2.500\nAm 12.000\nA#maj7/G# 16.000\n') },
     // Portada magenta y azul: con colores de la cancion, el acento pasa a ser rojizo
     { name: 'artcover.png', data: bandsPng(64, 64, [[[200, 30, 120], 0.6], [[30, 40, 160], 0.4]]) },
   ]);
@@ -188,6 +188,15 @@ test('login, estados de la lista, descarga y apertura', async () => {
   try {
     await p.goto(c.url);
     await p.waitFor(`document.querySelector('.login form')`, 30000);
+    // Como el login del panel: sin tarjeta ni titulo, logo centrado, etiquetas flotantes, boton pildora, idioma
+    const lg = await p.eval(`(() => { const f = document.querySelector('.login form'), sub = !!f.querySelector('p.sub'), w = f.querySelector('.wm').getBoundingClientRect(), b = f.querySelector('.btn'), u = f.querySelector('.lf input'), l = f.querySelector('.lf label');
+      const y0 = l.getBoundingClientRect().top; u.value = 'x'; return new Promise((r) => setTimeout(() => r({ sub, off: Math.abs((w.left + w.right) / 2 - innerWidth / 2), h1: !!f.querySelector('h1'), bg: getComputedStyle(f).backgroundColor,
+        radius: parseFloat(getComputedStyle(b).borderRadius), up: getComputedStyle(b).textTransform, fl: l.getBoundingClientRect().top < y0 && getComputedStyle(l).fontSize === '12px', langs: f.querySelectorAll('select option').length }), 300)); })()`);
+    expect(!lg.sub && lg.off <= 1 && !lg.h1 && lg.bg === 'rgba(0, 0, 0, 0)' && lg.radius >= 20 && lg.up === 'uppercase' && lg.fl && lg.langs === 11, `login: ${JSON.stringify(lg)}`);
+    await p.eval(`(() => { const s = document.querySelector('.login select'); s.value = 'de'; s.dispatchEvent(new Event('change')); })()`);
+    await p.waitFor(`document.documentElement.lang === 'de' && document.querySelector('.login .btn')?.textContent === 'Anmelden'`, 20000);
+    await p.eval(`(() => { const s = document.querySelector('.login select'); s.value = ''; s.dispatchEvent(new Event('change')); })()`);
+    await p.waitFor(`document.documentElement.lang !== 'de' && document.querySelector('.login form')`, 20000);
     // Tours ya vistos: el resto de pruebas no los quiere encima (los mira su propia prueba)
     await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`);
     await p.eval(`(()=>{const [u,w]=document.querySelectorAll('.login input');u.value='demo';w.value='pw';document.querySelector('.login form').requestSubmit();})()`);
@@ -309,6 +318,7 @@ test('letra magnetica: cerca del centro se engancha y vuelve; lejos se desprende
   await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
   try {
     await p.waitFor(`document.querySelectorAll('.lyrics .cl').length >= 4`, 10000);
+    await new Promise((r) => setTimeout(r, 600)); // fin de la transicion de vista
     await p.eval(`document.querySelectorAll('.lyrics .cl')[1].click()`);
     await new Promise((r) => setTimeout(r, 900));
     // Distancia (px) de la linea activa al centro del scroller
@@ -387,7 +397,7 @@ test('diagramas: guitarra pintada, vocabulario, piano sin zonas, clic = seek y s
   await p.waitFor(`${lit} > 2000`, 8000);
   const g = await p.eval(lit);
   const vocab = await p.eval(`[...document.querySelectorAll('.cdmini b')].map((b) => b.textContent).join(',')`);
-  expect(vocab === 'C,G,Am', `vocabulario: ${vocab}`);
+  expect(vocab === 'C,G,Am,A#maj7/G#', `vocabulario: ${vocab}`);
   const zoneShown = (await p.eval(`getComputedStyle(document.querySelectorAll('.cdsel .seg')[1]).visibility`)) === 'visible';
   // Piano: teclas con nombre, sin selector de zona
   await p.eval(`document.querySelectorAll('.cdsel .seg')[0].querySelectorAll('button')[0].click()`);
@@ -694,6 +704,7 @@ test('3D: escena pintada, luces con el interruptor, arrastre, omni, mute, baile 
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
   await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
+  expect(await p.eval(`!!document.querySelector('.d3load canvas.d3spin')`), 'la vista 3D no carga con el spinner de la marca');
   await p.waitFor(`document.querySelector('.d3 canvas') && !document.querySelector('.d3 .d3load')`, 20000);
   await new Promise((r) => setTimeout(r, 300));
   // Brillo medio de la escena en una captura (WebGL no se lee desde la pagina)
@@ -1238,6 +1249,20 @@ test('movil 412x915: biblioteca de Android, pestanas, reproductor a pantalla com
       cv: document.querySelector('.dr .cv').getBoundingClientRect().width })`);
     expect(!st.hs && !st.main && !st.side, `biblioteca movil: ${JSON.stringify(st)}`);
     expect(st.ph === 'Buscar en la biblioteca' && st.more === '1' && st.row === 75 && st.cv === 54, `filas / buscador: ${JSON.stringify(st)}`);
+    // Tactil: sin resaltado azul del navegador, sin seleccion al mantener, sin deslizar para recargar
+    const tch = await p.eval(`(() => { const b = getComputedStyle(document.querySelector('.drw .more')), r = getComputedStyle(document.documentElement);
+      return { tap: b.webkitTapHighlightColor, sel: b.userSelect, over: r.overscrollBehaviorY, body: getComputedStyle(document.body).overscrollBehaviorY, input: getComputedStyle(document.querySelector('.find input')).userSelect }; })()`);
+    expect(tch.tap === 'rgba(0, 0, 0, 0)' && tch.sel === 'none' && tch.over === 'none' && tch.body === 'none' && tch.input !== 'none', `tactil: ${JSON.stringify(tch)}`);
+    // Menus (ordenar y ⋮ de la fila): texto centrado en vertical en cada opcion
+    const offCenter = () => p.eval(`[...document.querySelectorAll('.menu.rowmenu button')].map((b) => { const r = document.createRange(); r.selectNodeContents(b); const t = r.getBoundingClientRect(), o = b.getBoundingClientRect(); return Math.abs((t.top + t.bottom) / 2 - (o.top + o.bottom) / 2); })`);
+    for (const open of ['.msort', '.drw .more']) {
+      await p.eval(`document.querySelector('${open}').click()`);
+      await p.waitFor(`document.querySelector('.menu.rowmenu')`);
+      const off = await offCenter();
+      expect(off.length > 0 && off.every((v) => v <= 1), `${open}: texto descentrado ${off}`);
+      await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+      await p.waitFor(`!document.querySelector('.menu.rowmenu')`);
+    }
     // Pestana Playlists y vuelta
     await p.eval(`document.querySelectorAll('.mnav button')[1].click()`);
     const pl = await p.eval(`({ title: document.querySelector('.mtitle').textContent, pls: document.querySelector('.plsec').checkVisibility(), list: document.querySelector('.pane > .list').checkVisibility(), ph: document.querySelector('.mpl input').placeholder })`);
@@ -1294,8 +1319,17 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
     await p.goto(c.url);
     await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
     await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    // Al revelar, los sliders suben desde 0 en cascada
+    await p.waitFor(`document.querySelectorAll('.stem').length === 3 && [...document.querySelectorAll('.stem > .sl')].some((r) => +r.value < 70)`, 20000);
     await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
     await p.waitFor(vis('.mstrip .strip'));
+    // Bug de JP: los acordes se cargan otra vez (refresco, cifrado) con la tira ya visible: la nueva sustituye a la vieja y sigue a la cancion
+    await p.eval(`(() => { const v = document.querySelector('.main').view; v.setChords(v.beats.cells, v.beats.beatsPerBar); })()`);
+    expect(await p.eval(`document.querySelector('.main').view.chords.strip.el.parentElement === document.querySelector('.mstrip')`), 'la tira nueva no esta en pantalla');
+    await p.eval(`${P}.seek(3000)`);
+    await p.waitFor(`document.querySelector('.mstrip .c.now')`, 5000);
+    await wait(1000);
+    expect(await p.eval(`[...document.querySelectorAll('.stem')].every((e) => +e.querySelector('.sl').value === +e.querySelector('.val').textContent)`), 'la cascada acaba en el valor real');
     // Disposicion: titulo, tira, mezcla y abajo BPM, posicion, transporte y 6 botones; sin pestanas de escritorio
     const lay = await p.eval(`(() => { const b = (s) => document.querySelector(s).getBoundingClientRect();
       return { title: document.querySelector('.mtt').textContent, tabs: ${vis('.vbar')}, acts: ${vis('.pbar .acts')}, opts: document.querySelectorAll('.mopts .mo').length,
@@ -1303,13 +1337,70 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
         order: ['.top', '.mstrip', '.view', '.mbpm', '.pbar .seek', '.pbar .btns', '.mopts'].map(s => [b(s).top, b(s).bottom]),
         hs: document.documentElement.scrollWidth > innerWidth, rowH: b('.stem').height }; })()`);
     expect(lay.title === 'Prueba - Cancion buena' && !lay.tabs && !lay.acts && lay.opts === 6 && lay.more === 3 && !lay.name && !lay.hs, `disposicion: ${JSON.stringify(lay)}`);
+    // Acorde largo: la letra cabe en su casilla (se mide tras cargar la fuente)
+    await p.eval(`document.fonts.ready.then(() => new Promise((r) => setTimeout(r, 200)))`);
+    const fit = await p.eval(`[...document.querySelectorAll('.mstrip .c')].filter((c) => c.textContent).map((c) => { const q = document.createRange(); q.selectNodeContents(c); return [c.textContent, q.getBoundingClientRect().width, c.getBoundingClientRect().width]; })`);
+    expect(fit.some((f) => f[0].length >= 6) && fit.every((f) => f[1] <= f[2] - 2), `acordes fuera de la casilla: ${JSON.stringify(fit.filter((f) => f[1] > f[2] - 2))}, ${fit.length}`);
     expect(/^BPM: \d+$/.test(lay.bpm) && lay.rowH === 78, `BPM / filas: ${lay.bpm} ${lay.rowH}`);
     for (let i = 1; i < lay.order.length; i++) expect(lay.order[i][0] >= lay.order[i - 1][1] - 0.5, `bloque ${i} pisa al anterior: ${JSON.stringify(lay.order)}`);
     expect(lay.order.at(-1)[1] <= 915.5, `botones fuera: ${lay.order.at(-1)[1]}`);
     // Letra y 3D: se encienden y apagan desde su boton, con el boton en acento
+    // Iconos de stem por mascara, ya en memoria: una fila nueva no espera a la red
+    await p.waitFor(`[...document.querySelectorAll('.stem .mi.s')].every((e) => e.style.getPropertyValue('--ic').startsWith('url("data:'))`, 5000);
+    // Cambio de vista: la saliente se funde (y no queda) y la entrante anima
+    await p.eval(`document.querySelector('.mo-lyrics').click()`);
+    const vt = await p.eval(`({ ghost: !!document.querySelector('.vghost .stem'), anim: document.querySelector('.main > .view:not(.vghost)').getAnimations().length })`);
+    expect(vt.ghost && vt.anim === 1, `transicion: ${JSON.stringify(vt)}`);
+    await wait(500);
+    expect(await p.eval(`!document.querySelector('.vghost')`), 'la vista saliente no se quita');
+    await p.eval(`document.querySelector('.mo-lyrics').click()`);
+    await wait(500);
+    expect(await p.eval(`[...document.querySelectorAll('.stem .mi.s')].every((e) => e.style.getPropertyValue('--ic').startsWith('url("data:'))`), 'al volver, los iconos no estan en memoria');
+    // Restaurar: el slider recorre el camino, no salta
+    await p.eval(`(() => { const r = document.querySelector('.stem > .sl'); r.value = 20; r.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('.stem .rs').click(); })()`);
+    await wait(120);
+    const mid = await p.eval(`+document.querySelector('.stem > .sl').value`);
+    await wait(350);
+    const end = await p.eval(`+document.querySelector('.stem > .sl').value`);
+    expect(mid > 20 && mid < 75 && end === 75, `slider: a medias ${mid}, final ${end}`);
+    // Medidas de las capturas de Android: casilla 44x60, titulo y BPM con la letra del movil de JP
+    const sz = await p.eval(`(() => { const c = document.querySelector('.mstrip .c').getBoundingClientRect(), f = (q) => parseFloat(getComputedStyle(document.querySelector(q)).fontSize);
+      return { w: c.width, h: c.height, chord: f('.mstrip .c'), title: f('.mtt'), bpm: f('.mbpm') }; })()`);
+    expect(sz.w === 44 && sz.h === 60 && sz.chord === 14 && sz.title === 16 && sz.bpm === 12, `tamanos: ${JSON.stringify(sz)}`);
     await p.eval(`document.querySelector('.mo-lyrics').click()`);
     expect(await p.eval(`document.querySelector('.view.lyr') && document.querySelector('.mo-lyrics').classList.contains('on')`), 'letra no se abre');
+    // Letra: 21 px, parte en lineas y nada se sale por la derecha (tampoco la activa, escalada)
+    await wait(700);
+    const lyf = await p.eval(`(() => { const l = [...document.querySelectorAll('.lylist .cl:not(.ins)')]; return { font: parseFloat(getComputedStyle(l[0]).fontSize), left: l[0].getBoundingClientRect().left, right: Math.max(...l.map((e) => e.getBoundingClientRect().right)) }; })()`);
+    expect(lyf.font === 21 && lyf.left === 24 && lyf.right <= 412, `letra: ${JSON.stringify(lyf)}`);
+    // Letra: acordes y ⋮ flotantes abajo a la derecha; ⋮ = hoja con karaoke y reprocesar
+    await p.waitFor(vis('.lymore'));
+    const ly = await p.eval(`(() => { const v = document.querySelector('.view').getBoundingClientRect(), m = document.querySelector('.lymore').getBoundingClientRect();
+      return { kar: ${vis('.lyopts .lykar')}, rp: ${vis('.lyopts .lyrp')}, right: v.right - m.right, bottom: v.bottom - m.bottom, w: m.width }; })()`);
+    expect(!ly.kar && !ly.rp && ly.w === 40 && Math.abs(ly.right - 20) < 1 && Math.abs(ly.bottom - 20) < 1, `botones de la letra: ${JSON.stringify(ly)}`);
+    await p.eval(`document.querySelector('.lymore').click()`);
+    await p.waitFor(`document.querySelector('dialog.sheet[open] .lyorow .switch')`);
+    expect(await p.eval(`document.querySelectorAll('dialog.sheet .lyorow').length === 2`), 'hoja de la letra sin karaoke y reprocesar');
+    await p.eval(`document.querySelector('dialog.sheet').close()`);
+    await p.waitFor(`!document.querySelector('dialog.sheet')`);
     await p.eval(`document.querySelector('.mo-lyrics').click()`);
+    // Cajon ☰: a la derecha, alto completo
+    await p.eval(`document.querySelector('.top .ib').click()`);
+    await p.waitFor(`document.querySelector('.pop.menu-pop')`);
+    await wait(350); // entra deslizando (240 ms)
+    const dr = await p.eval(`(() => { const r = document.querySelector('.pop.menu-pop').getBoundingClientRect(); return [r.top, Math.round(r.right), Math.round(r.bottom)]; })()`);
+    expect(dr[0] === 0 && dr[1] === 412 && dr[2] === 915, `cajon: ${dr}`);
+    await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
+    // Cabecera de bateria: el icono pone en solo todas las piezas
+    await p.eval(`document.querySelector('.gsolo').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
+    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    const ds = await p.eval(`({ on: document.querySelector('.gsolo').classList.contains('on'), kick: ${P}.stems.find(s => s.stem === 'kick').solo, bass: ${P}.stems.find(s => s.stem === 'bass').solo })`);
+    expect(ds.on && ds.kick && !ds.bass, `solo de bateria: ${JSON.stringify(ds)}`);
+    await p.eval(`document.querySelector('.gsolo').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
+    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    expect(await p.eval(`!${P}.stems.some(s => s.solo)`), 'solo de bateria no se quita');
     expect(await p.eval(`document.querySelectorAll('.view .stem').length === 3`), 'letra no vuelve a la mezcla');
     // Pildora de acordes: diagramas arriba, carrusel abajo; diagramas abiertos y el boton los cierra
     await p.eval(`document.querySelector('.mo-chords').click()`);
@@ -1317,6 +1408,14 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
     const pill = await p.eval(`(() => { const [a, b] = [...document.querySelectorAll('.cpill .mo')].map(x => x.getBoundingClientRect().top); return a < b; })()`);
     expect(pill, 'diagramas no estan arriba en la pildora');
     await p.eval(`document.querySelector('.cpill .mo').click()`);
+    // Diagramas a 412x800 (con la barra del navegador): la zona no pisa el mastil
+    await p.size(412, 800);
+    await p.waitFor(`document.querySelector('.cdcard canvas')?.clientHeight > 0`, 5000);
+    await wait(500);
+    const dg = await p.eval(`(() => { const r = (e) => e.getBoundingClientRect(), segs = [...document.querySelectorAll('.cdsel .seg')], cv = document.querySelector('.cdcard canvas'), n = document.querySelector('.cdname b');
+      return { zoneTop: r(segs.at(-1)).top, cvBottom: r(cv).bottom, cvH: r(cv).height, name: parseFloat(getComputedStyle(n).fontSize), zoneBtn: parseFloat(getComputedStyle(segs.at(-1).querySelector('button')).fontSize), segH: r(segs[0]).height }; })()`);
+    expect(dg.cvBottom <= dg.zoneTop && dg.cvH >= 120 && dg.name === 28 && dg.zoneBtn === 11 && dg.segH === 30, `diagramas: ${JSON.stringify(dg)}`);
+    await p.size(412, 915);
     await p.waitFor(`document.querySelector('.view.chv .cdg')`);
     expect(await p.eval(`${vis('.mstrip .strip')} && !${vis('.cdside')}`), 'diagramas: tira arriba y sin vocabulario');
     await p.eval(`document.querySelector('.mo-chords').click()`);
@@ -1324,7 +1423,10 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
     // Carrusel fuera desde la pildora (por cancion) y de vuelta
     await p.eval(`document.querySelector('.mo-chords').click()`);
     await p.eval(`document.querySelectorAll('.cpill .mo')[1].click()`);
-    expect(await p.eval(`!${vis('.mstrip')} && ${P}.chordsActive === false`), 'carrusel no se oculta');
+    // Se funde y cierra su altura (120 + 320 ms); luego queda oculto
+    expect(await p.eval(`document.querySelector('.mstrip').classList.contains('off') && ${P}.chordsActive === false`), 'carrusel no empieza a ocultarse');
+    await wait(520);
+    expect(await p.eval(`!${vis('.mstrip')}`), 'carrusel no se oculta');
     await p.eval(`document.querySelector('.mo-chords').click()`);
     await p.eval(`document.querySelectorAll('.cpill .mo')[1].click()`);
     expect(await p.eval(`${vis('.mstrip .strip')} && ${P}.chordsActive`), 'carrusel no vuelve');
@@ -1388,6 +1490,64 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
     return `${lay.opts} botones, ${lay.bpm}, solo ${solo}, hud "${metro.hud}"`;
   } finally {
     await p.eval(`document.querySelector('dialog.sheet')?.close()`).catch(() => {});
+    await p.size(1440, 900);
+  }
+});
+
+test('movil: panel de baile de la escena como Android (botones a la izquierda, tarjeta al lado, plegable)', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const box = `(s) => { const r = document.querySelector(s).getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; }`;
+  try {
+    await p.size(412, 915);
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+    await p.eval(`document.querySelector('.mo-3d').click()`);
+    await p.waitFor(`document.querySelector('.d3 canvas') && !document.querySelector('.d3 .d3load')`, 20000);
+    await p.eval(`document.querySelector('.d3 .switch').click()`);
+    // Con todo en su sitio, el reset no se ve pero guarda el hueco: el boton de baile no salta
+    const idle = await p.eval(`(${box})('.d3btns .d3btn')`);
+    await p.eval(`document.querySelector('.d3btns .d3btn').click()`);
+    await p.waitFor(`document.querySelector('dialog.dance')`, 3000);
+    await p.eval(`document.querySelector('dialog.dance .btn').click()`);
+    await p.waitFor(`document.querySelector('.d3panel:not([hidden]) .dbody')`, 3000);
+    await wait(100);
+    const m = await p.eval(`(() => { const b = ${box}; return { d3: b('.d3'), dance: b('.d3btns .d3btn'), reset: b('.d3btns .d3btn:last-child'), panel: b('.d3panel') }; })()`);
+    expect(Math.abs(m.dance.t - idle.t) < 1, `el boton de baile salta: ${idle.t} -> ${m.dance.t}`);
+    expect(m.dance.w === 48 && m.reset.w === 48 && Math.abs(m.reset.t - m.dance.b - 6) < 1, `botones: ${JSON.stringify([m.dance, m.reset])}`);
+    expect(Math.abs(m.dance.l - 16) < 1 && Math.abs(m.d3.b - m.reset.b - 16) < 1, `columna fuera de sitio: ${JSON.stringify(m)}`);
+    expect(Math.abs(m.panel.l - m.dance.r - 12) < 1 && Math.abs(m.d3.r - m.panel.r - 16) < 1, `la tarjeta no va al lado: ${JSON.stringify(m.panel)}`);
+    expect(Math.abs(m.panel.t - m.dance.t) < 1 && Math.abs(m.panel.b - m.reset.b) < 1, `la tarjeta no mide lo que los botones: ${JSON.stringify(m)}`);
+    // Pestanas sobre pildora de acento, que se desliza; nada sale de la tarjeta
+    const fits = `(() => { const P = document.querySelector('.d3panel').getBoundingClientRect(); return [...document.querySelectorAll('.d3panel .seg button, .d3panel .drow input, .d3panel .fxv')].every((e) => { const r = e.getBoundingClientRect(); return r.left >= P.left - .5 && r.right <= P.right + .5 && r.top >= P.top - .5 && r.bottom <= P.bottom + .5 && e.scrollWidth <= e.clientWidth + 1; }); })()`;
+    expect(await p.eval(fits), 'algo se sale de la tarjeta');
+    const pill = () => p.eval(`(() => { const a = document.querySelector('.d3panel .dpill').getBoundingClientRect(), o = document.querySelector('.d3panel .seg button[aria-checked=true]').getBoundingClientRect(); return { dx: a.left - o.left, dw: a.width - o.width, bg: getComputedStyle(document.querySelector('.d3panel .dpill')).backgroundColor, ac: getComputedStyle(document.querySelector('.d3panel')).getPropertyValue('--accent') }; })()`);
+    const p0 = await pill();
+    expect(Math.abs(p0.dx) < 1 && Math.abs(p0.dw) < 1, `la pildora no esta bajo la pestana: ${JSON.stringify(p0)}`);
+    await p.eval(`document.querySelectorAll('.d3panel .seg button')[1].click()`);
+    await wait(60);
+    expect(Math.abs((await pill()).dx) > 1, 'la pildora no se desliza');
+    await wait(320);
+    const p1 = await pill();
+    expect(Math.abs(p1.dx) < 1, `la pildora no llega: ${p1.dx}`);
+    expect(await p.eval(fits), 'algo se sale de la tarjeta en Distancia');
+    // Chevron: pliega a 32 px y abre
+    await p.eval(`document.querySelector('.d3panel .dchev').click()`);
+    await wait(360);
+    const f = await p.eval(`({ w: document.querySelector('.d3panel').getBoundingClientRect().width, body: document.querySelector('.d3panel .dbody').checkVisibility({ visibilityProperty: true }) })`);
+    expect(Math.abs(f.w - 32) < 1 && !f.body, `plegado: ${JSON.stringify(f)}`);
+    await p.eval(`document.querySelectorAll('.d3panel .dchev')[0].click()`);
+    await wait(360);
+    expect(Math.abs((await p.eval(`(${box})('.d3panel')`)).w - m.panel.w) < 1, 'no vuelve a abrirse');
+    // Parar el baile sigue funcionando
+    await p.eval(`document.querySelector('.d3btns .d3btn').click()`);
+    expect(await p.eval(`document.querySelector('.d3panel').hidden`), 'el panel no se va al parar');
+    return `panel ${Math.round(m.panel.w)}x${Math.round(m.panel.h)}`;
+  } finally {
     await p.size(1440, 900);
   }
 });

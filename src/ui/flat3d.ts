@@ -9,6 +9,7 @@ import {
   DANCE_SPEED_DEFAULT, DANCE_SPEED_MAX, DANCE_SPEED_MIN, FLAT_DANCE_DIST_MAX, FLAT_DANCE_DIST_MIN,
   FLAT_ELEV_MAX, FLAT_ELEV_MIN, defaultPose, flatDist, flatElevDeg, heightForElev, modified, type Pose3D,
 } from '../player/audio3d.ts';
+import { fillDancePanel } from './dancePanel.ts';
 import { iconOf } from './stemIcons.ts';
 import { h, img, setSlider, slider } from './dom.ts';
 import headUrl from '../assets/head_flat.webp';
@@ -333,7 +334,7 @@ export class Flat3D {
     sp.addEventListener('input', () => { this.dance.speed = +sp.value; sync(); });
     di.addEventListener('input', () => { this.dance.dist = +di.value; sync(); });
     sync();
-    this.panel.replaceChildren(
+    fillDancePanel(this.panel,
       h('div', { class: 'drow' }, h('span', { class: 'dlab', textContent: t('stems_dance_speed') }), sp, spV),
       h('div', { class: 'drow' }, h('span', { class: 'dlab', textContent: t('stems_dance_distance') }), di, diV));
   }

@@ -15,16 +15,33 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = 
 
 export const img = (src: string, cls = 'ic', alt = '') => h('img', { src, alt, class: cls, draggable: false });
 
+const sliderAnims = new WeakMap<HTMLInputElement, number>();
+export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 /** Slider de la casa: actualiza --p (relleno) con el valor. */
 export function slider(min: number, max: number, step: number, value: number, label: string): HTMLInputElement {
   const r = h('input', { type: 'range', class: 'sl', min: String(min), max: String(max), step: String(step), value: String(value), attrs: { 'aria-label': label } });
   const paint = () => r.style.setProperty('--p', `${((+r.value - min) / (max - min)) * 100}%`);
   r.addEventListener('input', paint);
+  r.addEventListener('pointerdown', () => cancelAnimationFrame(sliderAnims.get(r) ?? 0)); // el dedo manda
   paint();
   (r as HTMLInputElement & { paint: () => void }).paint = paint;
   return r;
 }
 export function setSlider(r: HTMLInputElement, v: number) { r.value = String(v); (r as HTMLInputElement & { paint?: () => void }).paint?.(); }
+
+/** Recorrido del slider (animateSliderTo de Android: 300 ms, AccelerateDecelerate). Solo visual: el valor real ya esta puesto. */
+export function animateSlider(r: HTMLInputElement, to: number, ms = 300) {
+  cancelAnimationFrame(sliderAnims.get(r) ?? 0);
+  if (reducedMotion()) { setSlider(r, to); return; }
+  const from = +r.value, t0 = performance.now();
+  const step = (now: number) => {
+    const k = Math.min(1, (now - t0) / ms);
+    setSlider(r, from + (to - from) * (0.5 - Math.cos(k * Math.PI) / 2));
+    if (k < 1) sliderAnims.set(r, requestAnimationFrame(step));
+  };
+  sliderAnims.set(r, requestAnimationFrame(step));
+}
 
 export const fmtTime = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));

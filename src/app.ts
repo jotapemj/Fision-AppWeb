@@ -113,7 +113,7 @@ export class App {
     clearTimeout(this.pollTimer);
     this.shell = this.sidebar = null;
     this.mini?.destroy(); this.mini = null;
-    this.root.replaceChildren(loginView(this.api, (s) => this.enter(s), notice));
+    this.root.replaceChildren(loginView(this.api, this.settings, (s) => this.enter(s), notice));
   }
 
   private enter(s: Session) {
@@ -606,7 +606,7 @@ export class App {
       });
       // Al empezar el fundido arranca la musica (abrir = reproducir, como Android)
       // Tour del reproductor cuando las filas ya se ven (Android: tras asentarse los sliders)
-      curtain.finish(() => { void view.toggle(); }, () => { setTimeout(() => { if (this.current?.view === view) view.maybeTour(); }, 900); });
+      curtain.finish(() => { view.revealStems(); void view.toggle(); }, () => { setTimeout(() => { if (this.current?.view === view) view.maybeTour(); }, 900); });
     } catch (err) {
       curtain.finish(() => {}, () => {}, false);
       const msg = err instanceof Error && err.message === 'engine_needs_isolation' ? t('web_engine_isolation') : t('err_song_missing_files');

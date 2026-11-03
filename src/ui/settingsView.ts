@@ -6,7 +6,7 @@ import { resetTours } from './coachMark.ts';
 import { openLicenses } from './licenses.ts';
 
 // Nombre de cada idioma en su idioma (R.array.lang_entries)
-const LANG_NAMES: Record<Lang, string> = { en: 'English', es: 'Español', ca: 'Català', uk: 'Українська', 'pt-BR': 'Português (Brasil)',
+export const LANG_NAMES: Record<Lang, string> = { en: 'English', es: 'Español', ca: 'Català', uk: 'Українська', 'pt-BR': 'Português (Brasil)',
   fr: 'Français', de: 'Deutsch', it: 'Italiano', ru: 'Русский', 'zh-Hans': '简体中文' };
 
 export interface SettingsContext {

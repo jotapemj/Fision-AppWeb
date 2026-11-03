@@ -29,6 +29,7 @@ export const FRAG_START = IMPACT + 70, FRAG_DUR = 620;
 export const SQ_START = IMPACT + 150, SQ_STAG = 60, SQ_DUR = 560;
 export const SETTLED = SQ_START + 2 * SQ_STAG + SQ_DUR;
 export const NO_TF = -1e9;
+export const MARK_MIN = -200, MARK_MAX = 532; // lienzo de la marca: incluye el vuelo del neutron y sus estelas
 
 export const c01 = (x: number) => Math.max(0, Math.min(1, x));
 export const easeOut = (x: number) => { const i = 1 - x; return 1 - i * i * i; };

@@ -1,6 +1,7 @@
 // Marca animada: el spinner y el cierre cumplen las reglas de FisionMotion.
+import fs from 'node:fs';
 import { test, expect, near } from './lib/harness.mjs';
-import { steady, closePlan, closeArc, warp, MIN_SPIN } from '../src/brand/fisionMotion.ts';
+import { steady, closePlan, closeArc, warp, drawMark, MIN_SPIN, N_START, SETTLED, MARK_MIN, MARK_MAX } from '../src/brand/fisionMotion.ts';
 
 test('spinner: cabeza siempre por delante de la cola y ambos avanzan', () => {
   let prev = steady(0);
@@ -29,4 +30,26 @@ test('warp: rampa continua de 1x a 2x en 150 ms', () => {
   near(warp(150), 150 + 75, 1e-9, 'fin de rampa');
   near(warp(1150) - warp(1149), 2, 1e-9, 'velocidad final 2x');
   near(warp(1) - warp(0), 1, 0.01, 'velocidad inicial 1x');
+});
+
+test('logotipo: el viewBox contiene todo el trazo (la N no se corta)', () => {
+  const svg = fs.readFileSync(new URL('../src/assets/icons/wordmark.svg', import.meta.url), 'utf8');
+  const [x0, y0, w, h] = svg.match(/viewBox="([^"]+)"/)[1].split(' ').map(Number);
+  // Solo comandos absolutos: M/L/C = pares x y; H = x; V = y
+  for (const [, cmd, args] of svg.matchAll(/([MLCHV])([^MLCHVZ]*)/g)) {
+    args.trim().split(' ').map(Number).forEach((v, i) => {
+      const isX = cmd === 'H' || (cmd !== 'V' && i % 2 === 0);
+      const [lo, hi] = isX ? [x0, x0 + w] : [y0, y0 + h];
+      expect(v >= lo && v <= hi, `${cmd} ${v} fuera de ${lo}..${hi}`);
+    });
+  }
+});
+
+test('marca: el lienzo del telon contiene todos los frames (el neutron no entra con corte)', () => {
+  let lo = Infinity, hi = -Infinity, w = 0;
+  const c = { save() {}, restore() {}, translate() {}, scale() {}, rotate() {}, closePath() {}, fill() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fillRect(x, y, fw, fh) { lo = Math.min(lo, x, y); hi = Math.max(hi, x + fw, y + fh); },
+    arc(x, y, r) { const e = r + w / 2; lo = Math.min(lo, x - e, y - e); hi = Math.max(hi, x + e, y + e); },
+    set lineWidth(v) { w = v; }, get lineWidth() { return w; } };
+  for (let tf = N_START; tf <= SETTLED + 100; tf += 4) drawMark(c, { head: 1, tail: 0, alpha: 1, grow: 1, tf });
+  expect(lo >= MARK_MIN && hi <= MARK_MAX, `marca ${lo.toFixed(1)}..${hi.toFixed(1)} fuera de ${MARK_MIN}..${MARK_MAX}`);
 });
