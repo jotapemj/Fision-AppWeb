@@ -13,6 +13,7 @@ import {
   MAX_DISTANCE, MIN_DISTANCE, modified, ROOM_CEIL_Y, ROOM_FLOOR_SURFACE_Y, ROOM_FLOOR_Y, ROOM_HALF_X, ROOM_HALF_Z,
   SWING_MAX, SWING_MIN, worldPos, type Pose3D,
 } from '../player/audio3d.ts';
+import { audio3dInfoDialog } from './info3d.ts';
 import { iconOf } from './stemIcons.ts';
 import { addPanels, addStudioWall, addTraps, PANEL_COLOR, SongScreen, TRAP_COLOR } from './scene3dDecor.ts';
 import { sceneSpinner } from './curtain.ts';
@@ -283,12 +284,11 @@ export class Scene3D {
     });
     this.dist.addEventListener('change', () => this.p.onChange?.());
     const side = h('div', { class: 'd3side' }, this.distTip, this.dist);
-    const legend = h('ul', { class: 'd3legend' }, ...['drag', 'click', 'double', 'long', 'camera'].map((k) => h('li', { textContent: t(`web_3d_legend_${k}`) })));
     this.resetBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 12c0-1.1-.9-2-2-2s-2 .9-2 2 .9 2 2 2 2-.9 2-2zM12 3c-4.97 0-9 4.03-9 9H0l4 4 4-4H5c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.51 0-2.91-.49-4.06-1.3l-1.42 1.44C8.04 20.3 9.94 21 12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9z"/></svg>'; // ic_restore_pan
     this.resetBtn.onclick = () => this.reset();
     this.danceBtn.onclick = () => (this.dance.active ? this.stopDance() : this.danceDialog());
     const btns = h('div', { class: 'd3btns' }, this.danceBtn, this.resetBtn);
-    const bottom = h('div', { class: 'd3bottom' }, legend, h('span', { class: 'sp' }), this.panel, btns);
+    const bottom = h('div', { class: 'd3bottom' }, h('span', { class: 'sp' }), this.panel, btns);
     this.el.append(this.canvasBox, this.veil, h('div', { class: 'd3chrome' }, head, side, bottom), this.loading.el);
   }
 
@@ -734,15 +734,5 @@ export class Scene3D {
     fillDancePanel(this.panel, tabs, row);
   }
 
-  private infoDialog() {
-    const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
-    const dlg = h('dialog', { class: 'settings', attrs: { 'aria-label': t('audio3d_info_title') } },
-      h('div', { class: 'shd' }, h('h2', { textContent: t('audio3d_info_title') }), close),
-      h('p', { class: 'muted', textContent: t('audio3d_info_body') }));
-    close.onclick = () => dlg.close();
-    dlg.addEventListener('close', () => dlg.remove());
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
-    document.body.append(dlg);
-    dlg.showModal();
-  }
+  private infoDialog() { audio3dInfoDialog(true); }
 }

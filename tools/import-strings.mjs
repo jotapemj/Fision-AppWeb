@@ -22,6 +22,7 @@ const keys = JSON.parse(fs.readFileSync(path.join(ROOT, 'src/i18n/keys.json'), '
 
 function unescape(s) {
   return s.trim()
+    .replace(/^<!\[CDATA\[(.*)\]\]>$/s, '$1')
     .replace(/^"(.*)"$/s, '$1')
     .replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\@/g, '@').replace(/\\\?/g, '?')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');

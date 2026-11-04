@@ -706,6 +706,12 @@ test('3D: escena pintada, luces con el interruptor, arrastre, omni, mute, baile 
   await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
   expect(await p.eval(`!!document.querySelector('.d3load canvas.d3spin')`), 'la vista 3D no carga con el spinner de la marca');
   await p.waitFor(`document.querySelector('.d3 canvas') && !document.querySelector('.d3 .d3load')`, 20000);
+    // Leyenda: en el dialogo de info, no sobre la vista (audio3d_info_dialog)
+    await p.eval(`document.querySelector('.d3 .d3i').click()`);
+    await p.waitFor(`document.querySelector('dialog.info3d')`, 3000);
+    const info = await p.eval(`({ over: !!document.querySelector('.d3 .d3legend'), lines: [...document.querySelectorAll('dialog.info3d .i3lg li')].map((l) => l.textContent), bold: [...document.querySelectorAll('dialog.info3d .i3lg li')].every((l) => l.querySelector('b')?.textContent), body: document.querySelector('dialog.info3d p').textContent, sep: !!document.querySelector('dialog.info3d hr') })`);
+    expect(!info.over && info.lines.length === 6 && info.bold && info.sep && info.body.length > 40 && !JSON.stringify(info).includes('<') && /Clic|Click/.test(info.lines[1]), `info: ${JSON.stringify(info)}`);
+    await p.eval(`document.querySelector('dialog.info3d .xbtn').click()`);
   await new Promise((r) => setTimeout(r, 300));
   // Brillo medio de la escena en una captura (WebGL no se lee desde la pagina)
   const shotLum = async () => {
@@ -794,6 +800,12 @@ test('3D plano (Rendimiento: Escena 2D): dummy, luces, arrastre sin cruzar la ca
     await p.eval(`[...document.querySelectorAll('.seg2 button')][3].click()`);
     await p.waitFor(`document.querySelectorAll('.f3 .f3ic').length === 3 && document.querySelector('.f3 .f3head')?.naturalWidth > 0`, 10000);
     const fl = `document.querySelector('.f3').flat3d`;
+    // Leyenda: en el dialogo de info, no sobre la vista (audio3d_info_dialog)
+    await p.eval(`document.querySelector('.f3 .d3i').click()`);
+    await p.waitFor(`document.querySelector('dialog.info3d')`, 3000);
+    const info = await p.eval(`({ over: !!document.querySelector('.f3 .d3legend'), lines: [...document.querySelectorAll('dialog.info3d .i3lg li')].map((l) => l.textContent), bold: [...document.querySelectorAll('dialog.info3d .i3lg li')].every((l) => l.querySelector('b')?.textContent), body: document.querySelector('dialog.info3d p').textContent, sep: !!document.querySelector('dialog.info3d hr') })`);
+    expect(!info.over && info.lines.length === 5 && info.bold && info.sep && info.body.length > 40 && !JSON.stringify(info).includes('<') && /Clic|Click/.test(info.lines[1]), `info: ${JSON.stringify(info)}`);
+    await p.eval(`document.querySelector('dialog.info3d .xbtn').click()`);
     const st0 = await p.eval(`({ three: !!document.querySelector('.f3 canvas'), veil: getComputedStyle(document.querySelector('.f3veil')).opacity, inert: document.querySelector('.f3stage').classList.contains('inert') })`);
     expect(!st0.three && +st0.veil > 0.7 && st0.inert, `apagado: ${JSON.stringify(st0)}`);
     await p.eval(`document.querySelector('.f3 .d3head .switch').click()`);
@@ -1124,6 +1136,11 @@ test('sin red: entra con la sesion guardada, biblioteca y playlists de la copia 
   await p.waitFor(`document.querySelector('.me .who span.off') && document.querySelectorAll('.dr').length === ${before.split('|').length}`, 15000);
   const st = await p.eval(`({ srv: document.querySelector('.me .who span').textContent, rows: [...document.querySelectorAll('.dr b')].map((b) => b.textContent).join('|'), login: !!document.querySelector('.login') })`);
   expect(!st.login && /Servidor sin conexi|Server offline/.test(st.srv), `estado: ${JSON.stringify(st)}`);
+  // Offline: nube con eslabon (ic_cloud_link) en rojo fijo
+  const cloud = `document.querySelector('.me .ccloud')`;
+  const cl = () => p.eval(`({ vis: ${cloud}.checkVisibility(), color: getComputedStyle(${cloud}).color, op: +getComputedStyle(${cloud}).opacity, path: ${cloud}.querySelector('path').getAttribute('d'), label: ${cloud}.getAttribute('aria-label') })`);
+  const c0 = await cl();
+  expect(c0.vis && c0.color === 'rgb(224, 72, 72)' && c0.path.startsWith('M1.16,14.15') && /sin conexi|offline/i.test(c0.label), `offline: ${JSON.stringify(c0)}`);
   expect(st.rows === before, `filas offline ${st.rows} vs ${before}`);
   // Una descargada se abre y suena sin server
   const local = `[...document.querySelectorAll('.dr')].find((r) => !r.classList.contains('cld'))`;
@@ -1134,6 +1151,12 @@ test('sin red: entra con la sesion guardada, biblioteca y playlists de la copia 
   net.down = false;
   await p.eval(`dispatchEvent(new Event('online'))`);
   await p.waitFor(`!document.querySelector('.me .who span.off')`, 8000);
+  // Reconectado: pasa a verde Fision (aunque el acento sea otro), 3 s y se apaga
+  await new Promise((r) => setTimeout(r, 800));
+  const c1 = await cl();
+  expect(c1.vis && c1.color === 'rgb(39, 179, 151)' && c1.op === 1 && /en l[ií]nea|online/i.test(c1.label), `reconectado: ${JSON.stringify(c1)}`);
+  await p.eval(`dispatchEvent(new Event('online'))`); // otro aviso de red no alarga ni corta el destello
+  await p.waitFor(`!${cloud}.checkVisibility()`, 4000);
   return `${st.srv}; ${st.rows.split('|').length} filas; suena una descargada`;
 });
 
@@ -1529,6 +1552,12 @@ test('movil: panel de baile de la escena como Android (botones a la izquierda, t
     await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
     await p.eval(`document.querySelector('.mo-3d').click()`);
     await p.waitFor(`document.querySelector('.d3 canvas') && !document.querySelector('.d3 .d3load')`, 20000);
+    // Leyenda: en el dialogo de info, no sobre la vista (audio3d_info_dialog)
+    await p.eval(`document.querySelector('.d3 .d3i').click()`);
+    await p.waitFor(`document.querySelector('dialog.info3d')`, 3000);
+    const info = await p.eval(`({ over: !!document.querySelector('.d3 .d3legend'), lines: [...document.querySelectorAll('dialog.info3d .i3lg li')].map((l) => l.textContent), bold: [...document.querySelectorAll('dialog.info3d .i3lg li')].every((l) => l.querySelector('b')?.textContent), body: document.querySelector('dialog.info3d p').textContent, sep: !!document.querySelector('dialog.info3d hr') })`);
+    expect(!info.over && info.lines.length === 5 && info.bold && info.sep && info.body.length > 40 && !JSON.stringify(info).includes('<') && /Tocar|Toque|Tap/.test(info.lines[1]), `info: ${JSON.stringify(info)}`);
+    await p.eval(`document.querySelector('dialog.info3d .xbtn').click()`);
     await p.eval(`document.querySelector('.d3 .switch').click()`);
     // Con todo en su sitio, el reset no se ve pero guarda el hueco: el boton de baile no salta
     const idle = await p.eval(`(${box})('.d3btns .d3btn')`);

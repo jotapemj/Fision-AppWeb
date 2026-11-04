@@ -46,7 +46,9 @@ const svg = (markup: string) => { const s = h('span', { class: 'st' }); s.innerH
 const TAB_SONGS_SVG = '<svg viewBox="0 -960 960 960" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M493.85-366.15q37.76 0 63.88-26.12 26.11-26.11 26.11-63.88v-224.62h114.62v-70.77h-150v226.16q-11.46-10.39-25.11-15.58-13.66-5.19-29.5-5.19-37.77 0-63.89 26.11-26.11 26.12-26.11 63.89 0 37.77 26.11 63.88 26.12 26.12 63.89 26.12ZM322.31-260Q292-260 271-281q-21-21-21-51.31v-455.38Q250-818 271-839q21-21 51.31-21h455.38Q808-860 829-839q21 21 21 51.31v455.38Q850-302 829-281q-21 21-51.31 21H322.31Zm0-60h455.38q4.62 0 8.46-3.85 3.85-3.84 3.85-8.46v-455.38q0-4.62-3.85-8.46-3.84-3.85-8.46-3.85H322.31q-4.62 0-8.46 3.85-3.85 3.84-3.85 8.46v455.38q0 4.62 3.85 8.46 3.84 3.85 8.46 3.85Zm-140 200Q152-120 131-141q-21-21-21-51.31v-515.38h60v515.38q0 4.62 3.85 8.46 3.84 3.85 8.46 3.85h515.38v60H182.31Z"/></svg>';
 const TAB_PL_SVG = '<svg viewBox="0 0 960 960" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M120 640V560H440V640ZM120 480V400H600V480ZM120 320V240H600V320ZM640 840V520L880 680Z"/></svg>';
 const PLUS_SVG = '<svg viewBox="0 0 24 24" width="29" height="29" aria-hidden="true"><path fill="#fff" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
-const CLOUD_OFF_SVG = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M7 18h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="#f87171" stroke-width="1.7"/><path d="M4 4l16 16" stroke="#f87171" stroke-width="1.7" stroke-linecap="round"/></svg>';
+// ic_cloud_link de Android: nube con eslabon
+const cloudLink = (px: number) => `<svg viewBox="0 0 24 24" width="${px}" height="${px}" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="2" d="M1.16,14.15A4.56,4.56 0 0 1 6.35,8.7A5.51,5.51 0 0 1 17.2,7.21A5.28,5.28 0 1 1 17.54,17.76L12.6,17.76"/><path stroke-width="1.7" d="M3.25,16.6L2.1,17.74A2.38,2.38 0 0 0 5.46,21.1L6.6,19.95"/><path stroke-width="1.7" d="M5.4,14.45L6.54,13.3A2.38,2.38 0 0 1 9.9,16.66L8.75,17.8"/><path stroke-width="1.7" d="M4.25,18.95L7.75,15.45"/></svg>`;
+const CLOUD_FLASH_MS = 3000, CLOUD_FADE_MS = 350;
 
 
 export class Sidebar {
@@ -76,7 +78,11 @@ export class Sidebar {
   private mTitle = h('h1', { class: 'mtitle' });
   private chips = h('div', { class: 'chips', attrs: { role: 'radiogroup', 'aria-label': t('tab_songs') } });
   private mCount = h('p', { class: 'mcount' });
-  private mCloud = h('span', { class: 'mcloud', attrs: { role: 'status', 'aria-label': t('server_status_offline') } });
+  // Estado del servidor: nube en la cabecera movil y en el pie de escritorio
+  private mCloud = h('span', { class: 'ccloud mcloud', attrs: { role: 'status' } });
+  private dCloud = h('span', { class: 'ccloud', attrs: { role: 'status' } });
+  private reach: boolean | null = null; // null = aun sin respuesta: ni rojo falso al arrancar
+  private cloudTimer = 0;
   private navBtns = new Map<LibTab, HTMLButtonElement>();
   private plq = '';
   private plCount = h('p', { class: 'mcount' });
@@ -99,6 +105,7 @@ export class Sidebar {
     const me = h('div', { class: 'me' },
       h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } }),
       h('span', { class: 'who' }, h('b', { textContent: user }), this.srv),
+      this.dCloud,
       h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }));
     me.lastElementChild!.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
     const addBtn = h('button', { class: 'addb', attrs: { 'aria-label': t('import_title') }, onclick: () => hooks.onAdd() });
@@ -106,8 +113,8 @@ export class Sidebar {
     addBtn.append(t('b_add'));
     this.plHead.hidden = true;
     // --- movil: cabecera (nube roja sin conexion, marca, avatar = ajustes) ---
-    this.mCloud.innerHTML = CLOUD_OFF_SVG;
-    this.mCloud.hidden = true;
+    this.mCloud.innerHTML = cloudLink(26); this.dCloud.innerHTML = cloudLink(22);
+    this.mCloud.hidden = this.dCloud.hidden = true;
     const avatar = h('button', { class: 'mav', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() });
     const mhd = h('div', { class: 'mhd' }, this.mCloud, img(wordmark, 'wm', 'Fision'), avatar);
     // Buscador + anadir (squircle con la marca), como et_find + b_add
@@ -170,8 +177,28 @@ export class Sidebar {
   /** Servidor inalcanzable: lo dice en rojo (nube roja de Android); lo descargado suena igual. */
   setOnline(on: boolean) {
     this.srv.classList.toggle('off', !on);
-    this.mCloud.hidden = on; // movil: nube roja fija sin conexion (refreshCloudStatusIcon)
+    this.setCloud(on);
     this.srv.textContent = on ? this.server : `${this.server} · ${t('server_status_offline')}`;
+  }
+
+  /** refreshCloudStatusIcon: sin conexion, rojo fijo; al volver, verde 3 s y se apaga; en linea, oculta. */
+  private setCloud(on: boolean) {
+    const was = this.reach;
+    if (was === on) return; // cada sondeo repite el estado: no corta el destello
+    this.reach = on;
+    clearTimeout(this.cloudTimer);
+    const all = [this.mCloud, this.dCloud];
+    const paint = (hidden: boolean, ok: boolean, fade: boolean) => all.forEach((c) => {
+      c.hidden = hidden; c.classList.toggle('ok', ok); c.classList.toggle('fade', fade);
+      c.setAttribute('aria-label', t(on ? 'server_status_online' : 'server_status_offline'));
+    });
+    if (!on) { paint(false, false, false); return; }
+    if (was !== false) { paint(true, false, false); return; }
+    paint(false, true, false);
+    this.cloudTimer = window.setTimeout(() => {
+      paint(false, true, true);
+      this.cloudTimer = window.setTimeout(() => paint(true, false, false), CLOUD_FADE_MS);
+    }, CLOUD_FLASH_MS);
   }
 
   update(rows: Row[], current: string | null, playing: boolean) {

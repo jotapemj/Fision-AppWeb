@@ -123,6 +123,10 @@ input[type=range].sl::-moz-range-thumb { width: 18px; height: 18px; border: 0; b
 .me .who b { font-weight: 400; font-size: 13.5px; }
 .me .who span { font-size: 11.5px; color: var(--text-muted); }
 .me .who span.off { color: #f87171; }
+.ccloud { display: grid; flex: none; color: #e04848; transition: color 550ms, opacity 350ms; }
+.ccloud.ok { color: #27b397; }
+.ccloud.fade { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .ccloud { transition: none; } }
 .me .out { font-size: 12px; color: var(--text-muted); padding: 6px 8px; border-radius: 8px; }
 @media (hover: hover) { .me .out:hover { background: var(--press); color: var(--text); } }
 
@@ -448,7 +452,6 @@ input[type=range].sl.bi::-webkit-slider-runnable-track { background: linear-grad
 .d3tip { padding: 4px 10px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 13px; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 150ms; }
 .d3tip.show { opacity: 1; }
 .d3bottom { display: flex; align-items: flex-end; gap: 12px; }
-.d3legend { list-style: none; font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.7); text-shadow: 0 1px 3px #000; }
 .d3btns { display: grid; gap: 8px; }
 .d3btn { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; }
 .d3btn svg { width: 24px; height: 24px; }
@@ -463,6 +466,9 @@ input[type=range].sl.bi::-webkit-slider-runnable-track { background: linear-grad
 .drow { display: flex; align-items: center; gap: 10px; }
 .drow .sl { flex: 1; }
 .drow .fxv { min-width: 84px; text-align: right; }
+dialog.info3d hr { border: 0; height: 1px; background: rgba(255,255,255,.13); margin: 16px 0 10px; }
+.i3lg { list-style: none; font-size: 12px; line-height: 1.7; color: rgba(255,255,255,.8); }
+.i3lg b { font-weight: 700; }
 .dwho img, .dcell img { width: 28px; height: 28px; }
 dialog.dance { width: min(480px, calc(100% - 32px)); }
 .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 8px 0 14px; }
@@ -672,7 +678,7 @@ dialog.expdlg { width: min(460px, calc(100% - 32px)); }
 .mhd { flex: none; position: relative; height: 56px; margin-top: 10px; display: grid; place-items: center; }
 .mhd .wm { height: 18px; }
 .mav { position: absolute; right: 12px; top: 10px; width: 36px; height: 36px; border-radius: 50%; background: #2b2b2b; box-shadow: 0 0 0 2px var(--accent); color: #cfcfcf; font-size: 13px; }
-.mcloud { position: absolute; left: 12px; top: 15px; display: grid; }
+.mcloud { position: absolute; left: 12px; top: 15px; }
 .mtitle { flex: none; font-weight: 400; font-size: 24px; line-height: 1.2; margin: 6px 20px 0; }
 .app.mob .pane > .frow, .mpl .frow { flex: none; display: flex; gap: 10px; margin: 20px 20px 0; }
 .app.mob .find { flex: 1; margin: 0; height: 53px; border-radius: 20px; background: #252525; box-shadow: inset 0 0 0 1px var(--text-muted); padding: 0 12px 0 14px; gap: 12px; }
@@ -873,7 +879,6 @@ dialog.sheet .fxpanel { position: static; background: none; box-shadow: none; pa
 
 /* 3D en movil: sin leyenda de raton; baile y reset abajo a la izquierda, acento translucido; panel encima */
 .app.mob .d3 { border-radius: 0; }
-.app.mob .d3legend { display: none; }
 /* Fila inferior (ll_3d_bottomRowScene): botones apilados a la izquierda y tarjeta al lado, de su mismo alto */
 .app.mob .d3chrome { padding-bottom: 16px; grid-template-columns: minmax(0, 1fr); }
 .app.mob .d3bottom { align-items: stretch; gap: 12px; }

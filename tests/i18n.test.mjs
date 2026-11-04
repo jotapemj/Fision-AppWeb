@@ -59,3 +59,10 @@ test('t(): placeholders, plurales y caida a ingles', async () => {
   expect(t('no_existe') === 'no_existe', 'clave desconocida');
   expect(pickLang(['pt-BR']) === 'pt-BR' && pickLang(['zh-CN']) === 'zh-Hans' && pickLang(['es-MX']) === 'es' && pickLang(['ja']) === 'en', 'pickLang');
 });
+
+test('textos importados de Android sin restos de XML (CDATA)', async () => {
+  const android = JSON.parse((await import('node:fs')).readFileSync(new URL('../src/i18n/android.json', import.meta.url), 'utf8'));
+  const bad = [];
+  for (const [lang, keys] of Object.entries(android)) for (const [k, v] of Object.entries(keys)) if (JSON.stringify(v).includes('CDATA')) bad.push(`${lang}:${k}`);
+  expect(!bad.length, `CDATA en ${bad.length} textos: ${bad.slice(0, 4).join(', ')}`);
+});

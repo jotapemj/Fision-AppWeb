@@ -12,6 +12,7 @@ import {
   defaultPose, flatDepthScale, flatElevDeg, flatFloor, flatLift, flatSwingElev, heightForElev, modified, type Pose3D,
 } from '../player/audio3d.ts';
 import { danceSetupDialog, danceTabs, fillDancePanel } from './dancePanel.ts';
+import { audio3dInfoDialog } from './info3d.ts';
 import { iconOf } from './stemIcons.ts';
 import { h, img, setSlider, slider } from './dom.ts';
 import headUrl from '../assets/head_flat.webp';
@@ -20,7 +21,7 @@ import type { Scene3DHooks } from './scene3d.ts';
 const LONG_PRESS_MS = 450, DOUBLE_MS = 300, SLOP_PX = 6;
 const HEADER_PX = 56, BOTTOM_PX = 92;  // cabecera y fila inferior (solo en las esquinas)
 const MOB_BOTTOM_PX = 126, MOB_HEAD_PX = 150, MOB_HEAD_FROM_BOTTOM = 265; // movil: fila de 102 + 16 + 8; cabeza como en Android
-const CORNER_PX = 270;                  // ancho de las esquinas ocupadas (titulo, interruptor, leyenda, play)
+const CORNER_PX = 270;                  // ancho de las esquinas ocupadas (titulo, interruptor, panel, play)
 const EDGE_PX = 8;                      // margen arriba y abajo en la columna central
 const RESET_STAGGER_MS = 60, RESET_MS = 700;
 
@@ -114,12 +115,11 @@ export class Flat3D {
     });
     this.elev.addEventListener('change', () => this.p.onChange?.());
     const side = h('div', { class: 'd3side' }, this.elevTip, this.elev);
-    const legend = h('ul', { class: 'd3legend' }, ...['drag', 'click', 'double', 'long'].map((k) => h('li', { textContent: t(`web_3d_legend_${k}`) })));
     this.resetBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 12c0-1.1-.9-2-2-2s-2 .9-2 2 .9 2 2 2 2-.9 2-2zM12 3c-4.97 0-9 4.03-9 9H0l4 4 4-4H5c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.51 0-2.91-.49-4.06-1.3l-1.42 1.44C8.04 20.3 9.94 21 12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9z"/></svg>'; // ic_restore_pan
     this.resetBtn.onclick = () => this.reset();
     this.danceBtn.onclick = () => (this.dance.active ? this.stopDance() : this.danceDialog());
     const btns = h('div', { class: 'd3btns' }, this.danceBtn, this.resetBtn);
-    const bottom = h('div', { class: 'd3bottom' }, legend, h('span', { class: 'sp' }), this.panel, btns);
+    const bottom = h('div', { class: 'd3bottom' }, h('span', { class: 'sp' }), this.panel, btns);
     this.stage.append(this.head);
     this.el.append(this.stage, this.veil, h('div', { class: 'd3chrome' }, head, side, bottom));
   }
@@ -415,15 +415,5 @@ export class Flat3D {
     if (done) { this.resetAnim = null; this.p.onChange?.(); this.syncControls(); }
   }
 
-  private infoDialog() {
-    const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
-    const dlg = h('dialog', { class: 'settings', attrs: { 'aria-label': t('audio3d_info_title') } },
-      h('div', { class: 'shd' }, h('h2', { textContent: t('audio3d_info_title') }), close),
-      h('p', { class: 'muted', textContent: t('audio3d_info_body') }));
-    close.onclick = () => dlg.close();
-    dlg.addEventListener('close', () => dlg.remove());
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
-    document.body.append(dlg);
-    dlg.showModal();
-  }
+  private infoDialog() { audio3dInfoDialog(false); }
 }
