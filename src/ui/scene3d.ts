@@ -16,7 +16,7 @@ import {
 import { iconOf } from './stemIcons.ts';
 import { addPanels, addStudioWall, addTraps, PANEL_COLOR, SongScreen, TRAP_COLOR } from './scene3dDecor.ts';
 import { sceneSpinner } from './curtain.ts';
-import { danceTabPill, fillDancePanel } from './dancePanel.ts';
+import { danceSetupDialog, danceTabs, fillDancePanel } from './dancePanel.ts';
 import { h, img, setSlider, slider } from './dom.ts';
 
 // Camara inicial (DEF_* de Android): detras de la cabeza, mirando la pared frontal
@@ -680,36 +680,14 @@ export class Scene3D {
   // ---------------- baile ----------------
 
   private danceDialog() {
-    const v2 = this.p.hasVocals2, chosen = new Set(this.p.stems.map((s) => s.stem)), swing = new Set(this.dance.swingIds);
-    const start = h('button', { class: 'btn', textContent: t('stems_dance_start') });
-    const grid = h('div', { class: 'dgrid' });
-    for (const s of this.p.stems) {
-      const name = t(titleKey(s.stem, v2)) || s.stem;
-      const pick = h('button', { class: 'dtile', attrs: { 'aria-pressed': 'true', 'aria-label': name, title: name } }, img(iconOf(s.stem, v2), 's', ''));
-      const sw = h('button', { class: 'dswing', textContent: t('dance_swing'), attrs: { 'aria-pressed': String(swing.has(s.stem)), 'aria-label': `${t('dance_swing')}: ${name}` } });
-      pick.onclick = () => { chosen.has(s.stem) ? chosen.delete(s.stem) : chosen.add(s.stem); pick.setAttribute('aria-pressed', String(chosen.has(s.stem))); start.disabled = !chosen.size; };
-      sw.onclick = () => { swing.has(s.stem) ? swing.delete(s.stem) : swing.add(s.stem); sw.setAttribute('aria-pressed', String(swing.has(s.stem))); };
-      grid.append(h('div', { class: 'dcell' }, pick, sw));
-    }
-    const rnd = h('input', { type: 'checkbox', checked: this.randomSwing });
-    const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
-    const dlg = h('dialog', { class: 'settings dance', attrs: { 'aria-label': t('stems_dance_title') } },
-      h('div', { class: 'shd' }, h('h2', { textContent: t('stems_dance_title') }), close), grid,
-      h('label', { class: 'dchk' }, rnd, t('dance_randomize_swing')), start);
-    close.onclick = () => dlg.close();
-    start.onclick = () => {
-      this.randomSwing = rnd.checked;
-      this.dance.start(this.p.poses, this.p.stems.map((s) => s.stem).filter((s) => chosen.has(s)), [...swing].filter((s) => chosen.has(s)), this.randomSwing);
+    danceSetupDialog(this.p, new Set(this.p.stems.map((s) => s.stem)), this.dance.swingIds, this.randomSwing, (ids, swing, random) => {
+      this.randomSwing = random;
+      this.dance.start(this.p.poses, ids, swing, random);
       this.swingStem = [...this.dance.swingIds][0] ?? null;
       this.danceTab = 'speed';
-      dlg.close();
       this.renderPanel();
       this.syncControls();
-    };
-    dlg.addEventListener('close', () => dlg.remove());
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
-    document.body.append(dlg);
-    dlg.showModal();
+    });
   }
 
   private stopDance() {
@@ -721,16 +699,14 @@ export class Scene3D {
   }
 
   /** Panel del baile: pestanas Velocidad / Distancia / Swing; slider + valor con unidad. */
-  private renderPanel(fromTab = -1) {
+  private renderPanel(fromTab: DanceTab | null = null) {
     this.panel.hidden = !this.dance.active;
     if (!this.dance.active) { this.panel.replaceChildren(); return; }
     const hasSwing = this.dance.swingIds.size > 0;
     if (!hasSwing && this.danceTab === 'swing') this.danceTab = 'speed';
-    const tabs = h('div', { class: 'seg dtabs', attrs: { role: 'tablist' } });
     const tabsDef: [DanceTab, string][] = [['speed', t('stems_dance_speed')], ['distance', t('stems_dance_distance')]];
     if (hasSwing) tabsDef.push(['swing', t('dance_tab_swing')]);
-    const tabIndex = (k: DanceTab) => tabsDef.findIndex(([d]) => d === k);
-    for (const [k, label] of tabsDef) tabs.append(h('button', { textContent: label, attrs: { role: 'tab', 'aria-checked': String(k === this.danceTab) }, onclick: () => { const from = tabIndex(this.danceTab); this.danceTab = k; this.renderPanel(from); } }));
+    const tabs = danceTabs(tabsDef, this.danceTab, fromTab, (k) => { const from = this.danceTab; this.danceTab = k; this.renderPanel(from); });
     const val = h('span', { class: 'fxv' });
     let row: HTMLElement;
     if (this.danceTab === 'speed') {
@@ -755,8 +731,6 @@ export class Scene3D {
       who.onclick = () => { this.swingStem = ids[(ids.indexOf(stem) + 1) % ids.length]; this.select(this.swingStem); this.renderPanel(); };
       sync(); row = h('div', { class: 'drow' }, who, r, val);
     }
-    const now = tabIndex(this.danceTab);
-    danceTabPill(tabs, fromTab < 0 ? now : fromTab, now);
     fillDancePanel(this.panel, tabs, row);
   }
 

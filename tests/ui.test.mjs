@@ -191,7 +191,7 @@ test('login, estados de la lista, descarga y apertura', async () => {
     // Como el login del panel: sin tarjeta ni titulo, logo centrado, etiquetas flotantes, boton pildora, idioma
     const lg = await p.eval(`(() => { const f = document.querySelector('.login form'), sub = !!f.querySelector('p.sub'), w = f.querySelector('.wm').getBoundingClientRect(), b = f.querySelector('.btn'), u = f.querySelector('.lf input'), l = f.querySelector('.lf label');
       const y0 = l.getBoundingClientRect().top; u.value = 'x'; return new Promise((r) => setTimeout(() => r({ sub, off: Math.abs((w.left + w.right) / 2 - innerWidth / 2), h1: !!f.querySelector('h1'), bg: getComputedStyle(f).backgroundColor,
-        radius: parseFloat(getComputedStyle(b).borderRadius), up: getComputedStyle(b).textTransform, fl: l.getBoundingClientRect().top < y0 && getComputedStyle(l).fontSize === '12px', langs: f.querySelectorAll('select option').length }), 300)); })()`);
+        radius: parseFloat(getComputedStyle(b).borderRadius), up: getComputedStyle(b).textTransform, fl: l.getBoundingClientRect().top < y0 && getComputedStyle(l).fontSize === '12px', langs: f.querySelectorAll('select option').length }), 800)); })()`);
     expect(!lg.sub && lg.off <= 1 && !lg.h1 && lg.bg === 'rgba(0, 0, 0, 0)' && lg.radius >= 20 && lg.up === 'uppercase' && lg.fl && lg.langs === 11, `login: ${JSON.stringify(lg)}`);
     await p.eval(`(() => { const s = document.querySelector('.login select'); s.value = 'de'; s.dispatchEvent(new Event('change')); })()`);
     await p.waitFor(`document.documentElement.lang === 'de' && document.querySelector('.login .btn')?.textContent === 'Anmelden'`, 20000);
@@ -797,58 +797,79 @@ test('3D plano (Rendimiento: Escena 2D): dummy, luces, arrastre sin cruzar la ca
     const st0 = await p.eval(`({ three: !!document.querySelector('.f3 canvas'), veil: getComputedStyle(document.querySelector('.f3veil')).opacity, inert: document.querySelector('.f3stage').classList.contains('inert') })`);
     expect(!st0.three && +st0.veil > 0.7 && st0.inert, `apagado: ${JSON.stringify(st0)}`);
     await p.eval(`document.querySelector('.f3 .d3head .switch').click()`);
-    await new Promise((r) => setTimeout(r, 300));
-    expect(+(await p.eval(`getComputedStyle(document.querySelector('.f3veil')).opacity`)) < 0.05, 'luces encendidas');
+    await p.waitFor(`+getComputedStyle(document.querySelector('.f3veil')).opacity < 0.05`, 3000); // luces encendidas
     const stem = await p.eval(`document.querySelector('.f3 .f3ic').dataset.stem`);
     const mouse = async (type, x, y) => p.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
     const drag = async (s, dx, dy) => { await mouse('mousePressed', s.x, s.y); for (let k = 1; k <= 8; k++) await mouse('mouseMoved', s.x + dx * k / 8, s.y + dy * k / 8); await mouse('mouseReleased', s.x + dx, s.y + dy); };
-    // Arrastre: el icono sigue al raton; el azimut y el radio cambian; cerca = mas grande
+    // Arrastre: el icono sigue al raton; hacia abajo = mas cerca de la camara = mas grande
     const s0 = await p.eval(`${fl}.probe('${stem}')`);
     await drag(s0, 90, 60);
     const s1 = await p.eval(`${fl}.probe('${stem}')`);
-    expect(s1.pose.placed && Math.abs(s1.x - (s0.x + 90)) < 6 && Math.abs(s1.y - (s0.y + 60)) < 6 && s1.pose.fr < s0.pose.fr && s1.scale > s0.scale,
+    expect(s1.pose.placed && Math.abs(s1.x - (s0.x + 90)) < 6 && Math.abs(s1.y - (s0.y + 60)) < 6 && s1.scale > s0.scale,
       `arrastre: (${s0.x.toFixed(0)},${s0.y.toFixed(0)}) -> (${s1.x.toFixed(0)},${s1.y.toFixed(0)}), radio ${s0.pose.fr.toFixed(2)} -> ${s1.pose.fr.toFixed(2)}, escala ${s0.scale.toFixed(2)} -> ${s1.scale.toFixed(2)}`);
-    // No se mete en la cabeza
+    // Sin hueco alrededor de la cabeza: delante del oyente pasa por detras de ella (y se puede agarrar); detras de el, por encima
     const hd = await p.eval(`(() => { const r = document.querySelector('.f3head').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
-    await drag(s1, hd.x - s1.x, hd.y - s1.y);
-    const s2 = await p.eval(`${fl}.probe('${stem}')`);
-    const ell = ((s2.x - hd.x) / (hd.w * 0.6)) ** 2 + ((s2.y - hd.y) / (hd.h * 0.55)) ** 2;
-    expect(ell > 0.98, `dentro de la cabeza: ${ell.toFixed(2)}`);
-    // Detras: circulo entero, justo debajo de la cabeza a distancia 1
     const g = await p.eval(`({ ...${fl}.g })`);
-    await drag(s2, hd.x - s2.x, hd.y + g.r - s2.y);
+    await drag(s1, hd.x - s1.x, hd.y - 10 - s1.y);
+    const s2 = await p.eval(`${fl}.probe('${stem}')`);
+    expect(Math.hypot(s2.x - hd.x, s2.y - hd.y + 10) < 6, `la cabeza aparta el icono: (${s2.x.toFixed(0)},${s2.y.toFixed(0)}) cabeza (${hd.x.toFixed(0)},${hd.y.toFixed(0)})`);
+    const depth = () => p.eval(`({ ic: +getComputedStyle(document.querySelector('.f3ic[data-stem="${stem}"]')).zIndex, head: +getComputedStyle(document.querySelector('.f3head')).zIndex, top: document.elementFromPoint(${fl}.probe('${stem}').x, ${fl}.probe('${stem}').y)?.closest?.('.f3ic')?.dataset.stem })`);
+    const dBack = await depth();
+    expect(dBack.ic < dBack.head && dBack.top === stem, `delante del oyente: ${JSON.stringify(dBack)}`);
+    // Detras: suelo en elipse, a distancia 1 queda a 0.45 del radio bajo la cabeza
+    await drag(s2, hd.x - s2.x, hd.y + g.r * 0.45 - s2.y);
     const sb = await p.eval(`${fl}.probe('${stem}')`);
-    expect(Math.abs(Math.abs(sb.pose.az) - Math.PI) < 0.1 && sb.pose.fr > 0.95, `detras: az ${(sb.pose.az * 180 / Math.PI).toFixed(0)} fr ${sb.pose.fr.toFixed(2)}`);
+    expect(Math.abs(Math.abs(sb.pose.az) - Math.PI) < 0.1 && Math.abs(sb.pose.fr - 1) < 0.05, `detras: az ${(sb.pose.az * 180 / Math.PI).toFixed(0)} fr ${sb.pose.fr.toFixed(2)}`);
+    const dFront = await depth();
+    expect(dFront.ic >= dFront.head, `detras del oyente: ${JSON.stringify(dFront)}`);
+    // Limite: no se aleja mas de 1.7 radios
+    await drag(sb, -sb.x + 4, 0);
+    const sf = await p.eval(`${fl}.probe('${stem}')`);
+    expect(sf.pose.fr <= 1.7001, `limite: ${sf.pose.fr}`);
+    await drag(sf, hd.x - sf.x, hd.y + g.r * 0.45 - sf.y);
     // Altura: el slider vertical de la seleccionada
     await p.eval(`(() => { const r = document.querySelector('.f3 .d3side input'); r.value = 40; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); })()`);
     const s3 = await p.eval(`${fl}.probe('${stem}')`);
     const elev = Math.atan2(s3.pose.h, s3.pose.rh) * 180 / Math.PI;
     expect(Math.abs(elev - 40) < 0.5, `altura ${elev.toFixed(1)} grados`);
+    const sbNow = await p.eval(`${fl}.probe('${stem}')`);
+    const liftPx = Math.tan(40 * Math.PI / 180) * 0.9 * g.r;
+    expect(Math.abs(hd.y + g.r * 0.45 - liftPx - sbNow.y) < 6, `la elevacion no sube el icono: y ${sbNow.y.toFixed(0)}, esperado ${(hd.y + g.r * 0.45 - liftPx).toFixed(0)}`);
     // Doble clic = omni (y el slider de altura se desactiva); pulsacion larga = mute
     for (let k = 0; k < 2; k++) { await mouse('mousePressed', s3.x, s3.y); await mouse('mouseReleased', s3.x, s3.y); }
     const omni = await p.eval(`({ o: ${fl}.probe('${stem}').pose.omni, cls: document.querySelector('.f3ic[data-stem="${stem}"]').classList.contains('omni'), off: document.querySelector('.f3 .d3side input').disabled })`);
     await mouse('mousePressed', s3.x, s3.y); await new Promise((r) => setTimeout(r, 650)); await mouse('mouseReleased', s3.x, s3.y);
     const muted = (await p.eval(`${fl}.probe('${stem}')`)).pose.muted;
     expect(omni.o && omni.cls && omni.off && muted, `omni ${JSON.stringify(omni)}, mute ${muted}`);
-    // Baile: sin swing en el dialogo; gira; panel con velocidad y distancia
+    // Baile con swing: el dialogo lo ofrece; pestanas y un solo slider como en la escena
     await p.eval(`document.querySelector('.f3 .d3btns .d3btn').click()`);
     await p.waitFor(`document.querySelector('dialog.dance')`, 3000);
     const swing = await p.eval(`document.querySelectorAll('dialog.dance .dswing').length`);
+    await p.eval(`document.querySelector('.f3ic[data-stem="${stem}"]') && [...document.querySelectorAll('dialog.dance .dcell')].forEach((c) => c.querySelector('.dswing').click())`);
     await p.eval(`document.querySelector('dialog.dance .btn').click()`);
-    const a0 = (await p.eval(`${fl}.probe('${stem}')`)).pose.az;
+    const other = await p.eval(`[...document.querySelectorAll('.f3 .f3ic')].map((b) => b.dataset.stem).find((k) => k !== '${stem}')`);
+    await p.eval(`${fl}.select('${other}')`);
+    const a0 = (await p.eval(`${fl}.probe('${other}')`)).pose;
+    const h0 = a0.h;
     await new Promise((r) => setTimeout(r, 600));
-    const d = await p.eval(`${fl}.probe('${stem}')`);
-    const sliders = await p.eval(`document.querySelectorAll('.f3dance input').length`);
-    expect(swing === 0 && d.dancing && sliders === 2 && Math.abs(d.pose.az - a0) > 0.05, `baile: swing ${swing}, activo ${d.dancing}, sliders ${sliders}, giro ${(d.pose.az - a0).toFixed(3)}`);
+    const d = await p.eval(`${fl}.probe('${other}')`);
+    const pan = await p.eval(`({ sliders: document.querySelectorAll('.f3dance input').length, tabs: document.querySelectorAll('.f3dance .seg button').length, elevOff: document.querySelector('.f3 .d3side input').disabled })`);
+    expect(swing === 3 && d.dancing && pan.sliders === 1 && pan.tabs === 3 && Math.abs(d.pose.az - a0.az) > 0.05, `baile: swing ${swing}, activo ${d.dancing}, ${JSON.stringify(pan)}, giro ${(d.pose.az - a0.az).toFixed(3)}`);
+    expect(d.pose.h !== h0 && pan.elevOff, `swing: altura ${h0} -> ${d.pose.h}, slider bloqueado ${pan.elevOff}`);
+    // Pestana Swing: stem + slider en Hz
+    await p.eval(`document.querySelectorAll('.f3dance .seg button')[2].click()`);
+    expect(await p.eval(`!!document.querySelector('.f3dance .dwho') && document.querySelector('.f3dance .fxv').textContent.includes('Hz')`), 'pestana swing');
     await p.eval(`document.querySelector('.f3 .d3btns .d3btn').click()`);
+    expect(await p.eval(`!document.querySelector('.f3 .d3side input').disabled`), 'al parar, la elevacion se puede tocar');
     // Reset: al semicirculo, sin omni ni mute ni altura
     await p.eval(`document.querySelector('.f3 .d3btns .d3btn:last-child').click()`);
     await new Promise((r) => setTimeout(r, 1300));
     const after = await p.eval(`[...document.querySelectorAll('.f3ic')].map((b) => ${fl}.probe(b.dataset.stem).pose)`);
     expect(after.every((q) => !q.placed && !q.omni && !q.muted && Math.abs(q.fr - 1) < 1e-9 && Math.abs(q.h) < 1e-9), `reset: ${JSON.stringify(after)}`);
-    await p.eval(`document.querySelector('.f3 .d3head .switch').click()`); // deja el 3D apagado
     return `sin three.js; arrastre ${s0.pose.fr.toFixed(2)} -> ${s1.pose.fr.toFixed(2)}, fuera de la cabeza, altura 40, omni, mute, baile, reset`;
   } finally {
+    // Con el 3D apagado aunque falle: si no, las siguientes abren la cancion en 3D y no ven la mezcla
+    await p.eval(`if (document.querySelector('.main').player.audio3d) document.querySelector('.f3 .d3head .switch')?.click()`).catch(() => {});
     // De vuelta a la escena 3D y a Mezcla para el resto
     await setScene('/^3D scene$|^Escena 3D$/');
     await p.eval(`[...document.querySelectorAll('.seg2 button')][2].click()`);
@@ -1548,6 +1569,48 @@ test('movil: panel de baile de la escena como Android (botones a la izquierda, t
     expect(await p.eval(`document.querySelector('.d3panel').hidden`), 'el panel no se va al parar');
     return `panel ${Math.round(m.panel.w)}x${Math.round(m.panel.h)}`;
   } finally {
+    await p.eval(`if (document.querySelector('.main').player?.audio3d) document.querySelector('.d3 .d3head .switch')?.click()`).catch(() => {});
+    await wait(600); // la mezcla se guarda 400 ms despues del cambio
+    await p.size(1440, 900);
+  }
+});
+
+test('movil: vista plana como Android (cabeza abajo, iconos 44 sin disco, panel de baile con pestanas)', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await p.size(412, 915);
+    await p.eval(`(() => { const s = JSON.parse(localStorage.getItem('fision.settings') || '{}'); s.audio3dScene = false; localStorage.setItem('fision.settings', JSON.stringify(s)); localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true })); })()`);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+    await p.eval(`document.querySelector('.mo-3d').click()`);
+    await p.waitFor(`document.querySelectorAll('.f3 .f3ic').length === 3 && document.querySelector('.f3 .f3head')?.naturalWidth > 0`, 10000);
+    await p.eval(`document.querySelector('.f3 .d3head .switch').click()`);
+    await wait(600); // fin de la transicion de vista
+    const m = await p.eval(`(() => { const v = document.querySelector('.f3').getBoundingClientRect(), r = document.querySelector('.f3head').getBoundingClientRect(), b = document.querySelector('.f3ic'), cs = getComputedStyle(b); return { v: v.height, headW: r.width, headFromBottom: v.bottom - (r.top + r.height / 2), icon: b.offsetWidth, bg: cs.backgroundColor, ringless: cs.boxShadow === 'none', r: document.querySelector('.f3').flat3d.g.r, w: v.width }; })()`);
+    expect(m.headW === 150 && Math.abs(m.headFromBottom - 265) < 1, `cabeza: ${JSON.stringify(m)}`);
+    expect(m.icon === 44 && m.bg === 'rgba(0, 0, 0, 0)' && m.ringless, `icono: ${JSON.stringify(m)}`);
+    expect(Math.abs(m.r - m.w * 0.35) < 1, `radio: ${m.r}`);
+    // Ningun icono baila sobre la fila inferior ni la cabecera
+    await p.eval(`document.querySelector('.f3 .d3btns .d3btn').click()`);
+    await p.waitFor(`document.querySelector('dialog.dance')`, 3000);
+    await p.eval(`document.querySelector('dialog.dance .btn').click()`);
+    await p.waitFor(`document.querySelector('.f3dance:not([hidden]) .dtabs')`, 3000);
+    const tr = await p.eval(`getComputedStyle(document.querySelector('.f3dance .dtabs')).backgroundColor`);
+    expect(tr === 'rgb(45, 40, 34)', `pista de pestanas: ${tr}`);
+    await p.eval(`(() => { const r = document.querySelectorAll('.f3dance .seg button')[1]; r.click(); })()`);
+    await p.eval(`(() => { const r = document.querySelector('.f3dance input'); r.value = r.max; r.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    const bad = await p.eval(`new Promise((done) => { const row = document.querySelector('.f3 .d3bottom').getBoundingClientRect(), h = document.querySelector('.f3 .d3head').getBoundingClientRect(); let n = 0, worst = 0; const t0 = performance.now(); const f = () => { for (const b of document.querySelectorAll('.f3ic')) { const r = b.getBoundingClientRect(), cy = r.top + r.height / 2; worst = Math.max(worst, cy - row.top, h.bottom - cy); } if (++n < 40) requestAnimationFrame(f); else done(worst); }; f(); })`);
+    expect(bad <= 0, `un icono invade los controles: ${bad.toFixed(1)} px`);
+    await p.eval(`document.querySelector('.f3 .d3btns .d3btn').click()`);
+    return `cabeza ${m.headW} px a ${Math.round(m.headFromBottom)} del borde, radio ${Math.round(m.r)}`;
+  } finally {
+    await p.eval(`if (document.querySelector('.main').player?.audio3d) document.querySelector('.d3 .d3head .switch')?.click()`).catch(() => {});
+    await wait(600); // la mezcla se guarda 400 ms despues del cambio
+    await p.eval(`(() => { const s = JSON.parse(localStorage.getItem('fision.settings') || '{}'); s.audio3dScene = true; localStorage.setItem('fision.settings', JSON.stringify(s)); })()`).catch(() => {});
     await p.size(1440, 900);
   }
 });

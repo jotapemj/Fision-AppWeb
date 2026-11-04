@@ -276,6 +276,24 @@ test('vista plana: distancia = |x, y| (min 0.1) y elevacion del slider; se guard
   expect(close(e.d3[g].dist, p.poses.get('guitar').rh / Math.cos(e.d3[g].elev * Math.PI / 180), 1e-6), `escena: ${e.d3[g].dist}`);
 });
 
+test('vista plana con camara detras: elipse, profundidad, elevacion en pantalla, limite y swing (PlayerActivity)', async () => {
+  const { flatDepthScale, flatLift, flatFloor, flatSwingElev, FLAT_SQUASH, FLAT_MAX_RADIUS } = await import('../src/player/audio3d.ts');
+  // Delante del oyente (ny < 0) = lejos de la camara = pequeno; detras = grande; con topes
+  expect(close(flatDepthScale(0), 1, 1e-9) && close(flatDepthScale(-1), 1 / 1.35, 1e-6) && close(flatDepthScale(1), 1 / 0.65, 1e-6) === false, 'escala base');
+  expect(flatDepthScale(1) === 1.5 && close(flatDepthScale(0.5), 1 / 0.825, 1e-6), `detras: ${flatDepthScale(1)}`);
+  expect(flatDepthScale(-1.7) > 0.55 && flatDepthScale(-50) === 0.55, `tope: ${flatDepthScale(-50)}`);
+  // La elevacion es la unica altura en pantalla, con tope en tan = +-1.2
+  expect(close(flatLift(0, 100), 0, 1e-9) && close(flatLift(45, 100), 90, 1e-6) && close(flatLift(70, 100), 108, 1e-6) && close(flatLift(-30, 100), -Math.tan(Math.PI / 6) * 90, 1e-6), `lift: ${flatLift(70, 100)}`);
+  // De pantalla al suelo: deshace la elipse y la altura
+  const f = flatFloor(50, 100 * FLAT_SQUASH * 0.5 - 90, 90, 100);
+  expect(close(f.x, 0.5, 1e-9) && close(f.y, 0.5, 1e-9), `suelo: ${JSON.stringify(f)}`);
+  const far = flatFloor(1000, 0, 0, 100);
+  expect(close(far.x, FLAT_MAX_RADIUS, 1e-9) && far.y === 0, `limite: ${JSON.stringify(far)}`);
+  // Swing: 0.4 de amplitud a radio 1 = 21.8 grados, con menos angulo cuanto mas lejos
+  expect(close(flatSwingElev(1, 1), Math.atan2(0.4, 1) * 180 / Math.PI, 1e-6) && close(flatSwingElev(-1, 1), -Math.atan2(0.4, 1) * 180 / Math.PI, 1e-6) && flatSwingElev(1, 1.7) < flatSwingElev(1, 1), 'swing');
+  expect(close(flatSwingElev(1, 0), 70, 1e-6), `swing pegado al centro, tope 70: ${flatSwingElev(1, 0)}`);
+});
+
 test('click de downbeat: solo con metronomo, cola desde la posicion, pausa la vacia, duck al metronomo elegido', async () => {
   const e = fakeEngine(), p = new Player(e, song());
   p.setDownbeats([0.5, 2.1, 4.0]);

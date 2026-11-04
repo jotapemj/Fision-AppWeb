@@ -1,15 +1,17 @@
-// Vista 3D plana = player_3d_view de Android (ajuste de rendimiento "Escena 2D"): el dummy de malla
-// en el centro, las pistas como iconos alrededor (arriba = delante, abajo = detras) y el motor con
-// azimut = atan2(x, -y), distancia = |x, y| (1 = radio del circulo) y la elevacion del slider vertical.
+// Vista 3D plana = player_3d_view de Android (ajuste de rendimiento "Escena 2D"): camara detras y encima
+// del dummy de malla, las pistas sobre una elipse del suelo (arriba = delante del oyente y detras de la
+// cabeza, abajo = detras) y el motor con azimut = atan2(x, -y), distancia = |x, y| (1 = radio del circulo)
+// y la elevacion del slider vertical, que tambien sube el icono en pantalla.
 // Sin three.js. Mismos gestos que la escena: arrastrar, clic, doble clic (omni), pulsacion larga (mute).
 import { t } from '../i18n/i18n.ts';
 import type { Player } from '../player/player.ts';
 import { titleKey } from '../player/stems.ts';
 import {
   DANCE_SPEED_DEFAULT, DANCE_SPEED_MAX, DANCE_SPEED_MIN, FLAT_DANCE_DIST_MAX, FLAT_DANCE_DIST_MIN,
-  FLAT_ELEV_MAX, FLAT_ELEV_MIN, defaultPose, flatDist, flatElevDeg, heightForElev, modified, type Pose3D,
+  FLAT_ELEV_MAX, FLAT_ELEV_MIN, FLAT_LIFT, FLAT_SQUASH, FLAT_SWING_AMP, SWING_DEFAULT, SWING_MAX, SWING_MIN,
+  defaultPose, flatDepthScale, flatElevDeg, flatFloor, flatLift, flatSwingElev, heightForElev, modified, type Pose3D,
 } from '../player/audio3d.ts';
-import { fillDancePanel } from './dancePanel.ts';
+import { danceSetupDialog, danceTabs, fillDancePanel } from './dancePanel.ts';
 import { iconOf } from './stemIcons.ts';
 import { h, img, setSlider, slider } from './dom.ts';
 import headUrl from '../assets/head_flat.webp';
@@ -17,6 +19,7 @@ import type { Scene3DHooks } from './scene3d.ts';
 
 const LONG_PRESS_MS = 450, DOUBLE_MS = 300, SLOP_PX = 6;
 const HEADER_PX = 56, BOTTOM_PX = 92;  // cabecera y fila inferior (solo en las esquinas)
+const MOB_BOTTOM_PX = 126, MOB_HEAD_PX = 150, MOB_HEAD_FROM_BOTTOM = 265; // movil: fila de 102 + 16 + 8; cabeza como en Android
 const CORNER_PX = 270;                  // ancho de las esquinas ocupadas (titulo, interruptor, leyenda, play)
 const EDGE_PX = 8;                      // margen arriba y abajo en la columna central
 const RESET_STAGGER_MS = 60, RESET_MS = 700;
@@ -25,8 +28,7 @@ const RESET_STAGGER_MS = 60, RESET_MS = 700;
 const toXY = (p: Pose3D) => ({ x: Math.sin(p.az) * p.fr, y: -Math.cos(p.az) * p.fr });
 /** Y su inversa: azimut del motor (0 delante = arriba) y radio. */
 const fromXY = (x: number, y: number) => ({ az: Math.atan2(x, -y), fr: Math.hypot(x, y) });
-/** Cerca = grande, lejos = pequeno (applyIconVisualForDistance). */
-export const iconScale = (fr: number) => Math.max(0.55, Math.min(1.35, 1 / Math.max(0.5, flatDist({ fr }))));
+type DanceTab = 'speed' | 'distance' | 'swing';
 
 export class Flat3D {
   readonly el = h('div', { class: 'd3 f3' });
@@ -45,14 +47,17 @@ export class Flat3D {
   private danceBtn = h('button', { class: 'd3btn', attrs: { 'aria-label': t('stems_dance_title'), title: t('stems_dance_title') } });
   private panel = h('div', { class: 'd3panel f3dance', hidden: true });
   // Geometria en px (se recalcula al cambiar de tamano)
-  private g = { cx: 0, cy: 0, r: 1, w: 0, h: 0, hw: 0, hh: 0 };
+  private g = { cx: 0, cy: 0, r: 1, w: 0, h: 0, mob: false };
   private ro: ResizeObserver | null = null;
   private raf = 0;
   private last = 0;
   private drag: { stem: string; id: number; ox: number; oy: number; x0: number; y0: number; moved: boolean; long: boolean; timer: number } | null = null;
   private lastUp = { t: 0, stem: '' };
   // Baile plano (startDance / tickDance): angulo en pantalla, factor de radio y de velocidad por stem
-  private dance = { active: false, speed: DANCE_SPEED_DEFAULT, dist: 1, ids: [] as string[], ang: new Map<string, number>(), rf: new Map<string, number>(), sf: new Map<string, number>() };
+  private dance = { active: false, speed: DANCE_SPEED_DEFAULT, dist: 1, ids: [] as string[], ang: new Map<string, number>(), rf: new Map<string, number>(), sf: new Map<string, number>(),
+    swing: new Set<string>(), phase: new Map<string, number>(), hz: new Map<string, number>(), lift: new Map<string, number>(), random: false };
+  private danceTab: DanceTab = 'speed';
+  private swingStem: string | null = null;
   private resetAnim: { from: Map<string, Pose3D>; t0: number } | null = null;
 
   constructor(p: Player, hooks: Scene3DHooks) {
@@ -80,7 +85,7 @@ export class Flat3D {
     const b = this.icons.get(stem);
     if (!b) return null;
     const r = b.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, pose: { ...this.p.poses.get(stem)! }, dancing: this.dance.active, scale: iconScale(this.p.poses.get(stem)!.fr) };
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, pose: { ...this.p.poses.get(stem)! }, dancing: this.dance.active, scale: flatDepthScale(toXY(this.p.poses.get(stem)!).y) };
   }
 
   watchAccent(_host: HTMLElement) { /* todo va por CSS (--accent) */ }
@@ -104,6 +109,7 @@ export class Flat3D {
       if (!s) return;
       const deg = +this.elev.value, pose = this.p.poses.get(s)!;
       this.p.setPose(s, { h: heightForElev(pose, deg) }, false);
+      this.place(s);
       this.tip(`${deg}°`);
     });
     this.elev.addEventListener('change', () => this.p.onChange?.());
@@ -120,39 +126,39 @@ export class Flat3D {
 
   // ---------------- geometria ----------------
 
-  /** Cabeza en el centro (Android: abajo; aqui circulo entero para poder ir detras, decision JP);
-   *  radio = 0.35 del ancho, acotado al alto (cabecera y leyenda van en las esquinas). */
+  /** Escritorio: cabeza en el centro (decision JP). Movil: abajo como Android. Radio = 0.35 del ancho, sin salirse en vertical por la elipse. */
   private layout() {
     const w = this.el.clientWidth, hh = this.el.clientHeight;
     if (!w || !hh) return;
-    const size = Math.round(Math.max(100, Math.min(170, hh * 0.22)));
-    const cy = hh / 2, cx = w / 2;
-    const r = Math.max(60, Math.min(w * 0.35, cy - EDGE_PX - 40));
-    this.g = { cx, cy, r, w, h: hh, hw: size, hh: size };
+    const mob = !!this.el.closest('.app.mob');
+    const size = mob ? MOB_HEAD_PX : Math.round(Math.max(100, Math.min(170, hh * 0.22)));
+    const cy = mob ? Math.max(hh * 0.45, hh - MOB_HEAD_FROM_BOTTOM) : hh / 2, cx = w / 2;
+    const r = Math.max(60, Math.min(w * 0.35, (cy - EDGE_PX - 40) / FLAT_SQUASH));
+    this.g = { cx, cy, r, w, h: hh, mob };
     Object.assign(this.head.style, { width: `${size}px`, height: `${size}px`, left: `${cx - size / 2}px`, top: `${cy - size / 2}px` });
     this.placeAll();
   }
 
-  /** Limites del icono (bordes; cabecera y fila inferior solo en las esquinas) y la elipse de la cabeza. */
+  /** Limites en pantalla del centro del icono: bordes, y cabecera y fila inferior (en escritorio solo en las esquinas). */
   private constrain(px: number, py: number) {
-    const g = this.g, half = 28;
+    const g = this.g, half = g.mob ? 22 : 28;
     px = Math.max(half, Math.min(g.w - half, px));
-    const corner = px < CORNER_PX || px > g.w - CORNER_PX;
-    py = Math.max((corner ? HEADER_PX : EDGE_PX) + half, Math.min(g.h - (corner ? BOTTOM_PX - 8 : EDGE_PX) - half, py));
-    const rx = g.hw * 0.6, ry = g.hh * 0.55;
-    let dx = px - g.cx, dy = py - g.cy;
-    if (Math.abs(dx) + Math.abs(dy) < 1) dy = -1; // justo en el centro: sale por delante
-    const inside = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
-    if (inside < 1) { const k = 1 / Math.sqrt(inside + 1e-6); dx *= k; dy *= k; px = g.cx + dx; py = g.cy + dy; }
+    const corner = g.mob || px < CORNER_PX || px > g.w - CORNER_PX;
+    const bottom = g.mob ? MOB_BOTTOM_PX : BOTTOM_PX - 8;
+    py = Math.max((corner ? HEADER_PX : EDGE_PX) + half, Math.min(g.h - (corner ? bottom : EDGE_PX) - half, py));
     return { px, py };
   }
+
+  /** Altura en pantalla: la de su elevacion, o la de la onda si esta en swing. */
+  private liftOf(stem: string, pose: Pose3D) { return this.dance.lift.get(stem) ?? flatLift(flatElevDeg(pose), this.g.r); }
 
   private place(stem: string) {
     const b = this.icons.get(stem), pose = this.p.poses.get(stem);
     if (!b || !pose || !this.g.w) return;
     const { x, y } = toXY(pose);
-    const { px, py } = this.constrain(this.g.cx + x * this.g.r, this.g.cy + y * this.g.r);
-    b.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%) scale(${iconScale(pose.fr)})`;
+    const { px, py } = this.constrain(this.g.cx + x * this.g.r, this.g.cy + y * this.g.r * FLAT_SQUASH - this.liftOf(stem, pose));
+    b.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%) scale(${flatDepthScale(y)})`;
+    b.style.zIndex = String(Math.round(y * 1000)); // la cabeza va en 0: delante del oyente pasa por detras de ella
     b.classList.toggle('sel', this.selected === stem);
     b.classList.toggle('omni', pose.omni);
     b.classList.toggle('muted', pose.muted);
@@ -180,10 +186,11 @@ export class Flat3D {
     const on = this.p.audio3d, sel = this.selected ? this.p.poses.get(this.selected)! : null;
     this.sw.setAttribute('aria-checked', String(on));
     // Omnipresente: el motor fuerza 0/0/1 y la elevacion no aplica
-    this.elev.disabled = !on || !sel || sel.omni;
+    // El swing tambien manda sobre la elevacion (elevationLocked)
+    this.elev.disabled = !on || !sel || sel.omni || (this.dance.active && this.dance.swing.has(this.selected!));
     if (sel) setSlider(this.elev, Math.round(flatElevDeg(sel)));
     this.danceBtn.disabled = !on; this.resetBtn.disabled = !on;
-    this.panel.querySelectorAll<HTMLInputElement>('input').forEach((c) => (c.disabled = !on));
+    this.panel.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach((c) => (c.disabled = !on));
     this.danceBtn.innerHTML = this.dance.active
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z" fill="currentColor"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
@@ -196,6 +203,8 @@ export class Flat3D {
     this.selected = stem;
     if (prev) this.place(prev);
     if (stem) this.place(stem);
+    // Un stem con swing tocado pasa a ser el que edita la pestana Swing
+    if (stem && this.dance.active && this.dance.swing.has(stem) && this.swingStem !== stem) { this.swingStem = stem; this.renderPanel(); }
     this.syncControls();
   }
 
@@ -229,7 +238,9 @@ export class Flat3D {
       if (!d.moved) { d.moved = true; clearTimeout(d.timer); this.select(stem); }
       const box = this.el.getBoundingClientRect();
       const { px, py } = this.constrain(e.clientX - d.ox - box.left, e.clientY - d.oy - box.top);
-      const { az, fr } = fromXY((px - this.g.cx) / this.g.r, (py - this.g.cy) / this.g.r);
+      this.dance.lift.delete(stem); // agarrado: sin onda
+      const f = flatFloor(px - this.g.cx, py - this.g.cy, this.liftOf(stem, this.p.poses.get(stem)!), this.g.r);
+      const { az, fr } = fromXY(f.x, f.y);
       this.p.setPose(stem, { az, fr, placed: true }, false);
       this.place(stem);
     });
@@ -270,39 +281,53 @@ export class Flat3D {
     if (this.resetAnim) this.stepReset(now);
   };
 
-  /** Radio maximo en unidades del circulo: no salir de la vista ni pisar cabecera o fila inferior. */
+  /** Radio maximo en unidades del circulo: no salir de la vista ni pisar cabecera o fila inferior (en vertical cuenta la elipse). */
   private maxRadius() {
-    const g = this.g;
-    const rx = Math.min(g.cx, g.w - g.cx) - 30, ry = Math.min(g.cy, g.h - g.cy) - EDGE_PX - 30;
+    const g = this.g, top = g.mob ? HEADER_PX : EDGE_PX, bottom = g.mob ? MOB_BOTTOM_PX : EDGE_PX;
+    const rx = Math.min(g.cx, g.w - g.cx) - 30, ry = (Math.min(g.cy - top, g.h - bottom - g.cy) - 30) / FLAT_SQUASH;
     return Math.max(50, Math.min(rx, ry)) / g.r;
   }
 
   private tickDance(dt: number) {
-    const two = 2 * Math.PI, grabbed = this.drag?.moved ? this.drag.stem : null, rMax = this.maxRadius();
-    for (const stem of this.dance.ids) {
+    const d = this.dance, two = 2 * Math.PI, grabbed = this.drag?.moved ? this.drag.stem : null, rMax = this.maxRadius();
+    for (const stem of d.ids) {
       if (stem === grabbed) continue;
       // En pantalla el angulo crece en sentido horario (y hacia abajo)
-      const ang = ((this.dance.ang.get(stem) ?? 0) + two * this.dance.speed * (this.dance.sf.get(stem) ?? 1) * dt) % two;
-      this.dance.ang.set(stem, ang);
-      const r = Math.min(rMax, (this.dance.rf.get(stem) ?? 1) * this.dance.dist);
+      const ang = ((d.ang.get(stem) ?? 0) + two * d.speed * (d.sf.get(stem) ?? 1) * dt) % two;
+      d.ang.set(stem, ang);
+      const r = Math.min(rMax, (d.rf.get(stem) ?? 1) * d.dist);
       const { az, fr } = fromXY(Math.cos(ang) * r, Math.sin(ang) * r);
-      this.p.setPose(stem, { az, fr, placed: true }, false);
+      const patch: Partial<Pose3D> = { az, fr, placed: true };
+      if (d.swing.has(stem)) {
+        // Onda alrededor de la linea de la cabeza, con fase propia: entera en pantalla a cualquier radio
+        const ph = ((d.phase.get(stem) ?? 0) + two * (d.hz.get(stem) ?? SWING_DEFAULT) * dt) % two;
+        d.phase.set(stem, ph);
+        const wave = Math.sin(ph), deg = flatSwingElev(wave, r);
+        d.lift.set(stem, FLAT_SWING_AMP * wave * this.g.r * FLAT_LIFT);
+        patch.h = heightForElev(this.p.poses.get(stem)!, deg);
+        if (stem === this.selected) setSlider(this.elev, Math.round(deg));
+      }
+      this.p.setPose(stem, patch, false);
       this.place(stem);
     }
   }
 
   /** startDance: cada stem parte de donde esta (factor de radio actual) a 0.7..1.3 x la velocidad. */
-  private startDance(ids: string[]) {
+  private startDance(ids: string[], swing: string[], random: boolean) {
     const d = this.dance;
-    d.ids = ids; d.ang.clear(); d.rf.clear(); d.sf.clear();
+    d.ids = ids; d.ang.clear(); d.rf.clear(); d.sf.clear(); d.phase.clear(); d.lift.clear();
+    d.swing = new Set(swing); d.random = random;
     for (const stem of ids) {
       const { x, y } = toXY(this.p.poses.get(stem)!);
       d.ang.set(stem, Math.atan2(y, x));
       const cur = Math.hypot(x, y);
       d.rf.set(stem, cur < 0.3 ? 1 : cur);
       d.sf.set(stem, 0.7 + Math.random() * 0.6);
+      if (d.swing.has(stem)) d.phase.set(stem, random ? Math.random() * 2 * Math.PI : 0);
     }
     d.active = ids.length > 0;
+    this.swingStem = swing[0] ?? null;
+    this.danceTab = 'speed';
     this.renderPanel();
     this.syncControls();
   }
@@ -314,51 +339,56 @@ export class Flat3D {
     this.dance.rf.set(stem, Math.max(0.3, Math.hypot(x, y) / Math.max(0.01, this.dance.dist)));
   }
 
-  /** Para y deja cada stem donde quedo (se guarda). */
+  /** Para y deja cada stem donde quedo (se guarda); el que hacia swing, en la elevacion alcanzada. */
   private stopDance() {
     this.dance.active = false;
     this.dance.ids = [];
+    this.dance.lift.clear();
+    this.placeAll();
     this.p.onChange?.();
     this.renderPanel();
     this.syncControls();
   }
 
-  /** Velocidad (vueltas/s) y distancia (multiplicador 0.4..1.2), solo mientras baila. */
-  private renderPanel() {
+  /** Pestanas Velocidad / Distancia (multiplicador) / Swing; un slider y su valor (= panel de la escena). */
+  private renderPanel(fromTab: DanceTab | null = null) {
     this.panel.hidden = !this.dance.active;
     if (!this.dance.active) { this.panel.replaceChildren(); return; }
-    const sp = slider(DANCE_SPEED_MIN, DANCE_SPEED_MAX, 0.01, this.dance.speed, t('stems_dance_speed'));
-    const di = slider(FLAT_DANCE_DIST_MIN, FLAT_DANCE_DIST_MAX, 0.05, this.dance.dist, t('stems_dance_distance'));
-    const spV = h('span', { class: 'fxv' }), diV = h('span', { class: 'fxv' });
-    const sync = () => { spV.textContent = t('dance_value_speed', this.dance.speed.toFixed(2)); diV.textContent = `${this.dance.dist.toFixed(2)}×`; };
-    sp.addEventListener('input', () => { this.dance.speed = +sp.value; sync(); });
-    di.addEventListener('input', () => { this.dance.dist = +di.value; sync(); });
-    sync();
-    fillDancePanel(this.panel,
-      h('div', { class: 'drow' }, h('span', { class: 'dlab', textContent: t('stems_dance_speed') }), sp, spV),
-      h('div', { class: 'drow' }, h('span', { class: 'dlab', textContent: t('stems_dance_distance') }), di, diV));
+    const d = this.dance, ids = d.ids.filter((s) => d.swing.has(s));
+    if (!ids.length && this.danceTab === 'swing') this.danceTab = 'speed';
+    const defs: [DanceTab, string][] = [['speed', t('stems_dance_speed')], ['distance', t('stems_dance_distance')]];
+    if (ids.length) defs.push(['swing', t('dance_tab_swing')]);
+    const tabs = danceTabs(defs, this.danceTab, fromTab, (k) => { const from = this.danceTab; this.danceTab = k; this.renderPanel(from); });
+    const val = h('span', { class: 'fxv' });
+    let row: HTMLElement;
+    if (this.danceTab === 'speed') {
+      const r = slider(DANCE_SPEED_MIN, DANCE_SPEED_MAX, 0.01, d.speed, t('stems_dance_speed'));
+      const sync = () => (val.textContent = t('dance_value_speed', d.speed.toFixed(2)));
+      r.addEventListener('input', () => { d.speed = +r.value; sync(); });
+      sync(); row = h('div', { class: 'drow' }, r, val);
+    } else if (this.danceTab === 'distance') {
+      const r = slider(FLAT_DANCE_DIST_MIN, FLAT_DANCE_DIST_MAX, 0.05, d.dist, t('stems_dance_distance'));
+      const sync = () => (val.textContent = `${d.dist.toFixed(2)}x`);
+      r.addEventListener('input', () => { d.dist = +r.value; sync(); });
+      sync(); row = h('div', { class: 'drow' }, r, val);
+    } else {
+      if (!this.swingStem || !d.swing.has(this.swingStem)) this.swingStem = ids[0];
+      const stem = this.swingStem!, name = t(titleKey(stem, this.p.hasVocals2)) || stem;
+      const r = slider(SWING_MIN, SWING_MAX, 0.05, d.hz.get(stem) ?? SWING_DEFAULT, t('stems_dance_osc_speed'));
+      const sync = () => (val.textContent = `${(d.hz.get(stem) ?? SWING_DEFAULT).toFixed(2)} Hz`);
+      r.addEventListener('input', () => { d.hz.set(stem, +r.value); sync(); });
+      // Icono del stem del swing: clic = siguiente stem con swing
+      const who = h('button', { class: 'dwho', attrs: { 'aria-label': name, title: name } }, img(iconOf(stem, this.p.hasVocals2), 's', ''));
+      who.onclick = () => { this.select(ids[(ids.indexOf(stem) + 1) % ids.length]); };
+      sync(); row = h('div', { class: 'drow' }, who, r, val);
+    }
+    fillDancePanel(this.panel, tabs, row);
+    this.syncControls();
   }
 
   private danceDialog() {
-    const v2 = this.p.hasVocals2, chosen = new Set(this.dance.ids.length ? this.dance.ids : this.p.stems.map((s) => s.stem));
-    const start = h('button', { class: 'btn', textContent: t('stems_dance_start') });
-    // Sin swing en la vista plana (no hay eje vertical)
-    const grid = h('div', { class: 'dgrid' });
-    for (const s of this.p.stems) {
-      const name = t(titleKey(s.stem, v2)) || s.stem;
-      const pick = h('button', { class: 'dtile', attrs: { 'aria-pressed': String(chosen.has(s.stem)), 'aria-label': name, title: name } }, img(iconOf(s.stem, v2), 's', ''));
-      pick.onclick = () => { chosen.has(s.stem) ? chosen.delete(s.stem) : chosen.add(s.stem); pick.setAttribute('aria-pressed', String(chosen.has(s.stem))); start.disabled = !chosen.size; };
-      grid.append(h('div', { class: 'dcell' }, pick));
-    }
-    const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
-    const dlg = h('dialog', { class: 'settings dance', attrs: { 'aria-label': t('stems_dance_title') } },
-      h('div', { class: 'shd' }, h('h2', { textContent: t('stems_dance_title') }), close), grid, start);
-    close.onclick = () => dlg.close();
-    start.onclick = () => { this.startDance(this.p.stems.map((s) => s.stem).filter((s) => chosen.has(s))); dlg.close(); };
-    dlg.addEventListener('close', () => dlg.remove());
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
-    document.body.append(dlg);
-    dlg.showModal();
+    danceSetupDialog(this.p, new Set(this.dance.ids.length ? this.dance.ids : this.p.stems.map((s) => s.stem)), this.dance.swing, this.dance.random,
+      (ids, swing, random) => this.startDance(ids, swing, random));
   }
 
   /** Vuelta al semicirculo frontal en cascada (60 ms, 700 ms por icono); limpia omni, mute y elevacion. */

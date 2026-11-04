@@ -15,6 +15,8 @@ export const DANCE_SINE_AMP = 0.6;
 // Vista plana 2D (ajuste de rendimiento): radio en unidades del semicirculo, elevacion del slider
 export const FLAT_ELEV_MIN = -30, FLAT_ELEV_MAX = 70, FLAT_MIN_DIST = 0.1;
 export const FLAT_DANCE_DIST_MIN = 0.4, FLAT_DANCE_DIST_MAX = 1.2;
+// Vista plana vista desde una camara detras y encima de la cabeza: el circulo del suelo es una elipse
+export const FLAT_SQUASH = 0.45, FLAT_PERSPECTIVE = 0.35, FLAT_MAX_RADIUS = 1.7, FLAT_LIFT = 0.9, FLAT_SWING_AMP = 0.4;
 
 export interface Pose3D {
   az: number;      // azimut del motor (rad)
@@ -78,6 +80,19 @@ export const flatDist = (p: Pick<Pose3D, 'fr'>) => Math.max(FLAT_MIN_DIST, p.fr)
 export const flatElevDeg = (p: Pick<Pose3D, 'h' | 'rh'>) => clamp(elevRad(p) * 180 / Math.PI, FLAT_ELEV_MIN, FLAT_ELEV_MAX);
 /** Altura que da esa elevacion con el radio de la escena (la pose guarda h). */
 export const heightForElev = (p: Pick<Pose3D, 'rh'>, deg: number) => p.rh * Math.tan(clamp(deg, FLAT_ELEV_MIN, FLAT_ELEV_MAX) * Math.PI / 180);
+/** Delante del oyente (ny < 0) = lejos de la camara = pequeno. */
+export const flatDepthScale = (ny: number) => clamp(1 / Math.max(0.2, 1 - FLAT_PERSPECTIVE * ny), 0.55, 1.5);
+/** Px que sube el icono sobre su punto del suelo: la elevacion es la unica altura en pantalla. */
+export const flatLift = (deg: number, r: number) => clamp(Math.tan(deg * Math.PI / 180), -1.2, 1.2) * r * FLAT_LIFT;
+/** De pantalla (px desde la cabeza) al suelo: deshace la elipse y la altura, con el limite de distancia. */
+export function flatFloor(dx: number, dy: number, lift: number, r: number) {
+  let x = dx / r, y = (dy + lift) / (r * FLAT_SQUASH);
+  const reach = Math.hypot(x, y);
+  if (reach > FLAT_MAX_RADIUS) { x *= FLAT_MAX_RADIUS / reach; y *= FLAT_MAX_RADIUS / reach; }
+  return { x, y };
+}
+/** Elevacion del motor para una onda de swing (-1..1) a esa distancia. */
+export const flatSwingElev = (wave: number, dist: number) => clamp(Math.atan2(FLAT_SWING_AMP * wave, Math.max(FLAT_MIN_DIST, dist)) * 180 / Math.PI, FLAT_ELEV_MIN, FLAT_ELEV_MAX);
 
 /** Posicion en el mundo. El oyente mira a +Z; la camara empieza detras (en -Z) y su derecha es -X,
  *  asi que el oido derecho (+pi/2) cae en -X: lo que se ve a la derecha suena a la derecha. */
