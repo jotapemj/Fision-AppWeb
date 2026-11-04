@@ -44,7 +44,7 @@ export interface PlayerHooks {
   /** Movil: bajar el reproductor a la biblioteca (b_back). */
   onCollapse?(): void;
   /** Beat nuevo: posicion en el compas, compas y tempo oido (BPM x multiplicador). */
-  onBeat(pos: number, beatsPerBar: number, heardBpm: number | null): void;
+  onBeat(pos: number, beatsPerBar: number, heardBpm: number | null, timeSec: number): void;
   nebula: { get(): boolean; set(on: boolean): void };
   /** Sonido en downbeat (global) y su sonido: indice de DOWNBEAT_SOUNDS. */
   downbeat: { get(): { on: boolean; type: number }; setOn(on: boolean): void; setType(i: number): void };
@@ -493,7 +493,7 @@ export class PlayerView {
       if (b !== this.beat) {
         const forward = b === this.beat + 1; // pulso solo al avanzar beat a beat (no en seeks)
         this.beat = b;
-        if (forward && b >= 0 && this.p.playing) this.hooks.onBeat(this.beats.cells[b].pos, this.beats.beatsPerBar, this.p.bpm ? this.p.bpm * this.p.tempoMult : null);
+        if (forward && b >= 0 && this.p.playing) this.hooks.onBeat(this.beats.cells[b].pos, this.beats.beatsPerBar, this.p.bpm ? this.p.bpm * this.p.tempoMult : null, this.beats.cells[b].time);
       }
     }
     if (this.beat !== this.bpmBeat) {

@@ -30,11 +30,18 @@ function voiceWav(spans) {
   return buf;
 }
 
+// Bateria falsa: 10 s a -20 dB y 10 s normales (secciones del pulso)
+function sectionWav() {
+  const buf = sineWav(60, 20);
+  for (let i = 44; i < 44 + 10 * 48000 * 4; i += 2) buf.writeInt16LE(Math.round(buf.readInt16LE(i) * 0.1), i);
+  return buf;
+}
+
 // Server falso: cuenta "demo"/"pw"; H1 lista, H2 con error, H3 en cola
 async function fakeServer() {
   const zip = makeZip([
     { name: 'vocals.wav', data: voiceWav([[0.5, 2], [2.5, 4], [12, 15]]) }, { name: 'bass.wav', data: sineWav(110, 20) },
-    { name: 'kick.wav', data: sineWav(60, 20) }, { name: 'metronome.wav', data: sineWav(1000, 20) },
+    { name: 'kick.wav', data: sectionWav() }, { name: 'metronome.wav', data: sineWav(1000, 20) },
     // 120 BPM: un beat cada 0.5 s, compas de 4 (downbeat cada 2 s)
     { name: 'beats.txt', data: Buffer.from(['120.0', ...Array.from({ length: 40 }, (_, i) => (0.5 + i * 0.5).toFixed(2))].join('\n')), deflate: true },
     { name: 'downbeats.txt', data: Buffer.from(Array.from({ length: 10 }, (_, i) => (0.5 + i * 2).toFixed(2)).join('\n')) },
@@ -1641,6 +1648,62 @@ test('movil: vista plana como Android (cabeza abajo, iconos 44 sin disco, panel 
     await wait(600); // la mezcla se guarda 400 ms despues del cambio
     await p.eval(`(() => { const s = JSON.parse(localStorage.getItem('fision.settings') || '{}'); s.audio3dScene = true; localStorage.setItem('fision.settings', JSON.stringify(s)); })()`).catch(() => {});
     await p.size(1440, 900);
+  }
+});
+
+test('fondo animado: el pulso sigue a las secciones de la bateria y el mapa queda guardado con la cancion', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const P = `document.querySelector('.main').player`;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const setNebula = (on) => p.eval(`(() => { const s = JSON.parse(localStorage.getItem('fision.settings') || '{}'); s.nebula = ${on}; localStorage.setItem('fision.settings', JSON.stringify(s)); })()`);
+  const mapFile = `(async () => { const r = await navigator.storage.getDirectory(); for await (const [n, acc] of r.entries()) { if (!n.startsWith('acc_')) continue; for await (const [h, d] of acc.entries()) { if (d.kind !== 'directory') continue; try { return await (await (await d.getFileHandle('pulse_map.txt')).getFile()).text(); } catch {} } } return null; })()`;
+  const open = async () => {
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelectorAll('.dr').length === 3`, 20000);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+  };
+  const clear = `(async () => { const r = await navigator.storage.getDirectory(); for await (const [n, acc] of r.entries()) { if (!n.startsWith('acc_')) continue; for await (const [h, d] of acc.entries()) { if (d.kind === 'directory') await d.removeEntry('pulse_map.txt').catch(() => {}); } } })()`;
+  try {
+    // Apagado: no se mide nada
+    await p.eval(clear);
+    await setNebula(false);
+    await open();
+    await wait(1200);
+    expect((await p.eval(mapFile)) === null, 'con el fondo apagado no se mide');
+    // Encendido: se mide en segundo plano y se guarda
+    await setNebula(true);
+    await open();
+    let txt = null;
+    for (let k = 0; k < 60 && !txt; k++) { txt = await p.eval(mapFile); if (!txt) await wait(250); }
+    expect(!!txt && txt.startsWith('1 ') && txt.trim().split('\n').length === 2, `mapa guardado: ${txt}`);
+    const spy = () => p.eval(`(() => { const n = document.querySelector('canvas.nebula').nebula; window.__beats = []; const b = n.beat.bind(n); n.beat = (k) => { window.__beats.push(k); b(k); }; })()`);
+    await spy();
+    const during = async (ms, secs) => { await p.eval(`${P}.seek(${ms}); window.__beats.length = 0; ${P}.playing || document.querySelector('.play')?.click()`); await wait(secs * 1000); return p.eval(`[...window.__beats]`); };
+    // Seccion floja: quieto
+    const quiet = await during(500, 2.5);
+    expect(quiet.length === 0, `seccion floja: ${quiet}`);
+    // Rampa: pulsa con menos fuerza
+    const ramp = await during(7000, 1.5);
+    expect(ramp.length > 0 && ramp.every((k) => k > 0 && k < 0.8), `rampa: ${ramp}`);
+    // Seccion fuerte: las fuerzas normales
+    const loud = await during(13000, 2);
+    expect(loud.length > 1 && loud.every((k) => k === 0.35 || k === 0.9), `fuerte: ${loud}`);
+    // Segunda apertura: de la cache, sin volver a medir (la fecha del fichero no cambia)
+    const stamp = `(async () => { const r = await navigator.storage.getDirectory(); for await (const [n, acc] of r.entries()) { if (!n.startsWith('acc_')) continue; for await (const [h, d] of acc.entries()) { if (d.kind !== 'directory') continue; try { return (await (await d.getFileHandle('pulse_map.txt')).getFile()).lastModified; } catch {} } } return 0; })()`;
+    const t0 = await p.eval(stamp);
+    await open();
+    await wait(1500);
+    expect(t0 > 0 && (await p.eval(stamp)) === t0, 'la segunda apertura ha vuelto a medir');
+    await spy();
+    const again = await during(500, 2);
+    expect(again.length === 0, `la cache no aplica: ${again}`);
+    return `${txt.trim().split('\n')[1]}; flojo 0 pulsos, rampa ${ramp.map((k) => k.toFixed(2))}, fuerte ${loud.length}`;
+  } finally {
+    await setNebula(false).catch(() => {});
+    await p.goto(c.url).catch(() => {});
+    await p.waitFor(`document.querySelectorAll('.dr').length === 3`, 20000).catch(() => {});
   }
 });
 

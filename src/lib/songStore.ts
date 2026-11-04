@@ -114,6 +114,27 @@ export class SongStore {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** Nombre, tamano y fecha de cada fichero, sin leerlos. */
+  async fileStats(hash: string): Promise<{ name: string; size: number; lastModified: number }[]> {
+    if ((await this.version(hash)) === null) throw new Error('not_downloaded');
+    const d = await (await this.root).getDirectoryHandle(hash);
+    const out = [];
+    for await (const name of d.keys()) {
+      if (name === MARK) continue;
+      const f = await (await d.getFileHandle(name)).getFile() as Blob & { lastModified?: number };
+      out.push({ name, size: f.size, lastModified: f.lastModified ?? 0 });
+    }
+    return out;
+  }
+
+  /** Texto de un fichero de la copia, o null si no esta. */
+  async getText(hash: string, name: string): Promise<string | null> {
+    try {
+      const d = await (await this.root).getDirectoryHandle(hash);
+      return await (await (await d.getFileHandle(name)).getFile()).text();
+    } catch (e) { if (notFound(e)) return null; throw e; }
+  }
+
   /** Sustituye (o borra con null) un fichero de una copia completa: p. ej. lyrics.json al refrescar. */
   async putFile(hash: string, name: string, data: Uint8Array | null): Promise<void> {
     if (!safeName(name)) throw new Error('bad_entry_name');

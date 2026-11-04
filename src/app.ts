@@ -25,6 +25,8 @@ import { MiniPlayer, type MiniSong } from './ui/miniPlayer.ts';
 import { Nebula } from './ui/nebula.ts';
 import { IdleMain } from './ui/idleMain.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
+import type { BeatPulseMap } from './player/beatPulseMap.ts';
+import { loadPulseMap } from './player/pulseLoader.ts';
 import { ACCENTS, DOWNBEAT_SOUNDS, type SettingsStore } from './settings.ts';
 import { openSettings } from './ui/settingsView.ts';
 import { startTour } from './ui/coachMark.ts';
@@ -47,6 +49,9 @@ export class App {
   private settings: SettingsStore;
   private root: HTMLElement;
   private store: SongStore | null = null;
+  // Ganancia del pulso por secciones de la cancion; null = pulso siempre encendido
+  private pulseMap: BeatPulseMap | null = null;
+  private pulseAbort: AbortController | null = null;
   private sidebar: Sidebar | null = null;
   private shell: HTMLElement | null = null;
   private entries: LibraryEntry[] = [];
@@ -555,7 +560,10 @@ export class App {
         onPrev: () => this.step(-1), onNext: () => this.step(1),
         onCollapse: () => this.showPlayer(false),
         onEnded: () => this.step(1), onPlayState: () => this.render(),
-        onBeat: (pos, bpb, bpm) => { const k = pulseFor(pos, bpb, bpm); if (k) this.nebula?.beat(k); },
+        onBeat: (pos, bpb, bpm, time) => {
+          const k = pulseFor(pos, bpb, bpm), gain = this.pulseMap ? this.pulseMap.gainAt(time) : 1;
+          if (k && gain > 0) this.nebula?.beat(k * gain); // lo tranquilo queda quieto; el pulso crece antes de lo fuerte
+        },
         nebula: { get: () => this.settings.get('nebula'), set: (on) => this.settings.set('nebula', on) },
         downbeat: { get: () => ({ on: this.settings.get('downbeatSound'), type: this.settings.get('downbeatType') }),
           setOn: (on) => this.settings.set('downbeatSound', on), setType: (i) => this.settings.set('downbeatType', i) },
@@ -589,6 +597,7 @@ export class App {
       applyChords();
       void this.applyDownbeat(player); // motor nuevo: el click se carga otra vez
       setLyr = (st) => { if (this.current?.view !== view) return; lyrics = st; applyChords(); };
+      this.refreshPulseMap();
       // Acordes nuevos del server con la cancion abierta: se ven ya (chordsUpdatedListener)
       this.current.reloadChords = async () => {
         replaceFiles(await this.store!.load(e.hash, (n) => CHORD_FILES.includes(n)));
@@ -617,7 +626,7 @@ export class App {
 
   private onSetting(k: string) {
     const cur = this.current;
-    if (k === 'nebula') this.nebula?.setEnabled(this.settings.get('nebula'));
+    if (k === 'nebula') { this.nebula?.setEnabled(this.settings.get('nebula')); this.refreshPulseMap(); }
     if (k === 'accentId' || k === 'songColors') { this.applySongColors(); this.idle?.setAccent(ACCENTS[this.settings.get('accentId')]); }
     if (k === 'sortAsc') this.render();
     if (k === 'audio3dScene' && cur) { cur.player.setFlat3D(!this.settings.get('audio3dScene')); cur.view.reload3D(); }
@@ -771,7 +780,23 @@ export class App {
     if (e) this.open(e, stay);
   }
 
+  /** Mide o carga en segundo plano las secciones de la cancion, solo con el fondo animado encendido. */
+  private refreshPulseMap() {
+    this.pulseAbort?.abort();
+    this.pulseAbort = null;
+    this.pulseMap = null;
+    const cur = this.current;
+    if (!cur || !this.store || !this.settings.get('nebula')) return;
+    const ctl = this.pulseAbort = new AbortController();
+    loadPulseMap(this.store, cur.entry.hash, cur.player.beats, ctl.signal)
+      .then((map) => { if (!ctl.signal.aborted) this.pulseMap = map; })
+      .catch(() => {});
+  }
+
   private stopSong() {
+    this.pulseAbort?.abort();
+    this.pulseAbort = null;
+    this.pulseMap = null;
     this.flushSave?.();
     if (!this.current) return;
     this.current.player.pause();
