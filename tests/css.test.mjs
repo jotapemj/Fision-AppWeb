@@ -19,3 +19,9 @@ test('iconos dibujados, no caracteres de texto (✕ ← ⋯ ▾ ✓ + − ⠿ co
   }
   expect(!bad.length, `${bad.length} iconos de texto: ${bad.join(', ')}`);
 });
+
+test('el texto sobre el acento sigue a --on-accent (con colores de portada pasa a negro)', () => {
+  const css = fs.readFileSync(new URL('../src/styles/app.css', import.meta.url), 'utf8');
+  const bad = css.split(/\r?\n/).filter((l) => /rgba?\(\s*4\s*,\s*20\s*,\s*15|#04140f/i.test(l) && !/^\s*--on-accent:/.test(l));
+  expect(!bad.length, `${bad.length} con el valor fijo: ${bad[0] ?? ''}`);
+});

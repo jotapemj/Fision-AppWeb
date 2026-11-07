@@ -268,7 +268,7 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cgrid .g.trail { background: color-mix(in srgb, var(--accent) 45%, #000); }
 .cgrid .g.now { background: var(--accent); color: var(--on-accent); }
 .cgrid .g.ghost { font-size: clamp(14px, 1.8vw, 22px); color: rgba(255,255,255,.32); }
-.cgrid .g.ghost.now { color: rgba(4,20,15,.6); }
+.cgrid .g.ghost.now { color: color-mix(in srgb, var(--on-accent) 60%, transparent); }
 .cgrid .g.b2 { overflow: visible; }
 .cgrid .g.b2::before { content: ""; position: absolute; left: -10px; top: 18%; bottom: 18%; width: 2px; border-radius: 1px; background: var(--accent); }
 .swap { animation: chswap 240ms cubic-bezier(.2,.7,.3,1); }
@@ -290,7 +290,7 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .strip .c.trail { background: color-mix(in srgb, var(--accent) 45%, #000); }
 .strip .c.now { background: var(--accent); color: var(--on-accent); }
 .strip .c.ghost { font-size: 20px; color: rgba(255,255,255,.32); }
-.strip .c.ghost.now { color: rgba(4,20,15,.6); }
+.strip .c.ghost.now { color: color-mix(in srgb, var(--on-accent) 60%, transparent); }
 .strip .bar { flex: none; width: 2px; height: 50px; border-radius: 1px; background: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .strip-track { transition: none; } }
 /* Diagramas (chords.html): selectores + actual/siguiente a la izquierda, vocabulario a la derecha */
