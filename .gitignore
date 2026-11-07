@@ -17,8 +17,8 @@ build/
 # Motor compilado (npm run engine)
 public/engine/
 
-# Maquetas: perfiles de Chrome y cache de los generadores
-docs/mockups/prof_*/
+# Maquetas de diseno: solo en local
+docs/mockups/
 __pycache__/
 
 # Sistema
