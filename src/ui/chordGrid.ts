@@ -51,7 +51,7 @@ export class ChordGrid {
       const c = cells[ci];
       let label = c.chord, ghost = false;
       if (!label && c.isDownbeat) { label = soundingChord(cells, ci - 1); ghost = !!label; }
-      const el = h('button', { class: `g${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}${second ? ' b2' : ''}`, attrs: { role: 'listitem', tabindex: '-1' } }, chordLabel(fmt(label)));
+      const el = h('button', { class: `g${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}${second ? ' b2' : ''}`, attrs: { role: 'listitem', tabindex: '-1', ...(label ? {} : { 'aria-hidden': 'true' }) } }, chordLabel(fmt(label)));
       el.onclick = () => { this.stopBrowsing(); onSeek(c.time); };
       this.cellEls[ci] = place(el);
     });

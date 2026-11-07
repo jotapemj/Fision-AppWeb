@@ -99,9 +99,9 @@ export class Sidebar {
     find.innerHTML = SEARCH_SVG;
     find.append(input);
     this.flt.onclick = () => this.openFilterMenu();
-    const bar = this.bar = h('div', { class: 'bar2' }, h('span', { class: 't', textContent: t('tab_songs') }), this.flt, this.count);
+    const bar = this.bar = h('div', { class: 'bar2' }, h('h2', { class: 't', textContent: t('tab_songs') }), this.flt, this.count);
     this.plAdd.onclick = () => hooks.onNewPlaylist();
-    const plSec = h('section', { class: 'plsec', attrs: { 'aria-label': t('tab_playlists') } }, h('div', { class: 'plbar' }, h('span', { textContent: t('tab_playlists') }), this.plAdd), this.plList);
+    const plSec = h('section', { class: 'plsec', attrs: { 'aria-label': t('tab_playlists') } }, h('div', { class: 'plbar' }, h('h2', { textContent: t('tab_playlists') }), this.plAdd), this.plList);
     const me = h('div', { class: 'me' },
       h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } }),
       h('span', { class: 'who' }, h('b', { textContent: user }), this.srv),
@@ -139,7 +139,7 @@ export class Sidebar {
       b.append(h('span', { textContent: label }));
       this.navBtns.set(k, b); nav.append(b);
     }
-    this.el = h('aside', { class: 'pane', attrs: { 'data-tab': this.tab } }, mhd, this.mTitle, h('div', { class: 'hd' }, img(wordmark, 'wm', 'Fision'), addBtn), frow,
+    this.el = h('aside', { class: 'pane', attrs: { 'data-tab': this.tab } }, mhd, this.mTitle, h('div', { class: 'hd' }, h('h1', { class: 'hdt' }, img(wordmark, 'wm', 'Fision')), addBtn), frow,
       h('div', { class: 'lhead' }, bar, chipRow, this.plHead), this.list, plSec, me, nav);
     this.mTitle.textContent = t('tab_songs');
     // Tour de la biblioteca (MainActivity.maybeStartLibraryTour)

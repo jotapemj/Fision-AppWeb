@@ -18,7 +18,7 @@ export class IdleMain {
     this.nebula.el.classList.add('idleneb');
     this.nebula.setColors(accentPalette(accent));
     this.nebula.setEnabled(true);
-    this.el = h('section', { class: 'main idle' }, this.nebula.el, h('div', { class: 'idlec' }, this.mark, h('p', { class: 'hint', textContent: text })));
+    this.el = h('main', { class: 'main idle' }, this.nebula.el, h('div', { class: 'idlec' }, this.mark, h('p', { class: 'hint', textContent: text })));
     requestAnimationFrame(() => this.paintMark());
   }
 

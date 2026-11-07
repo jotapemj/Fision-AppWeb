@@ -42,7 +42,7 @@ export class ChordStrip {
       // Compas sin acorde propio: se recuerda el sostenido, pequeno y tenue
       let label = c.chord, ghost = false;
       if (!label && c.isDownbeat) { label = soundingChord(cells, i - 1); ghost = !!label; }
-      const el = h('button', { class: `c${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}`, attrs: { role: 'listitem', tabindex: '-1' } }, chordLabel(fmt(label)));
+      const el = h('button', { class: `c${c.isDownbeat ? ' db' : ''}${ghost ? ' ghost' : ''}`, attrs: { role: 'listitem', tabindex: '-1', ...(label ? {} : { 'aria-hidden': 'true' }) } }, chordLabel(fmt(label)));
       el.onclick = () => { this.stopBrowsing(); onSeek(c.time); };
       this.cellEls.push(el);
       this.track.append(el);

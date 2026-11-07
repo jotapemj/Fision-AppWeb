@@ -149,7 +149,7 @@ const MEASURE = `(() => {
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const out = { contrast: [], overlap: [], clipped: [], measured: 0, hscroll: document.documentElement.scrollWidth > innerWidth, vscroll: document.documentElement.scrollHeight > innerHeight };
   const SEL = ['.fxpanel b', '.fxv', '.lr small', '.fxpanel .seg button', '.dr .tx b', '.dr .tx span', '.bar2 .t', '.flt', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
-    '.seek .meta span', '.seg2 button', '.top .t b', '.top .t span', '.me .who span', '.me .out'];
+    '.seek .meta span', '.seg2 button', '.top .t h2', '.top .t span', '.me .who span', '.me .out'];
   for (const s of SEL) for (const el of document.querySelectorAll(s)) {
     if (!el.getClientRects().length) continue;
     out.measured++;
@@ -563,7 +563,7 @@ test('contraste con el fondo animado encendido: textos sobre la nebulosa en su p
   await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
   await new Promise((r) => setTimeout(r, 700));
   const SEL = ['.fxpanel b', '.fxv', '.lr small', '.fxpanel .seg button', '.bar2 .t', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
-    '.seek .meta span', '.seg2 button', '.top .t b', '.top .t span'];
+    '.seek .meta span', '.seg2 button', '.top .t h2', '.top .t span'];
   // Textos a medir: color, tamano y caja del texto (rango), solo los que caen sobre la nebulosa
   const items = await p.eval(`(() => { const out = [];
     for (const s of ${JSON.stringify(SEL)}) for (const el of document.querySelectorAll(s)) {
@@ -998,7 +998,7 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     expect(up.zips.includes(H4), `zips pedidos: ${up.zips.join()}`);
     // Reprocesar la que suena desde el menu: form con el config, y se vuelve a bajar
     await p.eval(`[...document.querySelectorAll('.dr')].find((r) => r.textContent.includes('Cancion buena')).click()`);
-    await p.waitFor(`document.querySelector('.top .t b')?.textContent === 'Cancion buena' && !document.querySelector('canvas.curtain-c')`, 10000);
+    await p.waitFor(`document.querySelector('.top .t h2')?.textContent === 'Cancion buena' && !document.querySelector('canvas.curtain-c')`, 10000);
     const before = up.zips.filter((z) => z === H1).length;
     await p.eval(`document.querySelector('.top .ib').click()`);
     await p.eval(`[...document.querySelectorAll('.menu-pop .menuitem')].find((b) => /Reprocesar|Reprocess/.test(b.textContent)).click()`);
@@ -1019,7 +1019,7 @@ test('letra: sin letra se elige idioma y se pide; el job de letra no ocupa la fi
   const p = c.page, lyr = c.fake.up.lyr;
   const row = `[...document.querySelectorAll('.dr')].find((r) => r.textContent.includes('Subida'))`;
   await p.eval(`${row}.click()`);
-  await p.waitFor(`document.querySelector('.top .t b')?.textContent === 'Subida' && !document.querySelector('canvas.curtain-c')`, 10000);
+  await p.waitFor(`document.querySelector('.top .t h2')?.textContent === 'Subida' && !document.querySelector('canvas.curtain-c')`, 10000);
   await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
   await p.waitFor(`document.querySelector('.lystate .lycard')`, 5000);
   const auto = await p.eval(`document.querySelector('.lycard b').textContent`);
@@ -1776,6 +1776,57 @@ test('movil (Android 3.4.0): letra con controles plegables, reloj al arrastrar, 
     return `tira ${Math.round(far)} / ${Math.round(step)} ms, panel ${Math.round(open.bar.h)} -> ${Math.round(f.bar.h)} px`;
   } finally {
     await p.eval(`localStorage.setItem('fision.lyrics_karaoke_mode', '0')`).catch(() => {});
+    await p.size(1440, 900);
+  }
+});
+
+test('accesibilidad: region principal, encabezados, foco del buscador y celdas de acorde con nombre', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Visible y con nombre accesible (lo minimo: texto, aria-label o alt de su imagen)
+  const scan = `(() => {
+    const vis = (e) => e.checkVisibility({ visibilityProperty: true, opacityProperty: true });
+    const named = (e) => !!((e.getAttribute('aria-label') || e.textContent || '').trim() || e.querySelector('img[alt]:not([alt=""])'));
+    const heads = [...document.querySelectorAll('h1, h2')].filter(vis).map((x) => x.tagName + ':' + (x.textContent.trim() || x.querySelector('img')?.alt || ''));
+    const mains = [...document.querySelectorAll('main')].filter(vis).length;
+    const unnamed = [...document.querySelectorAll('button, [role=listitem]')].filter((e) => vis(e) && e.getAttribute('aria-hidden') !== 'true' && !e.closest('[aria-hidden=true]') && !named(e)).map((e) => e.className);
+    return { heads, mains, unnamed: [...new Set(unnamed)] };
+  })()`;
+  try {
+    await p.size(1440, 900);
+    await p.goto(c.url);
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelectorAll('.dr').length === 3`, 20000);
+    await wait(300);
+    const idle = await p.eval(scan);
+    expect(idle.mains === 1, `centro vacio: ${idle.mains} main`);
+    // Foco del buscador: algo visible cambia al enfocarlo
+    const ring = () => p.eval(`(() => { const f = document.querySelector('.pane .find'); const s = getComputedStyle(f); return s.boxShadow + '|' + s.outlineStyle; })()`);
+    const before = await ring();
+    await p.eval(`document.querySelector('.pane .find input').focus()`);
+    const after = await ring();
+    expect(before !== after && after.includes('rgb'), `buscador sin foco visible: ${before} -> ${after}`);
+    await p.eval(`document.activeElement.blur()`);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+    await wait(500);
+    const d = await p.eval(scan);
+    expect(d.mains === 1, `reproductor: ${d.mains} main`);
+    expect(d.heads.filter((x) => x.startsWith('H1')).length === 1 && d.heads.includes('H2:Cancion buena') && d.heads.some((x) => x.startsWith('H2:') && x !== 'H2:Cancion buena'), `encabezados escritorio: ${d.heads}`);
+    expect(!d.unnamed.length, `sin nombre en escritorio: ${d.unnamed}`);
+    await p.size(412, 915);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && !document.querySelector('canvas.curtain-c') && document.querySelector('.mstrip .c.now')`, 20000);
+    await wait(500);
+    const m = await p.eval(scan);
+    expect(m.mains === 1 && m.heads.some((x) => x.startsWith('H2:')), `encabezados movil: ${m.heads}, ${m.mains} main`);
+    expect(!m.unnamed.length, `sin nombre en movil: ${m.unnamed}`);
+    return `escritorio ${d.heads.join(', ')}; movil ${m.heads.join(', ')}`;
+  } finally {
     await p.size(1440, 900);
   }
 });

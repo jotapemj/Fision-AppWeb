@@ -180,8 +180,8 @@ export class PlayerView {
     const collapse = h('button', { class: 'mback', attrs: { 'aria-label': t('web_collapse_player') }, onclick: () => hooks.onCollapse?.() }, img(icCollapse, '', ''));
     const top = h('div', { class: 'top' }, collapse,
       cover ? img(cover, 'cover', t('cd_cover')) : h('span', { class: 'cover' }),
-      h('span', { class: 't' }, h('b', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })),
-      h('span', { class: 'mtt', textContent: song.artist ? `${song.artist} - ${song.title || song.filename}` : song.title || song.filename }),
+      h('div', { class: 't' }, h('h2', { textContent: song.title || song.filename }), h('span', { textContent: song.artist })),
+      h('h2', { class: 'mtt', textContent: song.artist ? `${song.artist} - ${song.title || song.filename}` : song.title || song.filename }),
       h('span', { class: 'sp' }));
     const menuBtn = h('button', { class: 'ib', attrs: { 'aria-label': t('web_menu'), 'aria-haspopup': 'dialog' } }, img(icMenu, '', ''));
     menuBtn.onclick = () => this.menuPop(menuBtn, top);
@@ -199,7 +199,7 @@ export class PlayerView {
     tab('mix', t('web_view_mix'), null, MIX_SVG);
     tab('3d', t('web_view_3d'), icItd);
     this.tabs.get('3d')!.classList.toggle('on3d', p.audio3d);
-    this.main = h('section', { class: 'main' }, top, this.stripSlot, h('div', { class: 'vbar' }, seg), this.viewBox);
+    this.main = h('main', { class: 'main' }, top, this.stripSlot, h('div', { class: 'vbar' }, seg), this.viewBox);
     (this.main as HTMLElement & { player?: Player; view?: PlayerView }).player = p; // acceso de las pruebas
     (this.main as HTMLElement & { view?: PlayerView }).view = this;
 
