@@ -4,6 +4,11 @@ CLAUDE.md
 # Entorno local (direccion del server)
 *.local
 
+# Diseno: ficheros de la herramienta, solo en local
+.impeccable/
+DESIGN.md
+PRODUCT.md
+
 # Dependencias y salidas
 node_modules/
 dist/
