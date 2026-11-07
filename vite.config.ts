@@ -27,10 +27,13 @@ function pwa(): Plugin {
       const files = walk(out).map((f) => path.relative(out, f).split(path.sep).join('/')).filter((f) => f !== 'sw.js').sort();
       const h = createHash('sha256');
       for (const f of files) h.update(f).update(fs.readFileSync(path.join(out, f)));
-      const list = ['', ...files.filter((f) => f !== 'index.html')]; // la pagina se guarda como '' (la URL /app/)
+      // Escena 3D (busto 6 MB + chunk de three.js): no se precarga; se guarda al usarla
+      const lazy = files.filter((f) => f.startsWith('models/') || /^assets\/scene3d-.*\.js$/.test(f));
+      const list = ['', ...files.filter((f) => f !== 'index.html' && !lazy.includes(f))]; // la pagina se guarda como '' (la URL /app/)
       const src = fs.readFileSync(path.resolve(import.meta.dirname, 'src/pwa/sw.template.js'), 'utf8')
         .replace("'__VERSION__'", JSON.stringify(h.digest('hex').slice(0, 12)))
-        .replace('__FILES__', JSON.stringify(list));
+        .replace('__FILES__', JSON.stringify(list))
+        .replace('__LAZY__', JSON.stringify(lazy));
       fs.writeFileSync(path.join(out, 'sw.js'), src);
     },
   };

@@ -1,7 +1,8 @@
-// Service worker de la PWA: guarda la app entera al instalar y la sirve desde la cache (arranque sin red).
+// Service worker de la PWA: guarda la app al instalar (la escena 3D, al usarla) y la sirve desde la cache (arranque sin red).
 // La version y la lista de ficheros las pone el build (plugin fision-pwa de vite.config.ts).
 const VERSION = '__VERSION__';
 const FILES = __FILES__; // relativas al scope; '' = la pagina
+const LAZY = __LAZY__; // escena 3D: no se precarga; se guarda la primera vez que se pide
 const PREFIX = 'fision-app-';
 const CACHE = PREFIX + VERSION;
 const BASE = new URL('./', self.location.href).pathname; // /app/
@@ -22,5 +23,9 @@ self.addEventListener('fetch', (e) => {
   // API del server y todo lo de fuera de /app: directo a la red
   if (req.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) return;
   const key = req.mode === 'navigate' ? BASE : url.pathname;
-  e.respondWith(caches.open(CACHE).then((c) => c.match(key, { ignoreSearch: true })).then((r) => r || fetch(req)));
+  const lazy = LAZY.includes(url.pathname.slice(BASE.length));
+  e.respondWith(caches.open(CACHE).then((c) => c.match(key, { ignoreSearch: true }).then((r) => r || fetch(req).then((res) => {
+    if (lazy && res.ok) { const copy = res.clone(); e.waitUntil(c.put(key, copy)); }
+    return res;
+  }))));
 });
