@@ -21,7 +21,22 @@ the separated songs into the browser and plays them through the same native
 engine as the app, compiled to WebAssembly. Built for the big screen of a
 computer, and laid out like the app on a phone.
 
+<br>
+
+<div align="center">
+  <img src="./docs/readme/screens-hero.png" width="860" alt="Fision Web on a computer: song library on the left and synced lyrics with chords over the words">
+</div>
+
+<br>
+
 ## Features
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/readme/features-dark.svg">
+    <img src="./docs/readme/features-light.svg" width="860" alt="Fision features: Self-hosted, Stem separation, Stem mixer, 3D audio, Synced Lyrics, Chord diagrams, Pitch and tempo, Dynamic metronome, Installable app">
+  </picture>
+</div>
 
 * **Stem mixer** with volume, balance, solo and per-stem effects (filter,
   tempo-synced echo and reverb).
@@ -35,6 +50,24 @@ computer, and laid out like the app on a phone.
 * **Export** the mix or each stem to WAV or M4A.
 * **Works offline** once a song is downloaded, and installs as an app (PWA).
 * **10 languages**, the same as the app.
+
+## Screenshots
+
+<div align="center">
+  <img src="./docs/readme/screens-desktop.png" width="860" alt="Chord diagrams with the beat strip, stem mixer with the effects panel, the 3D audio scene and the chord grid">
+  <br><br>
+  <img src="./docs/readme/screens-mobile.png" width="860" alt="On a phone: song library, stem mixer with the chord strip, synced lyrics and the 3D audio scene">
+</div>
+
+<details>
+<summary><b>More screenshots</b></summary>
+<br>
+<div align="center">
+  <img src="./docs/readme/screens-more-1.png" width="860" alt="On a phone: chord diagrams, stem options with effects and the dynamic metronome">
+  <br><br>
+  <img src="./docs/readme/screens-more-2.png" width="860" alt="Export dialog and settings">
+</div>
+</details>
 
 ## Getting started
 
