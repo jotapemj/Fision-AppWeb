@@ -711,6 +711,16 @@ dialog.expdlg { width: min(460px, calc(100% - 32px)); }
 .app.mob .dr .tx span { font-size: 10px; }
 .app.mob .dr .st { display: none; }
 .app.mob .drw .more { opacity: 1; right: 4px; width: 40px; height: 40px; flex-direction: column; gap: 3px; }
+/* Zona tactil >= 44 px sin cambiar el dibujo (Android: 48dp de toque) */
+.app.mob :is(.msort, .stem .s.btn-ic, .stem .rs, .mmore, .gsolo) { position: relative; }
+.app.mob :is(.mav, .msort, .drw .more, .stem .s.btn-ic, .stem .rs, .mmore, .gsolo)::after { content: ''; position: absolute; }
+.app.mob .mav::after { inset: -6px; border-radius: 50%; }
+.app.mob .msort::after { inset: -8px; }
+.app.mob .drw .more::after { inset: -4px -4px -4px -4px; }
+.app.mob .stem .s.btn-ic::after { inset: -5px -12px -5px -20px; } /* hasta el borde y el hueco del slider */
+.app.mob .stem .rs::after { inset: -11px -6px -11px -12px; }      /* medio hueco con el boton de opciones */
+.app.mob .stem .mmore::after { inset: -9px -20px -9px -6px; }
+.app.mob .gsolo::after { inset: -5px; }
 .app.mob .drw .more i { width: 4.5px; height: 4.5px; }
 @media (hover: hover) { .app.mob .drw:hover .dr { background: none; } }
 .app.mob .dr.cur { background: none; }

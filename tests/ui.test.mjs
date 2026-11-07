@@ -1831,6 +1831,43 @@ test('accesibilidad: region principal, encabezados, foco del buscador y celdas d
   }
 });
 
+test('movil: zona tactil de 44 px como minimo en los botones pequenos', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Zona que responde al dedo: desde el centro hacia fuera hasta que elementFromPoint deja de dar el boton
+  const hit = (sels) => p.eval(`(() => { const out = {};
+    for (const sel of ${JSON.stringify(sels)}) {
+      const e = [...document.querySelectorAll(sel)].find((x) => x.checkVisibility()); if (!e) { out[sel] = null; continue; }
+      const r = e.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const ok = (x, y) => { const t = document.elementFromPoint(x, y); return !!t && (t === e || e.contains(t)); };
+      const reach = (dx, dy) => { let k = 0; while (k < 60 && ok(cx + dx * (k + 1), cy + dy * (k + 1))) k++; return k; };
+      out[sel] = { w: reach(-1, 0) + reach(1, 0) + 1, h: reach(0, -1) + reach(0, 1) + 1, vw: Math.round(r.width), vh: Math.round(r.height) };
+    }
+    return out; })()`);
+  try {
+    await p.size(412, 915);
+    await p.goto(c.url);
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true }))`);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    await wait(300);
+    const lib = await hit(['.mav', '.msort', '.drw .more']);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && !document.querySelector('canvas.curtain-c') && document.querySelectorAll('.stem').length === 3`, 20000);
+    await wait(800);
+    const pl = await hit(['.stem .s.btn-ic', '.stem .rs', '.mmore']);
+    const all = { ...lib, ...pl };
+    const bad = Object.entries(all).filter(([, v]) => !v || v.w < 44 || v.h < 44);
+    expect(!bad.length, `zona tactil pequena: ${JSON.stringify(Object.fromEntries(bad))}`);
+    // El dibujo no cambia: mismo tamano visible
+    expect(all['.stem .rs'].vw === 26 && all['.mmore'].vw === 30 && all['.msort'].vw === 32, `tamano visible cambiado: ${JSON.stringify(all)}`);
+    return Object.entries(all).map(([k, v]) => `${k} ${v.vw}->${v.w}x${v.h}`).join(', ');
+  } finally {
+    await p.size(1440, 900);
+  }
+});
+
 test('sin excepciones en la pagina', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const errs = [...c.page.errors];
