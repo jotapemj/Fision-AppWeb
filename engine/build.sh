@@ -20,7 +20,11 @@ for s in AAFilter FIFOSampleBuffer FIRFilter RateTransposer SoundTouch TDStretch
   SRC+=("$ST/source/SoundTouch/$s.cpp")
 done
 
-COMMON=(-std=c++17 -O3 -msimd128 -pthread
+# Rutas relativas en los __FILE__ de los assert: el binario no lleva la ruta local (usuario del sistema)
+MAP=(-ffile-prefix-map="$ROOT"=.)
+command -v cygpath >/dev/null && MAP+=(-ffile-prefix-map="$(cygpath -m "$ROOT")"=.)
+
+COMMON=("${MAP[@]}" -std=c++17 -O3 -msimd128 -pthread
   -DSOUNDTOUCH_FLOAT_SAMPLES=1 -DSOUNDTOUCH_DISABLE_X86_OPTIMIZATIONS
   -I"$HERE/shim" -I"$HERE/src" -I"$HERE/vendor" -I"$ST/include" -I"$ST/source/SoundTouch"
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createFisionEngine
@@ -50,7 +54,7 @@ build_node() {
 }
 
 # Export offline: modulo aparte sin hilos (Worker en web, Node en las pruebas)
-EXP=(-std=c++17 -O3 -msimd128 -I"$HERE/shim" -I"$HERE/src" -I"$HERE/vendor"
+EXP=("${MAP[@]}" -std=c++17 -O3 -msimd128 -I"$HERE/shim" -I"$HERE/src" -I"$HERE/vendor"
   "$HERE/export_api.cpp" "$HERE/src/WavReader.cpp"
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createFisionExport -sFORCE_FILESYSTEM=1
   -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB -sEXPORTED_FUNCTIONS=_malloc,_free
