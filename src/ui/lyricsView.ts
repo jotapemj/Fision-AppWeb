@@ -227,6 +227,10 @@ export class LyricsView {
       const lr = line.getBoundingClientRect();
       const scale = line.offsetWidth ? lr.width / line.offsetWidth : 1; // la activa va escalada
       const ws = Array.from(line.querySelectorAll<HTMLElement>('.wd'));
+      // Tope = ancho de la columna (como la vista de Android), no el del texto: la linea es fit-content
+      const col = line.parentElement!, cr = col.getBoundingClientRect();
+      const maxX = (cr.right - parseFloat(getComputedStyle(col).paddingRight) - lr.left) / scale;
+      const placed: { el: HTMLElement; x: number; top: number; w: number }[] = [];
       let lastTop = NaN, lastRight = -Infinity;
       rc.forEach((c, k) => {
         const el = els[k], node = ws[c.word]?.firstChild;
@@ -240,10 +244,17 @@ export class LyricsView {
         const top = (box.top - lr.top) / scale;
         const w = el.offsetWidth;
         if (Math.abs(top - lastTop) < 2) x = Math.max(x, lastRight + SPACING);
-        x = Math.min(x, Math.max(0, line.offsetWidth - w));
-        el.style.transform = `translate(${x}px, ${top}px)`;
+        placed.push({ el, x, top, w });
         lastTop = top; lastRight = x + w;
       });
+      // Si el ultimo no cabe, se pega al tope y empuja hacia atras a los de su linea visual
+      for (let k = placed.length - 1; k >= 0; k--) {
+        const a = placed[k], b = placed[k + 1];
+        let lim = Math.max(0, maxX - a.w);
+        if (b && Math.abs(b.top - a.top) < 2) lim = Math.min(lim, b.x - SPACING - a.w);
+        a.x = Math.max(0, Math.min(a.x, lim));
+        a.el.style.transform = `translate(${a.x}px, ${a.top}px)`;
+      }
     });
   }
 

@@ -1083,6 +1083,39 @@ test('acordes nuevos en el server: cambia updated_at -> baja solo chords*.txt y 
   return `C -> D en caliente; pedidos ${gets}`;
 });
 
+test('acordes sobre la letra: dos juntos al final de una linea no se pisan', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page, ch = c.fake.ch;
+  // Un acorde ancho y E sobre "linea" (1-2 s), la ultima palabra: E se empuja mas alla del final del texto
+  ch.body = 'N 0.000\nC 0.500\nA#maj7/G# 1.500\nE 2.000\nG 2.500\nAm 12.000\n'; ch.v = '2026-10-11';
+  await p.eval(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
+  await p.waitFor(`document.querySelector('.lyopts .lychb:not([hidden])')`, 8000);
+  try { await p.waitFor(`[...document.querySelectorAll('.lyrics .lc')].some((e) => e.textContent === 'E')`, 8000); }
+  catch { throw new Error(`sin E: cancion "${await p.eval(`document.querySelector('.top .t h2')?.textContent`)}", lc ${await p.eval(`[...document.querySelectorAll('.lyrics .lc, .lyrics .lstrip *')].map((e) => e.className + ':' + e.textContent).join(' ')`)}, pedidos ${ch.gets.join(',')}`); }
+  await p.eval(`document.querySelector('.lychb').click()`);
+  await new Promise((r) => setTimeout(r, 600));
+  const res = await p.eval(`(() => {
+    const out = [];
+    for (const line of document.querySelectorAll('.lyrics .cl:not(.ins)')) {
+      const rs = [...line.querySelectorAll('.lc')].map((e) => ({ t: e.textContent, r: e.getBoundingClientRect() }));
+      for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+        const a = rs[i].r, b = rs[j].r;
+        if (Math.abs(a.top - b.top) < 2 && a.left < b.right && b.left < a.right) out.push(rs[i].t + '/' + rs[j].t);
+      }
+    }
+    const last = [...document.querySelectorAll('.lyrics .lc')].filter((e) => e.textContent !== 'C' && e.closest('.cl') === [...document.querySelectorAll('.lyrics .cl')][0]).map((e) => Math.round(e.getBoundingClientRect().left));
+    return { overlaps: out, last };
+  })()`);
+  await p.eval(`document.querySelector('.lychb').click()`); // apagado otra vez
+  ch.body = 'N 0.000\nC 0.500\nG 2.500\nAm 12.000\n'; ch.v = '2026-10-12';
+  await p.eval(`document.dispatchEvent(new Event('visibilitychange'))`);
+  await p.waitFor(`![...document.querySelectorAll('.lyrics .lc')].some((e) => e.textContent === 'E')`, 8000);
+  await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+  expect(res.overlaps.length === 0 && res.last.length === 2, `acordes que se pisan: ${res.overlaps.join(', ')} (fila 1 en x ${res.last})`);
+  return `fila 1 en x ${res.last}`;
+});
+
 test('exportar: mezcla WAV con metronomo a la carpeta elegida; pista con eco (cola) desde el panel', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
