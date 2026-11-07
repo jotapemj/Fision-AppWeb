@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
-// Server real para el proxy de desarrollo (mismo origen que en produccion)
-const SERVER = process.env.FISION_SERVER ?? 'http://localhost:8000';
+// Server para el proxy de desarrollo (mismo origen que en produccion): entorno o .env.local, sin direcciones en el repo
+const SERVER = loadEnv('development', process.cwd(), 'FISION_').FISION_SERVER ?? 'http://localhost:8000';
 const API = ['/login', '/auth', '/health', '/jobs', '/library', '/playlists', '/server'];
 const proxy = Object.fromEntries(API.map((p) => [p, { target: SERVER, changeOrigin: true }]));
 

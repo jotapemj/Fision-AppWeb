@@ -95,7 +95,8 @@ npm run dev             # http://localhost:5173/app/
 ```
 
 The dev server forwards the API to `FISION_SERVER`
-(`FISION_SERVER=http://<address>:8000 npm run dev`), so the web and the API
+(default `http://localhost:8000`; set it in the environment or in a git-ignored
+`.env.local` as `FISION_SERVER=http://<address>:8000`), so the web and the API
 share one origin, as they do when the server hosts the web. `localhost`
 already counts as a secure context, so no certificates are needed.
 

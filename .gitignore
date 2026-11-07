@@ -1,6 +1,9 @@
 # Bitacora interna
 CLAUDE.md
 
+# Entorno local (direccion del server)
+*.local
+
 # Dependencias y salidas
 node_modules/
 dist/
