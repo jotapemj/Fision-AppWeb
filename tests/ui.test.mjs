@@ -130,6 +130,22 @@ async function fakeServer() {
   return { url: `http://127.0.0.1:${srv.address().port}`, pl, up, del, ch, net, close: () => srv.close() };
 }
 
+// Contraste de cada elemento con texto propio dentro del dialogo abierto (fondo = colores apilados)
+const DIALOG_CONTRAST = `(() => {
+  const parse = (c) => { const m = c.match(/rgba?\\(([^)]+)\\)/); if (!m) return [0, 0, 0, 0]; const v = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v[3] ?? 1]; };
+  const over = (top, bot) => [0, 1, 2].map((i) => top[i] * top[3] + bot[i] * (1 - top[3])).concat(1);
+  const bgOf = (el) => { const st = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c[3] > 0) st.push(c); if (c[3] >= 1) break; } return st.reverse().reduce((a, c) => over(c, a), [0, 0, 0, 1]); };
+  const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const out = [];
+  for (const el of document.querySelectorAll('dialog[open] *')) {
+    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) || !el.checkVisibility({ opacityProperty: true }) || el.closest(':disabled, [aria-disabled=true]')) continue;
+    const st = getComputedStyle(el), bg = bgOf(el), r = ratio(over(parse(st.color), bg), bg);
+    if (r < (parseFloat(st.fontSize) >= 18.66 ? 3 : 4.5)) out.push(el.className + ' ' + r.toFixed(2) + ' "' + el.textContent.trim().slice(0, 20) + '"');
+  }
+  return out;
+})()`;
+
 // Medidas dentro de la pagina: solapes, recortes, contraste calculado
 const MEASURE = `(() => {
   const parse = (c) => {
@@ -969,6 +985,9 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     catch { throw new Error(`dialogo: ${await p.eval(`JSON.stringify({ dlg: !!document.querySelector('dialog.imp'), input: !!document.querySelector('input.pick-audio'), files: document.querySelector('input.pick-audio')?.files?.length, load: document.querySelector('.imload')?.hidden })`)}`); }
     const warn = await p.eval(`!document.querySelector('.imwarn').hidden`);
     await p.waitFor(`/0:05/.test(document.querySelector('.imtx small').textContent)`, 5000);
+    // Contraste de todo texto del dialogo (4.5:1; 3:1 desde 18.66 px)
+    const low = await p.eval(DIALOG_CONTRAST);
+    expect(!low.length, `contraste bajo en el dialogo: ${low.join('; ')}`);
     // Corta: no se sube nada
     await p.eval(`${btnSend}.click()`);
     const shortErr = await p.eval(`document.querySelector('dialog.imp .plerr').textContent`);
