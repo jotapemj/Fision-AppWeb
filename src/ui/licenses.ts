@@ -114,6 +114,8 @@ export const LICENSES: LicenseEntry[] = [
       + 'License (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/\n\n'
       + 'The stems, chords, beats and lyrics are derived from the original\n'
       + 'recording by FisionServer.' },
+  { name: 'Downbeat click sounds', author: 'Ludwig Peter Müller', license: 'CC0 1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    text: 'Metronome sounds recorded by Ludwig Peter Müller in December 2020.\nFree to use under the license Creative Commons CC0 1.0 Universal.' },
   { name: 'Noto Sans', author: 'The Noto Project Authors', license: 'SIL OFL 1.1', url: 'https://github.com/notofonts/latin-greek-cyrillic',
     text: `Copyright 2022 The Noto Project Authors\n\n${LIC_OFL}` },
   { name: 'MusGlyphs', author: 'Dan Kreider', license: 'SIL OFL 1.1', url: 'https://www.notationcentral.com/product/musglyphs/',
