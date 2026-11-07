@@ -5,6 +5,7 @@ import { t } from '../i18n/i18n.ts';
 import { fold, type Row } from '../library/library.ts';
 import { errorKey, move, pickable, TITLE_MAX, validate } from '../library/playlists.ts';
 import { h, img } from './dom.ts';
+import { icon } from './icons.ts';
 
 const COVER_PX = 512;
 
@@ -47,7 +48,7 @@ export function openPlaylistEditor(pl: Playlist | null, ctx: EditorCtx): HTMLDia
   const add = h('button', { class: 'btn ghost', textContent: t('playlist_add_songs'), attrs: { 'aria-expanded': 'false' } });
   const save = h('button', { class: 'btn', textContent: t('playlist_save') });
   const cancel = h('button', { class: 'btn ghost', textContent: t('playlist_cancel') });
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
 
   const paintCover = async () => {
     // Portada elegida > la del server (si no se quita) > mosaico de las primeras canciones
@@ -67,10 +68,10 @@ export function openPlaylistEditor(pl: Playlist | null, ctx: EditorCtx): HTMLDia
     list.replaceChildren(...songs.map((hsh, i) => {
       const r = byHash.get(hsh)!, cv = h('span', { class: 'cv' });
       void ctx.cover(hsh).then((u) => { if (u) cv.append(img(u, '', '')); });
-      const rm = h('button', { class: 'ib plrm', textContent: '✕', attrs: { 'aria-label': `${t('playlist_remove_song')}: ${r.entry.title || r.entry.filename}` } });
+      const rm = h('button', { class: 'ib plrm', attrs: { 'aria-label': `${t('playlist_remove_song')}: ${r.entry.title || r.entry.filename}` } }, icon('close', 16));
       rm.onclick = () => { songs = songs.filter((x) => x !== hsh); renderSongs(); renderPick(); void paintCover(); };
       const li = h('li', { class: 'plsong', draggable: true, tabIndex: 0, attrs: { 'aria-label': `${r.entry.title || r.entry.filename}. ${t('playlist_reorder')}: Alt + ↑ ↓` } },
-        h('span', { class: 'grip', textContent: '⠿', attrs: { 'aria-hidden': 'true' } }), cv,
+        h('span', { class: 'grip' }, icon('grip', 16)), cv,
         h('span', { class: 'tx' }, h('b', { textContent: r.entry.title || r.entry.filename }), h('span', { textContent: r.entry.artist })), rm);
       li.dataset.i = String(i);
       li.ondragstart = (e) => { e.dataTransfer?.setData('text/plain', String(i)); li.classList.add('drag'); };
@@ -96,7 +97,7 @@ export function openPlaylistEditor(pl: Playlist | null, ctx: EditorCtx): HTMLDia
     const avail = pickable(ctx.rows).filter((r) => !have.has(r.entry.hash) && (!q || fold(`${r.entry.title} ${r.entry.artist} ${r.entry.filename}`).includes(q)));
     if (!pickable(ctx.rows).length) { pickList.replaceChildren(h('p', { class: 'empty', textContent: t('playlist_no_songs_in_cloud') })); return; }
     pickList.replaceChildren(...avail.map((r) => {
-      const b = h('button', { class: 'plpk', attrs: { role: 'listitem' } }, h('span', { class: 'plus', textContent: '+', attrs: { 'aria-hidden': 'true' } }),
+      const b = h('button', { class: 'plpk', attrs: { role: 'listitem' } }, h('span', { class: 'plus' }, icon('plus', 16)),
         h('span', { class: 'tx' }, h('b', { textContent: r.entry.title || r.entry.filename }), h('span', { textContent: r.entry.artist })));
       b.onclick = () => { songs = [...songs, r.entry.hash]; renderSongs(); renderPick(); void paintCover(); };
       return b;

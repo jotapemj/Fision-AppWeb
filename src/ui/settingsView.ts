@@ -2,6 +2,7 @@
 import { LANGS, t, type Lang } from '../i18n/i18n.ts';
 import { ACCENTS, type Settings, type SettingsStore } from '../settings.ts';
 import { h } from './dom.ts';
+import { icon } from './icons.ts';
 import { resetTours } from './coachMark.ts';
 import { openLicenses } from './licenses.ts';
 
@@ -57,7 +58,7 @@ export function openSettings(store: SettingsStore, ctx: SettingsContext) {
   const serverLine = h('small', { textContent: ctx.server });
   ctx.serverInfo().then((i) => { if (i?.version) serverLine.textContent = `${ctx.server} · v${i.version}${i.gpu_name ? ' · ' + i.gpu_name : ''}`; }).catch(() => {});
 
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
   const out = h('button', { class: 'btn ghost', textContent: t('settings_logout_title') });
   const tourBtn = h('button', { class: 'btn ghost', textContent: t('settings_tour_title') });
   const licBtn = h('button', { class: 'btn ghost', textContent: t('about_view_licenses') });

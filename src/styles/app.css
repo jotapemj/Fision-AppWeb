@@ -22,6 +22,10 @@
 html, body, #app { height: 100%; }
 html, body { background: var(--bg); color: var(--text); font: 15px/1.4 var(--font); overscroll-behavior: none; }
 :root { accent-color: var(--accent); }
+.ico { display: inline-grid; place-items: center; line-height: 0; flex: none; }
+.ico svg { display: block; }
+:where(button:has(> .ico:only-child)) { display: inline-grid; place-items: center; }
+.lic-back { display: inline-flex; align-items: center; gap: 6px; }
 ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 button, label, img { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 @media (hover: none) { body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }

@@ -14,6 +14,7 @@ import { ChordStrip } from './chordStrip.ts';
 import { ChordDiagrams } from './chordDiagrams.ts';
 import { sceneSpinner } from './curtain.ts';
 import { animateSlider, dismissable, fmtTime, h, img, reducedMotion, setSlider, slider } from './dom.ts';
+import { icon } from './icons.ts';
 import { DOWNBEAT_SOUNDS } from '../settings.ts';
 import { startTour, views, type LegendRow, type Step } from './coachMark.ts';
 import icLyrics from '../assets/icons/ic_lyrics.svg';
@@ -662,7 +663,7 @@ export class PlayerView {
     if (drums.length) {
       const body = h('div', { hidden: !this.drumsOpen }, ...drums.map((s) => this.stemRow(s, v2)));
       const head = h('button', { class: 'group', attrs: { 'aria-expanded': String(this.drumsOpen) } },
-        img(icDrumset, '', ''), `${t('title_drumset')} · ${drums.length}`, h('span', { class: 'chev', textContent: '▾', attrs: { 'aria-hidden': 'true' } }));
+        img(icDrumset, '', ''), `${t('title_drumset')} · ${drums.length}`, h('span', { class: 'chev' }, icon('chev', 14)));
       head.onclick = () => { this.drumsOpen = !this.drumsOpen; body.hidden = !this.drumsOpen; head.setAttribute('aria-expanded', String(this.drumsOpen)); };
       // Movil: el icono de la cabecera abre el menu solo con Solo (todas las piezas a la vez); el resto pliega
       const gIcon = h('button', { class: 'gsolo', attrs: { 'aria-label': `${t('stem_menu_solo')}: ${t('title_drumset')}` } }, maskIcon(icDrumset, 'mi s'));
@@ -902,9 +903,9 @@ export class PlayerView {
       const d = bpm ? 1 : MULT_STEP;
       const cur = () => (bpm ? this.p.targetBpm! : this.p.tempoMult);
       pop.append(h('div', { class: 'hd' }, h('span', { textContent: t('web_tempo') }), show), r,
-        h('div', { class: 'row' }, h('button', { textContent: '−', onclick: () => apply(cur() - d) }),
+        h('div', { class: 'row' }, h('button', { attrs: { 'aria-label': `−${bpm ? 1 : MULT_STEP}` }, onclick: () => apply(cur() - d) }, icon('minus')),
           h('button', { textContent: bpm ? `${Math.round(bpm)}` : '1.00×', onclick: () => apply(bpm ? bpm : 1) }),
-          h('button', { textContent: '+', onclick: () => apply(cur() + d) })));
+          h('button', { attrs: { 'aria-label': `+${bpm ? 1 : MULT_STEP}` }, onclick: () => apply(cur() + d) }, icon('plus'))));
     });
   }
 }

@@ -2,6 +2,7 @@
 // Anadir aqui cada componente de terceros nuevo que vaya en el build.
 import { t } from '../i18n/i18n.ts';
 import { h } from './dom.ts';
+import { icon } from './icons.ts';
 
 export interface LicenseEntry { name: string; author: string; license: string; url: string; text: string }
 
@@ -124,7 +125,7 @@ export const LICENSES: LicenseEntry[] = [
 
 /** Dialogo de licencias: lista (nombre, autor · licencia) y detalle con el texto y el enlace. */
 export function openLicenses() {
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
   const titleEl = h('h2', { textContent: t('licenses_title') });
   const content = h('div');
   const dlg = h('dialog', { class: 'settings licenses', attrs: { 'aria-label': t('licenses_title') } },
@@ -143,7 +144,7 @@ export function openLicenses() {
   };
   const detail = (e: LicenseEntry) => {
     titleEl.textContent = e.name;
-    const back = h('button', { class: 'btn ghost', textContent: `← ${t('web_licenses_back')}` });
+    const back = h('button', { class: 'btn ghost lic-back' }, icon('back', 16), t('web_licenses_back'));
     back.onclick = list;
     content.replaceChildren(back,
       h('p', { class: 'lic-meta', textContent: t('license_meta_fmt', e.author, e.license) }),

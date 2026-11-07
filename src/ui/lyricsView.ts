@@ -2,6 +2,7 @@
 import { t } from '../i18n/i18n.ts';
 import { activeRow, CHORD_LAG_SEC, hasWords, KARAOKE_FADE_SEC, rowWords, switchAt, wordProgress, type LyricRow, type RowChord } from '../player/lyrics.ts';
 import { h, img } from './dom.ts';
+import { icon } from './icons.ts';
 import icChordsOnLyrics from '../assets/icons/ic_chords_on_lyrics.svg';
 import icOverflow from '../assets/icons/ic_lyrics_overflow.svg';
 import icKaraoke from '../assets/icons/ic_karaoke.svg';
@@ -283,7 +284,7 @@ export class LyricsView {
     let lang: LyricsLang = LYRICS_LANGS[0];
     const flagEl = h('span', { class: 'lyflag' }), name = h('b');
     const paint = () => { flagEl.replaceChildren(img(lang.flag, '', '')); flagEl.classList.toggle('auto', lang.code === null); name.textContent = t(lang.key); };
-    const card = h('button', { class: 'lycard', attrs: { 'aria-haspopup': 'dialog' } }, flagEl, h('span', { class: 'lyct' }, h('small', { textContent: t('lyrics_card_title') }), name), h('span', { class: 'chev', textContent: '▾', attrs: { 'aria-hidden': 'true' } }));
+    const card = h('button', { class: 'lycard', attrs: { 'aria-haspopup': 'dialog' } }, flagEl, h('span', { class: 'lyct' }, h('small', { textContent: t('lyrics_card_title') }), name), h('span', { class: 'chev' }, icon('chev', 16)));
     card.onclick = () => this.langDialog(lang, (l) => { lang = l; paint(); });
     const ok = h('button', { class: 'btn', textContent: t('lyrics_confirm') });
     ok.onclick = () => this.actions?.request(lang.code, reprocess);
@@ -306,10 +307,10 @@ export class LyricsView {
   }
 
   private langDialog(cur: LyricsLang, pick: (l: LyricsLang) => void) {
-    const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+    const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
     const list = h('div', { class: 'lylangs', attrs: { role: 'listbox', 'aria-label': t('lyrics_card_title') } }, ...LYRICS_LANGS.map((l) => {
       const b = h('button', { class: 'lylang', attrs: { role: 'option', 'aria-selected': String(l === cur) } },
-        h('span', { class: `lyflag${l.code === null ? ' auto' : ''}` }, img(l.flag, '', '')), h('span', { textContent: t(l.key) }), h('span', { class: 'ck', textContent: l === cur ? '✓' : '' }));
+        h('span', { class: `lyflag${l.code === null ? ' auto' : ''}` }, img(l.flag, '', '')), h('span', { textContent: t(l.key) }), h('span', { class: 'ck' }, l === cur ? icon('check', 18) : ''));
       b.onclick = () => { pick(l); dlg.close(); };
       return b;
     }));

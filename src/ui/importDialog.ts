@@ -9,6 +9,7 @@ import {
 } from '../library/importConfig.ts';
 import { iconOf } from './stemIcons.ts';
 import { h, img, toast } from './dom.ts';
+import { icon } from './icons.ts';
 
 const NAME: Record<TileStem, string> = { vocals: 'import_vocals_always', guitar: 'import_stem_guitar', bass: 'import_stem_bass', drums: 'import_stem_drums', piano: 'import_stem_piano', winds: 'import_stem_brass' };
 const ACCEPT = AUDIO_EXTS.map((e) => `.${e}`).join(',') + ',audio/*';
@@ -72,7 +73,7 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
   const progress = h('div', { class: 'improg', hidden: true }, h('span', { textContent: t('import_uploading') }), bar, pct);
   const send = h('button', { class: 'btn', textContent: t(reprocess ? 'import_reprocess_short' : 'import_send_short'), disabled: true });
   const cancel = h('button', { class: 'btn ghost', textContent: t('gpu_timeout_cancel') });
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
 
   const paintHero = async () => {
     if (target.kind === 'reprocess') {

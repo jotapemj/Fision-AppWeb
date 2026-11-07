@@ -4,6 +4,7 @@ import { t } from '../i18n/i18n.ts';
 import type { Player } from '../player/player.ts';
 import { titleKey } from '../player/stems.ts';
 import { h, img, reducedMotion } from './dom.ts';
+import { icon } from './icons.ts';
 import { iconOf } from './stemIcons.ts';
 
 const CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.3 6 7.9 7.4 12.5 12l-4.6 4.6L9.3 18l6-6z" fill="currentColor"/></svg>';
@@ -45,7 +46,7 @@ export function danceSetupDialog(p: Player, chosen: Set<string>, swingNow: Itera
     grid.append(h('div', { class: 'dcell' }, pick, sw));
   }
   const rnd = h('input', { type: 'checkbox', checked: random });
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
   const dlg = h('dialog', { class: 'settings dance', attrs: { 'aria-label': t('stems_dance_title') } },
     h('div', { class: 'shd' }, h('h2', { textContent: t('stems_dance_title') }), close), grid,
     h('label', { class: 'dchk' }, rnd, t('dance_randomize_swing')), start);

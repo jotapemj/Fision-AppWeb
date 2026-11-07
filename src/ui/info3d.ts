@@ -2,6 +2,7 @@
 // Movil: los textos de Android. Escritorio: los mismos gestos en palabras de raton.
 import { t } from '../i18n/i18n.ts';
 import { h } from './dom.ts';
+import { icon } from './icons.ts';
 
 const ANDROID = ['drag', 'tap', 'double', 'long', 'reset'].map((k) => `audio3d_legend_${k}`);
 
@@ -15,7 +16,7 @@ export function audio3dInfoDialog(camera: boolean) {
   const mob = !!document.querySelector('.app.mob');
   const desk = ['drag', 'click', 'double', 'long', ...(camera ? ['camera'] : [])].map((k) => `web_3d_legend_${k}`);
   const keys = mob ? ANDROID : [...desk, 'audio3d_legend_reset'];
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
   const dlg = h('dialog', { class: 'settings info3d', attrs: { 'aria-label': t('audio3d_info_title') } },
     h('div', { class: 'shd' }, h('h2', { textContent: t('audio3d_info_title') }), close),
     h('p', { class: 'muted', textContent: t('audio3d_info_body') }),

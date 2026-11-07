@@ -5,6 +5,7 @@
 import { t } from '../i18n/i18n.ts';
 import { applyFilter, counts, fold, search, type Filter, type Row } from '../library/library.ts';
 import { dismissable, h, img } from './dom.ts';
+import { icon } from './icons.ts';
 import wordmark from '../assets/icons/wordmark.svg';
 import icMark from '../assets/icons/ic_fision_mark.svg';
 import icOrder from '../assets/icons/ic_orderby.png';
@@ -64,7 +65,7 @@ export class Sidebar {
   private hooks: SidebarHooks;
   private waves = new Map<string, CoverWave>(); // una por descarga: conserva el nivel entre repintados
   private plList = h('div', { class: 'pls', attrs: { role: 'list' } });
-  private plAdd = h('button', { class: 'pladd', textContent: '+', attrs: { 'aria-label': t('playlist_new'), title: t('playlist_new') } });
+  private plAdd = h('button', { class: 'pladd', attrs: { 'aria-label': t('playlist_new'), title: t('playlist_new') } }, icon('plus'));
   private playlists: PlaylistSummary[] = [];
   private canEdit = false;
   private open: Playlist | null = null;
@@ -247,9 +248,9 @@ export class Sidebar {
 
   /** Cabecera de la playlist abierta: volver, titulo con su cuenta y opciones. */
   private renderPlHead(p: Playlist) {
-    const back = h('button', { class: 'ib plback', textContent: '←', attrs: { 'aria-label': t('playlist_back') } });
+    const back = h('button', { class: 'ib plback', attrs: { 'aria-label': t('playlist_back') } }, icon('back'));
     back.onclick = () => this.hooks.onClosePlaylist();
-    const opts = h('button', { class: 'ib plopt', textContent: '⋯', attrs: { 'aria-label': t('playlist_options'), 'aria-haspopup': 'menu' } });
+    const opts = h('button', { class: 'ib plopt', attrs: { 'aria-label': t('playlist_options'), 'aria-haspopup': 'menu' } }, icon('more'));
     opts.disabled = !this.canEdit;
     opts.onclick = () => {
       if (opts.getAttribute('aria-expanded') === 'true') return;
@@ -279,7 +280,7 @@ export class Sidebar {
     const label = { all: 'library_filter_all', downloaded: 'library_filter_downloaded', cloud: 'library_filter_cloud' }[this.filter];
     const n = { all: c.all, downloaded: c.downloaded, cloud: c.cloud }[this.filter];
     this.flt.hidden = !c.showFilter;
-    this.flt.textContent = `${t(label)} · ${n} ▾`;
+    this.flt.replaceChildren(`${t(label)} · ${n}`, icon('chev', 14));
     this.count.hidden = c.showFilter;
     this.count.textContent = String(c.all);
     // Movil: chips con cuentas que siguen a la busqueda, o la linea de cuenta (MainActivity.updateCountLine)

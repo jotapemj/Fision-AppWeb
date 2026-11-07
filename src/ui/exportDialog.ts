@@ -2,6 +2,7 @@
 // (aviso de solo, mezcla o separadas, volumen, formato + casillas, progreso con Cancelar).
 import { t } from '../i18n/i18n.ts';
 import { h, toast } from './dom.ts';
+import { icon } from './icons.ts';
 import { echoDelayMs, fxActive, type Player, type StemState } from '../player/player.ts';
 import { METRONOMES } from '../player/stems.ts';
 import { displayName, sanitize, stemGains, timestamp, type FxParams, type Metronome } from '../export/mixdown.ts';
@@ -33,8 +34,8 @@ export function openExport(ctx: ExportCtx, stem: string | null = null) {
   const aac = canEncodeAac();
 
   const title = h('h2');
-  const back = h('button', { class: 'xbtn', textContent: '←', attrs: { 'aria-label': t('export_back') } });
-  const close = h('button', { class: 'xbtn', textContent: '✕', attrs: { 'aria-label': t('web_close') } });
+  const back = h('button', { class: 'xbtn', attrs: { 'aria-label': t('export_back') } }, icon('back'));
+  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
   const body = h('div', { class: 'expbody' });
   const dlg = h('dialog', { class: 'settings expdlg', attrs: { 'aria-labelledby': 'exp-title' } },
     h('div', { class: 'shd' }, back, title, close), body);
