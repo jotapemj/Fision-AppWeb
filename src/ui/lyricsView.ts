@@ -5,6 +5,7 @@ import { h, img } from './dom.ts';
 import icChordsOnLyrics from '../assets/icons/ic_chords_on_lyrics.svg';
 import icOverflow from '../assets/icons/ic_lyrics_overflow.svg';
 import icKaraoke from '../assets/icons/ic_karaoke.svg';
+import icLyricsBtn from '../assets/icons/ic_lyrics.svg';
 import icReprocess from '../assets/icons/ic_reprocess.svg';
 import { openSheet } from './sheet.ts';
 import { LYRICS_LANGS, type LyricsLang } from '../player/lyricsLangs.ts';
@@ -61,6 +62,13 @@ export class LyricsView {
   private relayout = 0;
   /** Lo pone la app: guardar el interruptor de la cancion. */
   onChordsToggle: ((on: boolean) => void) | null = null;
+  /** Desplazamiento a mano (dy px) y si ha llegado arriba: pliega o despliega los controles del movil. */
+  onUserScroll: ((dy: number, atTop: boolean) => void) | null = null;
+  /** Hay letra que leer (o deja de haberla). */
+  onContent: ((on: boolean) => void) | null = null;
+  /** Boton de cerrar la letra con los controles plegados (b_lyricsClose). */
+  onClose: (() => void) | null = null;
+  private lastTop = 0;
   // Desplazamiento a mano: gesto en curso y letra desprendida de la cancion
   private gesture = false;
   private detached = false;
@@ -75,11 +83,18 @@ export class LyricsView {
     this.scroller.addEventListener('touchmove', user, { passive: true });
     this.scroller.addEventListener('pointerdown', (e) => { if (e.target === this.scroller) user(); }); // barra de scroll
     this.scroller.addEventListener('keydown', (e) => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) user(); });
-    this.scroller.addEventListener('scroll', () => { if (this.gesture) this.armSettle(); }, { passive: true });
+    this.scroller.addEventListener('scroll', () => {
+      const st = this.scroller.scrollTop, dy = st - this.lastTop;
+      this.lastTop = st;
+      if (!this.gesture) return; // el seguimiento automatico no cuenta
+      this.armSettle();
+      if (dy) this.onUserScroll?.(dy, st <= 0);
+    }, { passive: true });
     this.set(state);
   }
 
   set(state: LyricsState) {
+    this.onContent?.(state.kind === 'content');
     this.active = -2;
     this.hold = null;
     this.attach(false);
@@ -166,7 +181,10 @@ export class LyricsView {
     });
     this.scroller.classList.toggle('kar', this.karaoke && karaokeOk);
     this.scroller.replaceChildren(list);
-    this.el.replaceChildren(opts, this.scroller);
+    // Movil: con los controles plegados, el boton de la letra vuelve aqui (abajo a la izquierda)
+    const close = h('button', { class: 'lyclose', attrs: { 'aria-label': t('lyrics_button_description') } }, img(icLyricsBtn, '', ''));
+    close.onclick = () => this.onClose?.();
+    this.el.replaceChildren(opts, close, this.scroller);
     // Posicion de cada acorde: medida sobre las letras ya maquetadas (y otra vez si cambia el ancho)
     this.ro?.disconnect();
     this.ro = new ResizeObserver(() => this.scheduleLayout());

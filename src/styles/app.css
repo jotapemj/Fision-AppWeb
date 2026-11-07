@@ -203,6 +203,7 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cl.now { transform: scale(1.154); color: #fff; } /* AppWhite, como Android */
 .cl.ins { font-size: 28px; }
 .kar .cl.now { color: rgba(255,255,255,.55); } /* lyrics_line_current */
+.kar .cl.ins.now { color: #fff; } /* la nota instrumental activa, en blanco aun con karaoke */
 .kar .cl.now .wd { color: color-mix(in srgb, #fff calc(var(--k, 0) * 100%), rgba(255,255,255,.55)); }
 @media (prefers-reduced-motion: reduce) { .cl { transition: none; } }
 /* Acordes sobre la letra (ChordLyricsTextView): banda encima de cada linea, nombre sobre su letra */
@@ -937,3 +938,28 @@ dialog.sheet .fxpanel { position: static; background: none; box-shadow: none; pa
 .app.mob .cdsel > .seg:last-child { width: min(284px, 100%); }
 .app.mob .menu button { font-size: 12px; }
 .app.mob .strip { --edge: 22px; }
+
+/* Movil, letra: controles plegados (setLyricsControlsFolded). --fold 0..1 anima todo a la vez (260 ms, FastOutSlowIn) */
+@property --fold { syntax: '<number>'; inherits: true; initial-value: 0; }
+.app.mob { transition: --fold 260ms cubic-bezier(.4,0,.2,1); }
+.app.mob.lyfold { --fold: 1; }
+@media (prefers-reduced-motion: reduce) { .app.mob { transition: none; } }
+/* BPM, barra y tiempos se encogen con sus margenes y se apagan pronto; la fila de opciones queda cortada */
+.app.mob .pbar.fm :is(.mbpm, .seek, .mopts) { overflow: hidden; opacity: max(0, 1 - var(--fold) * 1.6); }
+.app.mob .pbar.fm .mbpm { height: calc(var(--hb) * (1 - var(--fold))); margin-block: calc(6px * (1 - var(--fold))); }
+.app.mob .pbar.fm .seek { height: calc(var(--hs) * (1 - var(--fold))); }
+.app.mob .pbar.fm .mopts { height: calc(var(--ho) * (1 - var(--fold))); padding-top: calc(6px * (1 - var(--fold))); }
+.app.mob .pbar.fm .btns { padding-top: calc(14px - 8px * var(--fold)); padding-bottom: calc(10px - 2px * var(--fold)); }
+/* La fila del transporte, en una pildora negra sobre la letra; play un poco menor dentro */
+.app.mob .pbar .btns { position: relative; }
+.app.mob .pbar .btns > * { position: relative; }
+.app.mob .pbar.fm .btns::before { content: ''; position: absolute; left: var(--pl); right: var(--pr); top: calc(var(--pt) - 8px * var(--fold)); height: var(--ph);
+  border-radius: 999px; background: #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); opacity: var(--fold); pointer-events: none; }
+.app.mob .pbar .btns::before { opacity: var(--fold); }
+.app.mob .pbar .play { scale: calc(1 - .2 * var(--fold)); }
+/* Boton de la letra encendido (disco de acento, icono oscuro), abajo a la izquierda */
+.lyclose { display: none; }
+.app.mob .lyclose { display: grid; place-items: center; position: absolute; left: 20px; bottom: 20px; z-index: 2; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent); opacity: var(--fold); pointer-events: none; }
+.app.mob.lyfold .lyclose { pointer-events: auto; }
+.app.mob .lyclose img { width: 24px; height: 24px; filter: brightness(0); }

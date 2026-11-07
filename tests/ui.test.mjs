@@ -1707,6 +1707,79 @@ test('fondo animado: el pulso sigue a las secciones de la bateria y el mapa qued
   }
 });
 
+test('movil (Android 3.4.0): letra con controles plegables, reloj al arrastrar, tira con velocidad por distancia, nota instrumental en blanco', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  const P = `document.querySelector('.main').player`;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const box = (sel) => `(() => { const e = document.querySelector('${sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height, op: +getComputedStyle(e).opacity, vis: e.checkVisibility({ visibilityProperty: true, opacityProperty: true }) }; })()`;
+  try {
+    await p.size(412, 915);
+    await p.eval(`localStorage.setItem('fision.onboarding', JSON.stringify({ library: true, player: true })); localStorage.setItem('fision.lyrics_karaoke_mode', '1')`);
+    await p.goto(c.url);
+    await p.waitFor(`document.querySelector('.app.mob') && document.querySelectorAll('.dr').length === 3`, 20000);
+    await p.eval(`[...document.querySelectorAll('.dr')].find(r => r.textContent.includes('Cancion buena')).click()`);
+    await p.waitFor(`document.querySelector('.app.onplayer') && document.querySelectorAll('.stem').length === 3 && !document.querySelector('canvas.curtain-c')`, 20000);
+    await p.waitFor(`document.querySelector('.mstrip .c.now')`, 5000);
+
+    // Tira: un salto largo tarda segun las celdas recorridas (150..800 ms); el paso de un beat, poco (80..200 ms)
+    const dur = () => p.eval(`parseFloat(getComputedStyle(document.querySelector('.mstrip .strip-track')).transitionDuration) * 1000`);
+    await p.eval(`${P}.seek(15000)`);
+    await wait(150);
+    const far = await dur();
+    expect(far > 300 && far <= 800, `salto largo: ${far} ms`);
+    await wait(700);
+    const step = await dur();
+    expect(step >= 80 && step <= 200, `un beat: ${step} ms`);
+
+    // Reloj: mientras se arrastra la barra muestra el tiempo del dedo, no el de la cancion
+    await p.eval(`(() => { const r = document.querySelector('.pbar .seek input'); r.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); r.value = 500; r.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    await wait(600);
+    const clock = await p.eval(`document.querySelector('.pbar .seek .meta span').textContent`);
+    await p.eval(`(() => { const r = document.querySelector('.pbar .seek input'); r.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    expect(clock === '00:10', `reloj al arrastrar: ${clock}`);
+
+    // Letra
+    await p.eval(`document.querySelector('.mo-lyrics').click()`);
+    await p.waitFor(`document.querySelectorAll('.lyrics .cl').length >= 4`, 10000);
+    await wait(600);
+    // Nota instrumental activa en blanco aunque haya karaoke
+    await p.eval(`${P}.seek(7000)`);
+    await p.waitFor(`document.querySelector('.lyrics .cl.ins.now')`, 3000);
+    await wait(600);
+    const note = await p.eval(`getComputedStyle(document.querySelector('.lyrics .cl.ins.now')).color`);
+    expect(note === 'rgb(255, 255, 255)', `nota instrumental: ${note}`);
+    await p.eval(`${P}.seek(500)`);
+    await wait(700);
+
+    const open = await p.eval(`({ bar: (${box('.pbar')}), lyr: (${box('.lyrics')}), play: (${box('.pbar .play')}) })`);
+    const wheel = async (dy, n = 4) => { const l = open.lyr; for (let k = 0; k < n; k++) { await p.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: l.l + l.w / 2, y: l.t + l.h / 2, deltaX: 0, deltaY: dy }); await wait(60); } await wait(450); };
+    // Bajar leyendo: los controles se pliegan a la fila del transporte en una pildora; vuelve el boton de la letra
+    await wheel(60);
+    const f = await p.eval(`({ bar: (${box('.pbar')}), lyr: (${box('.lyrics')}), play: (${box('.pbar .play')}), bpm: (${box('.mbpm')}), seek: (${box('.pbar .seek')}), opts: (${box('.mopts')}),
+      pill: +getComputedStyle(document.querySelector('.pbar .btns'), '::before').opacity, close: (${box('.lyclose')}),
+      closeBg: getComputedStyle(document.querySelector('.lyclose')).backgroundColor, accent: getComputedStyle(document.querySelector('.main')).getPropertyValue('--accent').trim() })`);
+    expect(f.bpm.h < 1 && f.seek.h < 1 && f.opts.h < 1 && !f.bpm.vis && !f.opts.vis, `plegado: ${JSON.stringify({ bpm: f.bpm, seek: f.seek, opts: f.opts })}`);
+    expect(f.pill === 1 && Math.abs(f.play.w - open.play.w * 0.8) < 1, `pildora ${f.pill}, play ${open.play.w} -> ${f.play.w}`);
+    expect(f.lyr.h > open.lyr.h + 100 && f.bar.h < open.bar.h - 100, `la letra no gana sitio: ${open.lyr.h} -> ${f.lyr.h}, panel ${open.bar.h} -> ${f.bar.h}`);
+    expect(f.close?.vis && f.close.w === 40 && Math.abs(f.close.l - 20) < 1 && Math.abs(f.lyr.b - f.close.b - 20) < 1.5 && f.closeBg !== 'rgba(0, 0, 0, 0)', `boton cerrar: ${JSON.stringify(f.close)} ${f.closeBg}`);
+    // Subir: se despliegan
+    await wheel(-60);
+    const u = await p.eval(`({ bpm: (${box('.mbpm')}), close: (${box('.lyclose')}), pill: +getComputedStyle(document.querySelector('.pbar .btns'), '::before').opacity })`);
+    expect(u.bpm.vis && u.bpm.h > 5 && !u.close?.vis && u.pill === 0, `desplegado: ${JSON.stringify(u)}`);
+    // Plegar y cerrar la letra con el boton: mezcla y controles desplegados
+    await wheel(60);
+    await p.eval(`document.querySelector('.lyclose').click()`);
+    await wait(500);
+    const back = await p.eval(`({ view: !!document.querySelector('.view .lyrics'), bpm: (${box('.mbpm')}), opts: (${box('.mopts')}) })`);
+    expect(!back.view && back.bpm.vis && back.opts.h > 20, `cerrar: ${JSON.stringify(back)}`);
+    return `tira ${Math.round(far)} / ${Math.round(step)} ms, panel ${Math.round(open.bar.h)} -> ${Math.round(f.bar.h)} px`;
+  } finally {
+    await p.eval(`localStorage.setItem('fision.lyrics_karaoke_mode', '0')`).catch(() => {});
+    await p.size(1440, 900);
+  }
+});
+
 test('sin excepciones en la pagina', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const errs = [...c.page.errors];

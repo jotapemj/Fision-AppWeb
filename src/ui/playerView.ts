@@ -69,6 +69,7 @@ export interface PlayerHooks {
 }
 
 const MIX_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="13" width="5" height="3" rx="1" fill="currentColor"/><rect x="9.5" y="7" width="5" height="3" rx="1" fill="currentColor"/><rect x="15.5" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
+const LYRICS_FOLD_PX = 24; // LYRICS_FOLD_THRESHOLD_DP: desplazamiento a mano que pliega o despliega
 const PLAY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="#000"/></svg>';
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="#000"/></svg>';
 const SPEED_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a8 8 0 1 1 16 0" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 15l4-5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
@@ -150,6 +151,10 @@ export class PlayerView {
   private stripTimer = 0;
   private cascadeOn = true;
   private mBpm = h('p', { class: 'mbpm' });
+  // Controles plegados en la letra (movil)
+  private folded = false;
+  private foldAccum = 0;
+  private lyricsContent = false;
   private mOpts = new Map<MOpt, HTMLButtonElement>();
   private bpmBeat = -2;
   private moptsEl!: HTMLElement;
@@ -161,6 +166,16 @@ export class PlayerView {
     // Acordes en la letra: por cancion (Room chordsOnLyrics)
     this.lyrics.setChordsOn(p.chordsOnLyrics);
     this.lyrics.onChordsToggle = (on) => p.setChordsOnLyrics(on);
+    // Movil: bajar leyendo pliega los controles a la fila del transporte; subir (o llegar arriba) los despliega
+    this.lyrics.onUserScroll = (dy, atTop) => {
+      if (!this.mobile || this.view !== 'lyrics') return;
+      if ((dy > 0) !== (this.foldAccum > 0)) this.foldAccum = 0;
+      this.foldAccum += dy;
+      if (this.foldAccum > LYRICS_FOLD_PX) this.setFold(true);
+      else if (this.foldAccum < -LYRICS_FOLD_PX || atTop) this.setFold(false);
+    };
+    this.lyrics.onContent = (on) => { this.lyricsContent = on; if (!on) this.setFold(false); };
+    this.lyrics.onClose = () => this.setView('mix');
     this.lyrics.actions = hooks.lyrics ?? null;
     const collapse = h('button', { class: 'mback', attrs: { 'aria-label': t('web_collapse_player') }, onclick: () => hooks.onCollapse?.() }, img(icCollapse, '', ''));
     const top = h('div', { class: 'top' }, collapse,
@@ -191,6 +206,8 @@ export class PlayerView {
     // --- barra inferior ---
     this.seekEl = slider(0, 1000, 1, 0, t('web_position'));
     this.seekEl.onpointerdown = () => (this.seeking = true);
+    // Mientras se arrastra, el reloj muestra el tiempo del dedo
+    this.seekEl.addEventListener('input', () => { if (this.seeking) this.posEl.textContent = fmtTime(+this.seekEl.value / 1000 * p.durationMs); });
     this.seekEl.onchange = () => { this.seeking = false; p.seek(+this.seekEl.value / 1000 * p.durationMs); };
     const seek = h('div', { class: 'seek' }, this.seekEl, h('div', { class: 'meta' }, this.posEl, h('span', { textContent: fmtTime(p.durationMs) })));
     const ib = (icon: string, label: string, fn: () => void) => h('button', { class: 'ib', attrs: { 'aria-label': label }, onclick: fn }, img(icon, '', ''));
@@ -239,6 +256,7 @@ export class PlayerView {
   /** Movil (calco de Android) o escritorio: misma vista, otra disposicion. La vista de escritorio no se pisa. */
   setMobile(on: boolean) {
     if (on === this.mobile) return;
+    if (!on) this.setFold(false);
     this.mobile = on;
     // Android abre en la mezcla (o en 3D si la cancion tiene el 3D encendido)
     this.view = on ? (this.p.audio3d ? '3d' : 'mix') : loadView();
@@ -485,7 +503,7 @@ export class PlayerView {
     if (end === 'next') this.hooks.onEnded(end);
     else if (end === 'stopped') this.refreshPlay();
     const pos = this.p.positionMs;
-    this.posEl.textContent = fmtTime(pos);
+    if (!this.seeking) this.posEl.textContent = fmtTime(pos);
     if (!this.seeking) setSlider(this.seekEl, this.p.durationMs ? Math.round(pos / this.p.durationMs * 1000) : 0);
     if (this.view === 'lyrics') this.lyrics.tick((pos + LYRICS_CLOCK_OFFSET_MS) / 1000);
     if (this.beats) {
@@ -572,6 +590,7 @@ export class PlayerView {
 
   private setView(v: View) {
     const changed = v !== this.view;
+    if (v !== 'lyrics') this.setFold(false);
     if (changed) this.viewOut();
     this.view = v;
     if (!this.mobile) try { localStorage.setItem(VIEW_PREF, v); } catch { /* sin storage */ }
@@ -580,6 +599,29 @@ export class PlayerView {
     this.renderView();
     if (changed) this.viewIn();
     if (v === 'mix' && this.tourWanted) setTimeout(() => this.maybeTour(), 400); // tras las filas
+  }
+
+  /** setLyricsControlsFolded: fuera quedan BPM, barra, tiempos y la fila de opciones; el transporte, en una pildora. */
+  private setFold(on: boolean) {
+    if (on === this.folded) return;
+    if (on && !(this.mobile && this.view === 'lyrics' && this.lyricsContent)) return;
+    const app = this.bar.closest('.app') as HTMLElement | null;
+    if (!app) return;
+    const above = [this.mBpm, this.bar.querySelector<HTMLElement>('.seek')!, this.moptsEl];
+    if (on && getComputedStyle(app).getPropertyValue('--fold').trim() === '0') {
+      // Medidas desplegado (una vez maquetado): alturas que se encogen y la pildora alrededor de los 5 botones
+      const [hb, hs, ho] = above.map((e) => e.offsetHeight);
+      const row = this.bar.querySelector<HTMLElement>('.btns')!, rb = row.getBoundingClientRect();
+      const kids = [...row.children] as HTMLElement[], first = kids[0].getBoundingClientRect(), last = kids[kids.length - 1].getBoundingClientRect();
+      const play = this.playBtn.getBoundingClientRect();
+      Object.entries({ '--hb': hb, '--hs': hs, '--ho': ho, '--pl': first.left - rb.left - 10, '--pr': rb.right - last.right - 10, '--pt': play.top - rb.top, '--ph': play.height })
+        .forEach(([k, v]) => this.bar.style.setProperty(k, `${v}px`));
+      this.bar.classList.add('fm');
+    }
+    this.folded = on;
+    this.foldAccum = 0;
+    app.classList.toggle('lyfold', on);
+    above.forEach((e) => (e.inert = on));
   }
 
   private renderView() {

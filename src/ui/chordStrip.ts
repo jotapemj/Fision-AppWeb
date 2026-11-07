@@ -10,6 +10,18 @@ const MAGNET_NEAR = 2;          // a <= 2 celdas vuelve al momento
 const MAGNET_BASE_MS = 1500, MAGNET_PER_CELL_MS = 100, MAGNET_MAX_MS = 4000;
 const WHEEL_SETTLE_MS = 150;    // fin del gesto de rueda
 const FLING_MS = 220;           // inercia: proyeccion de la velocidad al soltar
+// Movimiento animado = SpeedyLinearLayoutManager: un beat, curva sqrt de la distancia (80..200 ms);
+// varias celdas, proporcional a las recorridas (2 -> 150 ms ... 36 -> 800 ms); mas lejos, 400 ms
+const FAR_CELLS = 36, MOVE_MIN_MS = 150, MOVE_MAX_MS = 800, FAR_MOVE_MS = 400;
+const STEP_EASE = 'cubic-bezier(.2,.7,.3,1)', MOVE_EASE = 'cubic-bezier(.215,.61,.355,1)'; // Decelerate(1.5)
+
+/** Duracion y curva de un movimiento de dx px con celdas de cellPx (px de pantalla: dpr). */
+export function moveTiming(dx: number, cellPx: number, dpr = 1): { ms: number; ease: string } {
+  const cells = cellPx > 0 ? Math.round(Math.abs(dx) / cellPx) : 0;
+  if (cells <= 1) return { ms: Math.max(80, Math.min(200, Math.trunc(60 + 8 * Math.sqrt(Math.max(1, Math.abs(dx) * dpr))))), ease: STEP_EASE };
+  if (cells > FAR_CELLS) return { ms: FAR_MOVE_MS, ease: MOVE_EASE };
+  return { ms: Math.round(MOVE_MIN_MS + (MOVE_MAX_MS - MOVE_MIN_MS) * (cells - 2) / (FAR_CELLS - 2)), ease: MOVE_EASE };
+}
 
 export class ChordStrip {
   readonly el = h('div', { class: 'strip', attrs: { role: 'list' } });
@@ -82,9 +94,20 @@ export class ChordStrip {
   private offsetFor(k: number) { const t = this.cellEls[k]; return t ? Math.max(0, t.offsetLeft - this.slot()) : 0; }
   private maxOffset() { return this.offsetFor(this.cellEls.length - 1); }
   private setOffset(px: number, animate: boolean) {
-    this.offset = Math.max(0, Math.min(this.maxOffset(), px));
+    const to = Math.max(0, Math.min(this.maxOffset(), px));
+    if (animate) {
+      const { ms, ease } = moveTiming(to - this.offset, this.cellPx(), devicePixelRatio || 1);
+      this.track.style.transitionDuration = `${ms}ms`;
+      this.track.style.transitionTimingFunction = ease;
+    }
+    this.offset = to;
     this.track.classList.toggle('free', !animate);
     this.track.style.transform = `translateX(${-this.offset}px)`;
+  }
+  /** Paso medio entre celdas (las rayas de compas suman su hueco). */
+  private cellPx() {
+    const n = this.cellEls.length;
+    return n > 1 ? (this.cellEls[n - 1].offsetLeft - this.cellEls[0].offsetLeft) / (n - 1) : 0;
   }
   /** Celda mas cercana al hueco del tercio con este desplazamiento. */
   private nearest(px: number) {
