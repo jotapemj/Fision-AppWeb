@@ -1,12 +1,14 @@
 // Fondo animado (NebulaBackgroundView): 3 blobs en orbita + ancla bajo el transporte,
 // mezcla aditiva, velo 0x66000000, 30 fps, pulso por beat. Opt-in (nebula_enabled = false).
-import { accentPalette, brightnessCap, decayPulse, orbits } from '../player/nebulaMath.ts';
+import { accentPalette, ANCHOR_ALPHA, BLOB_ALPHA, brightnessCap, decayPulse, orbits } from '../player/nebulaMath.ts';
 
 export interface NebulaColors { blobs: number[][]; anchor: number[] }
 
 const FRAME_MS = 1000 / 30;
 const SCALE = 0.5; // todo es difuso: media resolucion basta
 const ANCHOR_Y = 1.02, ANCHOR_W = 1.30, ANCHOR_SQUASH = 0.36;
+
+const PULSE_GROW = [0.6, 0.25, 0.35]; // crecimiento del radio con el pulso: nucleo, halos, ancla (Android .40 / .10 / .15 + alpha)
 
 export class Nebula {
   readonly el: HTMLCanvasElement = document.createElement('canvas');
@@ -77,15 +79,15 @@ export class Nebula {
     if (this.orbitK > 0) this.orbit.forEach((o, i) => {
       const a = 2 * Math.PI * o.freq * t + o.phase;
       const cx = w / 2 + w * o.rx * Math.cos(a), cy = hgt / 2 + hgt * o.ry * Math.sin(a);
-      const r = i === 0 ? min * 0.30 * (1 + p * 0.40) : min * 0.55 * (1 + p * 0.10);
-      const alpha = Math.min(230, i === 0 ? 170 + p * 70 : 135 + p * 60) / 255;
-      this.blob(cx, cy, r, this.palette.blobs[i], alpha * this.orbitK * this.cap, 0.20);
+      // Pulso por tamaño (web): Android sube alpha y radio; aqui el alpha queda fijo para no pasar del tope
+      const r = i === 0 ? min * 0.30 * (1 + p * PULSE_GROW[0]) : min * 0.55 * (1 + p * PULSE_GROW[1]);
+      this.blob(cx, cy, r, this.palette.blobs[i], BLOB_ALPHA[i] * this.orbitK * this.cap, 0.20);
     });
     // Ancla: elipse fija bajo el borde, como un foco tras el transporte
-    const ax = w / 2, ay = hgt * ANCHOR_Y, ar = w * ANCHOR_W * (1 + p * 0.15);
+    const ax = w / 2, ay = hgt * ANCHOR_Y, ar = w * ANCHOR_W * (1 + p * PULSE_GROW[2]);
     ctx.save();
     ctx.translate(ax, ay); ctx.scale(1, ANCHOR_SQUASH); ctx.translate(-ax, -ay);
-    this.blob(ax, ay, ar, this.palette.anchor, Math.min(240, 160 + p * 80) / 255 * this.cap, 0);
+    this.blob(ax, ay, ar, this.palette.anchor, ANCHOR_ALPHA * this.cap, 0);
     ctx.restore();
     // Velo "cristal esmerilado"
     ctx.globalCompositeOperation = 'source-over';

@@ -1,7 +1,7 @@
 // Importa textos de la app Android (res/values*/strings.xml) a src/i18n/android.json.
 // Solo las claves listadas en src/i18n/keys.json.
 // Uso: node tools/import-strings.mjs <ruta a app/src/main/res>   (o FISION_ANDROID_RES)
-// Placeholders: %1$s / %1$d / %d / %s -> {1}, {2}...  (%% -> %)
+// Placeholders: %1$s / %1$d / %1$.1f / %d / %s -> {1}, {2}...  (%% -> %; el numero llega ya formateado)
 // <plurals> -> { one: "...", other: "..." } con {n} = la cantidad
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,7 +30,7 @@ function unescape(s) {
 
 function placeholders(s, plural) {
   let seq = 0;
-  return s.replace(/%(?:(\d+)\$)?([sd%])/g, (_, n, t) => {
+  return s.replace(/%(?:(\d+)\$)?(?:\.\d+)?([sdf%])/g, (_, n, t) => {
     if (t === '%') return '%';
     if (plural && !n && t === 'd') return '{n}';
     return `{${n ? Number(n) : ++seq}}`;

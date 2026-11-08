@@ -354,5 +354,18 @@
  "cd_audio_3d",
  "coach_pl_bar_metronome",
  "coach_pl_icon_body",
- "lyrics_options_title"
+ "lyrics_options_title",
+ "playlist_delete_action",
+ "gpu_dialog_title_ok",
+ "gpu_dialog_title_missing",
+ "gpu_dialog_title_unknown",
+ "gpu_dialog_label_vram",
+ "gpu_dialog_label_driver",
+ "gpu_dialog_refresh",
+ "gpu_dialog_no_gpu_body",
+ "server_gpu_title",
+ "server_gpu_ok_short",
+ "vram_gb_fmt",
+ "vram_free_of_total_fmt",
+ "gpu_vram_low_body"
 ]

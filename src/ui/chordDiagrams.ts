@@ -7,10 +7,11 @@ import {
   type Change, type Instrument, type Position,
 } from '../player/chordShapes.ts';
 import { h } from './dom.ts';
+import { icon } from './icons.ts';
 
-const INSTR_PREF = 'fision.chordInstrument', ZONE_PREF = 'fision.chordZone';
+const INSTR_PREF = 'fision.chordInstrument', ZONE_PREF = 'fision.chordZone', VOCAB_PREF = 'fision.chordVocab'; // vocabulario plegado: '0'
 const INSTRUMENTS: Instrument[] = ['piano', 'guitar', 'ukulele'];
-const FRETS = 5, STEP_MS = 380;
+const FRETS = 5, STEP_MS = 460;
 
 const load = <T>(k: string, ok: (v: string) => T | null, def: T): T => { try { const v = localStorage.getItem(k); return (v !== null ? ok(v) : null) ?? def; } catch { return def; } };
 const save = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* sin storage */ } };
@@ -46,7 +47,8 @@ export class ChordDiagrams {
   private beat = -1;
   private stage = h('div', { class: 'cdstage' });
   private vocab = h('div', { class: 'cdvocab' });
-  private vocabHead = h('p', { class: 'cdvh' });
+  private vocabBtn = h('button', { class: 'cdvt' }, icon('chev', 44)); // chevron fino: pliega / despliega el vocabulario
+  private side!: HTMLElement;
   private zoneSeg: HTMLElement;
   private instSeg: HTMLElement;
   private ro: ResizeObserver;
@@ -59,7 +61,10 @@ export class ChordDiagrams {
     this.zoneSeg = this.seg([t('chord_diagram_zone_open'), '3–7', '7–12', t('chord_diagram_zone_auto')], this.zone, (i) => {
       this.zone = i; save(ZONE_PREF, String(i)); this.recompute(); this.refresh();
     }, t('chord_diagram_zone_open'));
-    this.el.append(h('div', { class: 'cdmain' }, h('div', { class: 'cdsel' }, this.instSeg, this.zoneSeg), this.stage), h('aside', { class: 'cdside' }, this.vocabHead, this.vocab));
+    this.side = h('aside', { class: 'cdside' }, this.vocabBtn, h('div', { class: 'cdvw' }, this.vocab));
+    this.el.append(h('div', { class: 'cdmain' }, h('div', { class: 'cdsel' }, this.instSeg, this.zoneSeg), this.stage), this.side);
+    this.setVocabOpen(load(VOCAB_PREF, (v) => v !== '0', true), false);
+    this.vocabBtn.onclick = () => { const on = !this.side.classList.contains('open'); save(VOCAB_PREF, on ? '1' : '0'); this.setVocabOpen(on, true); };
     this.bindSwipe();
     this.ro = new ResizeObserver(() => this.redraw());
     this.ro.observe(this.stage);
@@ -71,6 +76,7 @@ export class ChordDiagrams {
 
   setCells(cells: BeatCell[]) {
     this.changes = chordChanges(cells);
+    this.vocabKey = ''; // acordes nuevos: vocabulario rehecho
     this.recompute();
     this.shown = Number.MIN_SAFE_INTEGER;
     this.refresh();
@@ -131,16 +137,31 @@ export class ChordDiagrams {
     this.el.classList.toggle('piano', piano);
     const cur = this.cardEl(this.card(this.shown), 'cur'), nxt = this.cardEl(this.card(this.shown + 1), 'nxt');
     nxt.onclick = () => this.step(1);
+    const motion = dir !== 0 && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // El que se va: se queda donde estaba (con su dibujo) y se funde mientras sale
+    const old = motion ? this.stage.querySelector<HTMLElement>('.cdcard.cur:not(.gone)') : null;
+    const box = old ? { l: old.offsetLeft, t: old.offsetTop, w: old.offsetWidth } : null;
+    this.stage.querySelectorAll('.cdcard.gone').forEach((g) => g.remove());
     this.stage.replaceChildren(cur, nxt);
     this.redraw();
     // ChordStageView: el siguiente pasa a actual desde su sitio; al retroceder, al reves
-    if (dir && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      const ax = piano ? 'Y' : 'X', ease = 'cubic-bezier(0,0,.2,1)';
-      cur.animate([{ transform: `translate${ax}(${dir > 0 ? 60 : -60}%) scale(${dir > 0 ? 0.62 : 1})`, opacity: dir > 0 ? 0.42 : 0 }, { transform: 'none', opacity: 1 }], { duration: STEP_MS, easing: ease });
-      nxt.animate([{ transform: `translate${ax}(${dir > 0 ? 40 : -60}%)`, opacity: 0 }, { transform: 'none', opacity: 0.42 }], { duration: STEP_MS, easing: ease });
+    if (motion) {
+      const ax = piano ? 'Y' : 'X', ease = 'cubic-bezier(.22,1,.36,1)', o = { duration: STEP_MS, easing: ease };
+      cur.animate([{ transform: `translate${ax}(${dir > 0 ? 60 : -60}%) scale(${dir > 0 ? 0.62 : 1})`, opacity: dir > 0 ? 0.42 : 0 }, { transform: 'none', opacity: 1 }], o);
+      nxt.animate([{ transform: `translate${ax}(${dir > 0 ? 40 : -60}%)`, opacity: 0 }, { transform: 'none', opacity: 0.42 }], o);
+      if (old && box) {
+        old.classList.add('gone');
+        Object.assign(old.style, { left: `${box.l}px`, top: `${box.t}px`, width: `${box.w}px` });
+        this.stage.append(old);
+        // Adelante: sale hacia atras encogiendo; atras: vuelve al hueco del siguiente
+        old.animate([{ transform: 'none', opacity: 1 }, { transform: dir > 0 ? `translate${ax}(-30%) scale(.8)` : `translate${ax}(60%) scale(.62)`, opacity: 0 }],
+          { duration: STEP_MS * 0.75, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }).onfinish = () => old.remove();
+      }
     }
     this.renderVocab();
   }
+
+  private vocabKey = '';
 
   private cardEl(c: Card | null, cls: string): HTMLElement {
     const el = h('div', { class: `cdcard ${cls}` });
@@ -174,10 +195,17 @@ export class ChordDiagrams {
   private renderVocab() {
     const seen = new Map<string, number>();
     this.changes.forEach((c, i) => { if (!seen.has(c.raw)) seen.set(c.raw, i); });
-    this.vocabHead.textContent = t('web_chords_vocab', seen.size);
     const curRaw = this.changes[this.shown]?.raw;
+    // Solo se rehace si cambia lo que muestra; al cambiar de acorde basta mover el marcado (rehacerlo parpadeaba)
+    const n = this.o.notation(), key = [this.instrument, this.zone, n.shift, n.latin, n.flat, !!this.shapes, ...seen.keys()].join('|');
+    if (key === this.vocabKey) {
+      for (const b of this.vocab.children) b.classList.toggle('on', (b as HTMLElement).dataset.raw === curRaw);
+      return;
+    }
+    this.vocabKey = key;
+    this.vocabBtn.setAttribute('aria-label', t('web_chords_vocab', seen.size));
     const minis = [...seen.entries()].map(([raw, i]) => {
-      const c = this.card(i)!, b = h('button', { class: `cdmini${raw === curRaw ? ' on' : ''}`, attrs: { 'aria-label': c.name } },
+      const c = this.card(i)!, b = h('button', { class: `cdmini${raw === curRaw ? ' on' : ''}`, attrs: { 'aria-label': c.name, 'data-raw': raw } },
         h('b', { class: this.o.notation().latin ? 'lat' : '', textContent: c.name }), h('canvas', { attrs: { 'aria-hidden': 'true' } }));
       (b as HTMLElement & { card?: Card }).card = c;
       b.onclick = () => {
@@ -188,6 +216,14 @@ export class ChordDiagrams {
     });
     this.vocab.replaceChildren(...minis);
     requestAnimationFrame(() => this.redraw());
+  }
+
+  /** Vocabulario abierto o plegado en horizontal (la columna se anima por CSS). */
+  private setVocabOpen(on: boolean, animate: boolean) {
+    this.side.classList.toggle('open', on);
+    this.side.classList.toggle('still', !animate);
+    this.vocabBtn.setAttribute('aria-expanded', String(on));
+    if (on) requestAnimationFrame(() => this.redraw());
   }
 
   /** Deslizar: al siguiente (izquierda; arriba en piano) o al anterior. */

@@ -48,11 +48,21 @@ export const fmtTime = (ms: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
-/** Cierra al hacer clic fuera o pulsar Escape. Devuelve la funcion de cierre. */
+const LEAVE_MS = 200; // salida de menus y desplegables (la animacion va por CSS; el cajon movil tarda 200)
+
+/** Cierra al hacer clic fuera o pulsar Escape (con fundido de salida). Devuelve la funcion de cierre. */
 export function dismissable(el: HTMLElement, onClose: () => void, ignore: HTMLElement[] = []): () => void {
   const click = (e: MouseEvent) => { if (!el.contains(e.target as Node) && !ignore.some((i) => i.contains(e.target as Node))) close(); };
   const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-  const close = () => { document.removeEventListener('pointerdown', click, true); document.removeEventListener('keydown', key); el.remove(); onClose(); };
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('pointerdown', click, true); document.removeEventListener('keydown', key);
+    if (reducedMotion() || !el.isConnected) el.remove();
+    else { el.classList.add('leaving'); setTimeout(() => el.remove(), LEAVE_MS); }
+    onClose();
+  };
   setTimeout(() => { document.addEventListener('pointerdown', click, true); document.addEventListener('keydown', key); });
   return close;
 }

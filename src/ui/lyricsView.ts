@@ -9,6 +9,7 @@ import icKaraoke from '../assets/icons/ic_karaoke.svg';
 import icLyricsBtn from '../assets/icons/ic_lyrics.svg';
 import icReprocess from '../assets/icons/ic_reprocess.svg';
 import { openSheet } from './sheet.ts';
+import { confirmDialog } from './confirmDialog.ts';
 import { LYRICS_LANGS, type LyricsLang } from '../player/lyricsLangs.ts';
 
 const KARAOKE_PREF = 'fision.lyrics_karaoke_mode'; // lyrics_karaoke_mode, default false
@@ -115,7 +116,8 @@ export class LyricsView {
     const karaokeOk = hasWords(this.rows);
     const sw = h('button', { class: 'switch', attrs: { role: 'switch', 'aria-checked': String(this.karaoke && karaokeOk), 'aria-label': t('lyrics_karaoke_mode') }, disabled: !karaokeOk,
       title: karaokeOk ? '' : t('lyrics_karaoke_unavailable') });
-    const setKaraoke = (on: boolean) => { this.karaoke = on; saveKaraoke(on); sw.setAttribute('aria-checked', String(on)); this.scroller.classList.toggle('kar', on); this.active = -2; };
+    // Al cambiar, la linea activa pasa ya al modo nuevo (tambien en pausa, sin esperar al siguiente cambio de linea)
+    const setKaraoke = (on: boolean) => { this.karaoke = on; saveKaraoke(on); sw.setAttribute('aria-checked', String(on)); this.scroller.classList.toggle('kar', on); this.repaint(); };
     sw.onclick = () => setKaraoke(!this.karaoke);
     const opts = h('div', { class: 'lyopts' }, h('label', { class: 'lykar' }, t('lyrics_karaoke_mode'), sw));
     if (this.actions) {
@@ -311,7 +313,7 @@ export class LyricsView {
     const cancel = h('button', { class: 'btn ghost lyred', textContent: t(error ? 'lyrics_reprocess' : 'lyrics_cancel') });
     cancel.onclick = () => {
       if (error) { this.set({ kind: 'picker' }); return; }
-      if (confirm(t('lyrics_cancel_dialog_title'))) this.actions?.cancelJob();
+      void confirmDialog({ icon: 'warning', message: t('lyrics_cancel_dialog_title'), yes: t('lyrics_dialog_yes'), no: t('lyrics_dialog_no') }).then((ok) => { if (ok) this.actions?.cancelJob(); });
     };
     const skel = h('div', { class: 'skel mini', attrs: { 'aria-busy': 'true' } }, h('i'), h('i'), h('i'), h('i'), h('i'), h('i'));
     return h('div', { class: 'lystate', attrs: { role: 'status' } }, h('h2', { textContent: t(error ? 'lyrics_error' : 'lyrics_processing') }), error ? '' : skel, cancel);
@@ -356,6 +358,18 @@ export class LyricsView {
   }
 
   get isDetached() { return this.detached; }
+
+  /** Repinta la activa con el ultimo reloj (o el de la fila tocada). */
+  private repaint() {
+    const sec = Number.isFinite(this.lastSec) ? this.lastSec : 0;
+    if (this.active >= 0) this.paint(this.active, this.hold ? Math.max(sec, this.hold.kar) : sec);
+  }
+
+  /** La vista vuelve a pantalla: el scroller se reinsertó con scrollTop 0. Recolocar ya en la activa (sin animar). */
+  reveal() {
+    this.attach(false);
+    this.center(false);
+  }
 
   private armSettle() {
     clearTimeout(this.settle);

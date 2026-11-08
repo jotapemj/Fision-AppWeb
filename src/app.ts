@@ -18,12 +18,13 @@ import type { LyricsState } from './ui/lyricsView.ts';
 import { buildBeatCells, parseChords, parseTimes } from './player/chords.ts';
 import { h, toast } from './ui/dom.ts';
 import { loginView } from './ui/login.ts';
-import { idleBar, PlayerView } from './ui/playerView.ts';
+import { PlayerView } from './ui/playerView.ts';
 import { Curtain } from './ui/curtain.ts';
 import { Sidebar, type RowMenuItem } from './ui/sidebar.ts';
 import { MiniPlayer, type MiniSong } from './ui/miniPlayer.ts';
 import { Nebula } from './ui/nebula.ts';
 import { IdleMain } from './ui/idleMain.ts';
+import { confirmDialog } from './ui/confirmDialog.ts';
 import { accentPalette, pulseFor } from './player/nebulaMath.ts';
 import type { BeatPulseMap } from './player/beatPulseMap.ts';
 import { loadPulseMap } from './player/pulseLoader.ts';
@@ -154,8 +155,11 @@ export class App {
     this.nebula = new Nebula();
     this.nebula.setColors(accentPalette(ACCENTS[this.settings.get('accentId')]));
     this.nebula.setEnabled(this.settings.get('nebula'));
+    // Foto de perfil (como el avatar de Android); sin foto o sin red, la inicial
+    const side = this.sidebar;
+    void this.api.avatar().then((b) => { if (b && this.sidebar === side) side.setAvatar(URL.createObjectURL(b)); }).catch(() => {});
     this.shell = h('div', { class: 'app' });
-    this.layout(this.hintMain(t('web_pick_song')), idleBar());
+    this.layout(this.hintMain(null));
     this.onPlayer = false;
     this.applyScreen();
     this.root.replaceChildren(this.shell);
@@ -206,7 +210,7 @@ export class App {
   }
 
   /** Centro sin cancion: nebulosa relajada + marca (una sola viva a la vez). */
-  private hintMain(text: string) {
+  private hintMain(text: string | null) {
     this.idle?.destroy();
     this.idle = new IdleMain(text, ACCENTS[this.settings.get('accentId')]);
     return this.idle.el;
@@ -382,7 +386,7 @@ export class App {
   }
 
   private async deletePlaylist(p: Playlist) {
-    if (!confirm(t('playlist_delete_confirm', p.title))) return;
+    if (!(await confirmDialog({ message: t('playlist_delete_confirm', p.title) }))) return;
     try {
       await this.api.deletePlaylist(p.id);
       toast(t('playlist_deleted'));
@@ -423,8 +427,9 @@ export class App {
   private async deleteSong(r: Row) {
     const e = r.entry, kind = deleteKind(r.state), title = e.title || e.filename;
     if (!kind) return;
+    const detail = e.artist ? `${title} · ${e.artist}` : title; // la cancion afectada, en todos los casos
     if (kind === 'queue') {
-      if (!confirm(t('cloud_cancel_queue_confirm'))) return;
+      if (!(await confirmDialog({ message: t('cloud_cancel_queue_confirm'), detail, yes: t('lyrics_dialog_yes') }))) return;
       const job = this.jobs.find((j) => j.hash === e.hash);
       if (job) { try { await this.api.cancelJob(job.job_id); } catch { /* ya no estaba */ } }
       this.inflight.delete(e.hash);
@@ -432,11 +437,11 @@ export class App {
       return;
     }
     if (kind === 'local') {
-      if (!confirm(t('delete_confirm', title))) return;
+      if (!(await confirmDialog({ message: t('delete_confirm', title), detail: e.artist || undefined }))) return;
       // La que suena: se para y el centro vuelve a la pantalla sin cancion
       if (this.current?.entry.hash === e.hash) {
         this.stopSong();
-        this.layout(this.hintMain(t('web_pick_song')), idleBar());
+        this.layout(this.hintMain(null));
         this.nebula?.setOrbitBlobsVisible(true);
         void this.applySongColors();
       }
@@ -447,7 +452,7 @@ export class App {
       this.render();
       return;
     }
-    if (!confirm(t('cloud_delete_cloud_confirm'))) return;
+    if (!(await confirmDialog({ message: t('cloud_delete_cloud_confirm'), detail }))) return;
     try { await this.api.deleteSong(e.hash); }
     catch (err) {
       if (err instanceof ApiError && err.status === 409) toast(t('cloud_delete_busy'));
@@ -466,6 +471,8 @@ export class App {
     // Abrir desde una playlist fija su orden; desde la biblioteca vuelve a la biblioteca
     if (r.state.kind === 'downloaded') this.queue = queue;
     if (r.state.kind === 'error' && r.state.code && RETRYABLE.includes(r.state.code)) { this.retryDialog(r.entry, r.state.code); return; }
+    // La que ya suena no se recarga: en movil solo se abre el reproductor (como Android)
+    if (r.state.kind === 'downloaded' && this.current?.entry.hash === r.entry.hash) { this.showPlayer(true); return; }
     if (r.state.kind === 'downloaded') this.open(r.entry);
     else if (r.state.kind === 'cloud') this.download(r.entry); // como Android: tocar en la nube = descargar
   }
@@ -620,7 +627,7 @@ export class App {
       curtain.finish(() => {}, () => {}, false);
       const msg = err instanceof Error && err.message === 'engine_needs_isolation' ? t('web_engine_isolation') : t('err_song_missing_files');
       console.error('open', err);
-      if (!this.current) { this.layout(this.hintMain(msg), idleBar()); if (this.onPlayer) this.showPlayer(false); if (this.mobile) toast(msg); }
+      if (!this.current) { this.layout(this.hintMain(msg)); if (this.onPlayer) this.showPlayer(false); if (this.mobile) toast(msg); }
     } finally { this.opening = false; }
   }
 

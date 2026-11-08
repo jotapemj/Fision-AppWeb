@@ -149,7 +149,8 @@ export function openLicenses() {
     content.replaceChildren(back,
       h('p', { class: 'lic-meta', textContent: t('license_meta_fmt', e.author, e.license) }),
       h('pre', { class: 'lic-text', textContent: e.text }),
-      h('a', { class: 'lic-visit', href: e.url, target: '_blank', rel: 'noopener noreferrer', textContent: t('license_detail_visit') }));
+      // Pie fijo abajo: el enlace siempre a mano aunque el texto sea largo
+      h('div', { class: 'lic-foot' }, h('a', { class: 'lic-visit', href: e.url, target: '_blank', rel: 'noopener noreferrer', textContent: t('license_detail_visit') })));
     dlg.scrollTop = 0;
     back.focus();
   };

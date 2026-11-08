@@ -1,13 +1,14 @@
 // Punto de entrada unico del arnes.
 //   node tests/run.mjs            todas
 //   node tests/run.mjs zip        solo las que casen (fichero o nombre de prueba)
+//   node tests/run.mjs 'a|b'      las que casen con a o con b (las de ui dependen del orden: incluir la de login)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tests } from './lib/harness.mjs';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const filter = (process.argv[2] || '').toLowerCase();
+const filters = (process.argv[2] || '').toLowerCase().split('|').filter(Boolean);
 const files = fs.readdirSync(dir).filter((f) => f.endsWith('.test.mjs')).sort();
 
 let pass = 0, fail = 0, skip = 0;
@@ -18,7 +19,7 @@ for (const f of files) {
   const group = f.replace('.test.mjs', '');
   for (const t of tests) {
     const full = `${group} › ${t.name}`;
-    if (filter && !full.toLowerCase().includes(filter)) continue;
+    if (filters.length && !filters.some((f) => full.toLowerCase().includes(f))) continue;
     const ts = performance.now();
     try {
       const r = await t.fn();

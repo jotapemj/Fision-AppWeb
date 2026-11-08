@@ -4,7 +4,7 @@
 // chips de filtro, orden y pestanas Canciones / Playlists abajo. Lo de un modo se oculta en el otro por CSS.
 import { t } from '../i18n/i18n.ts';
 import { applyFilter, counts, fold, search, type Filter, type Row } from '../library/library.ts';
-import { dismissable, h, img } from './dom.ts';
+import { dismissable, h, img, reducedMotion } from './dom.ts';
 import { icon } from './icons.ts';
 import wordmark from '../assets/icons/wordmark.svg';
 import icMark from '../assets/icons/ic_fision_mark.svg';
@@ -90,6 +90,18 @@ export class Sidebar {
   private plNew: HTMLButtonElement;
   private input: HTMLInputElement;
 
+  private av!: HTMLElement;
+  private mav!: HTMLElement;
+
+  /** Foto de perfil del server (GET /auth/avatar) sobre la inicial; null = vuelve la inicial (como Android). */
+  setAvatar(url: string | null) {
+    for (const el of [this.av, this.mav]) {
+      el.querySelector('img')?.remove();
+      el.classList.toggle('pic', !!url);
+      if (url) el.append(img(url, 'avimg', ''));
+    }
+  }
+
   constructor(user: string, server: string, hooks: SidebarHooks) {
     this.server = server;
     this.srv.textContent = server;
@@ -103,12 +115,12 @@ export class Sidebar {
     const bar = this.bar = h('div', { class: 'bar2' }, h('h2', { class: 't', textContent: t('tab_songs') }), this.flt, this.count);
     this.plAdd.onclick = () => hooks.onNewPlaylist();
     const plSec = h('section', { class: 'plsec', attrs: { 'aria-label': t('tab_playlists') } }, h('div', { class: 'plbar' }, h('h2', { textContent: t('tab_playlists') }), this.plAdd), this.plList);
+    this.av = h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } });
     const me = h('div', { class: 'me' },
-      h('span', { class: 'av', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-hidden': 'true' } }),
+      this.av,
       h('span', { class: 'who' }, h('b', { textContent: user }), this.srv),
       this.dCloud,
-      h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }));
-    me.lastElementChild!.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
+      h('button', { class: 'gear', attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() }, icon('settings', 22))); // Material "Settings" (ic_settings)
     const addBtn = h('button', { class: 'addb', attrs: { 'aria-label': t('import_title') }, onclick: () => hooks.onAdd() });
     addBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 18h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 15.5v-5M9.6 12.6 12 10.2l2.4 2.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     addBtn.append(t('b_add'));
@@ -116,7 +128,7 @@ export class Sidebar {
     // --- movil: cabecera (nube roja sin conexion, marca, avatar = ajustes) ---
     this.mCloud.innerHTML = cloudLink(26); this.dCloud.innerHTML = cloudLink(22);
     this.mCloud.hidden = this.dCloud.hidden = true;
-    const avatar = h('button', { class: 'mav', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() });
+    const avatar = this.mav = h('button', { class: 'mav', textContent: user.slice(0, 1).toUpperCase(), attrs: { 'aria-label': t('settings_toolbar_title') }, onclick: () => hooks.onSettings() });
     const mhd = h('div', { class: 'mhd' }, this.mCloud, img(wordmark, 'wm', 'Fision'), avatar);
     // Buscador + anadir (squircle con la marca), como et_find + b_add
     const msq = h('button', { class: 'msq', attrs: { 'aria-label': t('import_title') }, onclick: () => hooks.onAdd() }, img(icMark, '', ''));
@@ -218,9 +230,17 @@ export class Sidebar {
 
   /** Abre (o cierra con null) una playlist en la lista. */
   showPlaylist(p: Playlist | null) {
+    const was = this.open?.id ?? null;
     this.open = p;
     this.renderPlaylists();
     this.render();
+    // Entrar desliza desde la derecha; volver, desde la izquierda (como pasar de pantalla)
+    if (was !== (p?.id ?? null) && !reducedMotion()) {
+      const dx = p ? 28 : -28;
+      for (const el of [this.list, p ? this.plHead : this.bar]) {
+        el.animate([{ transform: `translateX(${dx}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 280, easing: 'cubic-bezier(.2,0,0,1)' });
+      }
+    }
   }
 
   get openPlaylist() { return this.open; }

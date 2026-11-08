@@ -61,16 +61,20 @@ const relLum = (c: number[]) => {
 };
 
 /** Tope del fondo (luminancia del peor punto, calculado como si todo se solapara). Calibrado con la e2e de
- *  contraste: 0.075 deja el peor texto en 4.54; 0.065 en 4.75. */
-export const NEBULA_MAX_LUM = 0.065;
-const PEAK_BLOB = [230 / 255, 195 / 255, 195 / 255], PEAK_ANCHOR = 240 / 255, VEIL_KEEP = 0.6;
+ *  contraste: 0.065 dejaba el peor texto en 4.75 pero casi no se veia; JP (2026-11-08) pidio el doble:
+ *  0.13 deja el peor en 3.49 (minimo de la prueba: 3). */
+export const NEBULA_MAX_LUM = 0.13;
+// Alpha fijo de blobs y ancla (los de Android en reposo): en la web el pulso solo agranda (JP, 2026-11-08)
+export const BLOB_ALPHA = [170 / 255, 135 / 255, 135 / 255], ANCHOR_ALPHA = 160 / 255;
+const VEIL_KEEP = 0.6;
 
 /**
  * Tope de brillo (web, decision JP; Android no lo tiene): factor para el alpha de blobs y ancla tal que el peor
- * punto (todo sumado en 'lighter', pulso maximo, tras el velo .4) no pase de maxLum. 1 = no hace falta.
+ * punto (todo sumado en 'lighter', tras el velo .4) no pase de maxLum. El pulso no sube el alpha (agranda los
+ * blobs), asi que el pico no cambia con el golpe. 1 = no hace falta.
  */
 export function brightnessCap(p: { blobs: number[][]; anchor: number[] }, maxLum = NEBULA_MAX_LUM): number {
-  const sum = [0, 1, 2].map((ch) => p.blobs.reduce((s, c, i) => s + c[ch] * (PEAK_BLOB[i] ?? PEAK_BLOB[1]), 0) + p.anchor[ch] * PEAK_ANCHOR);
+  const sum = [0, 1, 2].map((ch) => p.blobs.reduce((s, c, i) => s + c[ch] * (BLOB_ALPHA[i] ?? BLOB_ALPHA[1]), 0) + p.anchor[ch] * ANCHOR_ALPHA);
   const lumAt = (k: number) => relLum(sum.map((v) => Math.min(255, v * k) * VEIL_KEEP));
   if (lumAt(1) <= maxLum) return 1;
   let lo = 0, hi = 1;

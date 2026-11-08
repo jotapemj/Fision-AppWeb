@@ -32,6 +32,12 @@ export interface JobSubmit { hash: string; job_id?: string; state: string; cache
 /** GET /jobs/{id}: error_code estable; error es texto libre en ingles (solo respaldo). */
 export interface JobStatus { job_id: string; hash: string; state: LiveJob['state']; position: number | null; error?: string; error_code?: string }
 
+/** GET /server/info (REFERENCE.md, deteccion de hardware). vram_free_mb se mide en cada peticion. */
+export interface ServerInfo {
+  version?: string; gpu?: boolean; gpu_name?: string; vram_total_mb?: number; vram_free_mb?: number; vram_min_mb?: number;
+  driver?: string; gpu_usable?: boolean | null; gpu_problem?: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -88,7 +94,13 @@ export class Api {
 
   async library(): Promise<LibraryEntry[]> { return this.json(await this.authed('/library')); }
 
-  async serverInfo(): Promise<{ version?: string; gpu?: boolean; gpu_name?: string }> { return this.json(await this.authed('/server/info')); }
+  async serverInfo(): Promise<ServerInfo> { return this.json(await this.authed('/server/info')); }
+
+  /** Foto de perfil de la cuenta (AvatarManager.fetchAvatar); 404 = sin foto. */
+  async avatar(): Promise<Blob | null> {
+    const r = await this.authed('/auth/avatar', {}, [404]);
+    return r.status === 404 ? null : r.blob();
+  }
 
   async job(id: string): Promise<JobStatus> { return this.json(await this.authed(`/jobs/${id}`)); }
   async cancelJob(id: string): Promise<void> { await this.authed(`/jobs/${id}`, { method: 'DELETE' }, [404]); }

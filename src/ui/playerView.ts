@@ -106,10 +106,32 @@ const MORE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="t
 const LONG_PRESS_MS = 450;
 type MOpt = 'repeat' | 'lyrics' | 'pitch' | 'metro' | 'chords' | '3d';
 
-/** Barra inferior sin cancion: todo desactivado. */
-export function idleBar(): HTMLElement {
-  const b = h('div', { class: 'pbar' });
-  b.append(h('div'), h('div', { class: 'btns' }, withSvg(h('button', { class: 'play', disabled: true, attrs: { 'aria-label': t('web_play') } }), PLAY_SVG)), h('div'));
+/** Boton de 5 s (attachSeekButtonBounce + animateSeekSign de Android): rebote al soltar y un "+" / "-" que sube
+ *  desde la base 20 px con fundido, se queda 500 ms y se va. */
+function seekBtn(ic: string, label: string, dir: 1 | -1, fn: () => void): HTMLButtonElement {
+  const sign = h('span', { class: `sksign ${dir > 0 ? 'fwd' : 'bwd'}` }, icon(dir > 0 ? 'plus' : 'minus', 22));
+  const b = h('button', { class: 'ib sk', attrs: { 'aria-label': label } }, img(ic, '', ''), sign);
+  let signAnim: Animation | null = null;
+  const press = (on: boolean) => {
+    if (reducedMotion()) return;
+    b.animate(on ? [{ transform: 'scale(.92)' }] : [{ transform: 'scale(.92)' }, { transform: 'scale(1.1)', offset: 0.48, easing: 'ease-out' }, { transform: 'none' }],
+      on ? { duration: 80, fill: 'forwards' } : { duration: 230, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+  };
+  b.addEventListener('pointerdown', () => press(true));
+  b.addEventListener('pointerup', () => press(false));
+  b.addEventListener('pointercancel', () => press(false));
+  b.onclick = () => {
+    fn();
+    if (reducedMotion()) return;
+    signAnim?.cancel();
+    // 220 ms subiendo (Decelerate), 500 ms quieto, 200 ms fundido
+    signAnim = sign.animate([
+      { transform: 'translateY(0)', opacity: 0, easing: 'cubic-bezier(0,0,.2,1)' },
+      { transform: 'translateY(-20px)', opacity: 1, offset: 220 / 920 },
+      { transform: 'translateY(-20px)', opacity: 1, offset: 720 / 920 },
+      { transform: 'translateY(-20px)', opacity: 0 },
+    ], { duration: 920 });
+  };
   return b;
 }
 
@@ -213,8 +235,8 @@ export class PlayerView {
     const seek = h('div', { class: 'seek' }, this.seekEl, h('div', { class: 'meta' }, this.posEl, h('span', { textContent: fmtTime(p.durationMs) })));
     const ib = (icon: string, label: string, fn: () => void) => h('button', { class: 'ib', attrs: { 'aria-label': label }, onclick: fn }, img(icon, '', ''));
     this.playBtn = h('button', { class: 'play', onclick: () => this.toggle() });
-    const btns = h('div', { class: 'btns' }, ib(icBack5, t('web_back5'), () => p.skip(-5000)), ib(icPrev, t('web_prev'), hooks.onPrev),
-      this.playBtn, ib(icNext, t('web_next'), hooks.onNext), ib(icFwd5, t('web_fwd5'), () => p.skip(5000)));
+    const btns = h('div', { class: 'btns' }, seekBtn(icBack5, t('web_back5'), -1, () => p.skip(-5000)), ib(icPrev, t('web_prev'), hooks.onPrev),
+      this.playBtn, ib(icNext, t('web_next'), hooks.onNext), seekBtn(icFwd5, t('web_fwd5'), 1, () => p.skip(5000)));
     const act = (icon: string | null, svgMarkup: string, label: string, val: HTMLElement, fn: (b: HTMLButtonElement) => void) => {
       const b = h('button', { class: 'act' }, icon ? img(icon, '', '') : '', h('span', {}, h('small', { textContent: label }), val));
       if (svgMarkup) withSvg(b, svgMarkup);
@@ -633,7 +655,7 @@ export class PlayerView {
 
   private renderBody() {
     this.viewBox.className = this.view === 'lyrics' ? 'view lyr' : 'view';
-    if (this.view === 'lyrics') { this.viewBox.replaceChildren(this.lyrics.el); return; }
+    if (this.view === 'lyrics') { this.viewBox.replaceChildren(this.lyrics.el); this.lyrics.reveal(); return; }
     if (this.view !== '3d') this.scene3d?.watchAccent(this.main); // sigue al acento aunque no se vea
     if (this.view === 'chords' && this.chords) {
       const meta = h('p', { class: 'chmeta', textContent: `${this.p.bpm ? Math.round(this.p.bpm) + ' BPM · ' : ''}${this.chords.beatsPerBar}/4` });

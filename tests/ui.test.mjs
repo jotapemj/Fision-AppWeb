@@ -84,7 +84,8 @@ async function fakeServer() {
       if (up.lyr.posts.length && !up.lyr.ready) extra.push({ job_id: 'jl', hash: H4, filename: 'x', state: 'running', position: 0 });
       return json(200, [...(del.queueGone ? [] : [{ job_id: 'j', hash: H3, filename: 'x', state: 'queued', position: 1 }]), ...extra]);
     }
-    if (req.url === '/server/info') return json(200, { version: '2.1.0', gpu: false });
+    if (req.url === '/server/info') return json(200, { version: '2.1.0', gpu: false, gpu_name: '', vram_total_mb: 0, vram_free_mb: 0, vram_min_mb: 4096, driver: '' });
+    if (req.url === '/auth/avatar') { res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(bandsPng(32, 32, [[[240, 200, 40], 1]])); } // foto de perfil amarilla
     if (req.url === '/jobs' && req.method === 'POST') {
       const cfg = (body.match(/name="config_json"\r\n\r\n([^\r]*)/) || [])[1];
       up.calls.push({ type: req.headers['content-type'], cfg, name: (body.match(/filename="([^"]+)"/) || [])[1] });
@@ -235,9 +236,15 @@ test('login, estados de la lista, descarga y apertura', async () => {
       const n = document.querySelector('.main.idle .idleneb'), m = document.querySelector('.main.idle .idlemark');
       if (!n || !m) return null;
       const px = (c, f) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let k = 0; for (let i = 0; i < d.length; i += 4) if (f(d[i], d[i + 1], d[i + 2], d[i + 3])) k++; return k / (d.length / 4); };
-      return { color: px(n, (r, g, b, a) => a > 0 && Math.max(r, g, b) > 20), white: px(m, (r, g, b, a) => a > 200 && r > 240 && g > 240 && b > 240) };
+      if (!m.complete || !m.naturalWidth) return { loading: true };
+      const mc = Object.assign(document.createElement('canvas'), { width: 128, height: 128 }); mc.getContext('2d').drawImage(m, 0, 0, 128, 128);
+      const bar = document.querySelector('.pbar'), r = document.querySelector('.main.idle').getBoundingClientRect();
+      return { color: px(n, (r, g, b, a) => a > 0 && Math.max(r, g, b) > 20), white: px(mc, (r, g, b, a) => a > 200 && r > 240 && g > 240 && b > 240),
+        bar: !!bar, hint: !!document.querySelector('.main.idle .hint'), full: Math.abs(r.bottom - innerHeight) < 1 };
     })()`);
-    expect(idle && idle.color > 0.3 && idle.white > 0.05, `centro sin cancion: ${JSON.stringify(idle)}`);
+    // Foto de perfil del server en el pie (sobre la inicial), como el avatar de Android
+    await p.waitFor(`document.querySelector('.me .av img.avimg')?.naturalWidth > 0`, 5000);
+    expect(idle && idle.color > 0.3 && idle.white > 0.05 && !idle.bar && !idle.hint && idle.full, `centro sin cancion (logo, sin barra ni texto, alto completo): ${JSON.stringify(idle)}`);
     // Sin descargadas no hay filtro: solo el total (un hidden pisado por CSS lo dejaba visible)
     const bar = await p.eval(`(() => { const f = document.querySelector('.flt'), n = document.querySelector('.bar2 .count'); return { flt: f.getClientRects().length > 0, count: n.getClientRects().length > 0 }; })()`);
     expect(!bar.flt && bar.count, `cabecera sin descargadas: filtro ${bar.flt ? 'visible' : 'oculto'}, total ${bar.count ? 'visible' : 'oculto'}`);
@@ -269,6 +276,18 @@ test('login, estados de la lista, descarga y apertura', async () => {
   } catch (e) { await c.close(); ctx = { skip: 'skip — fallo previo' }; throw e; }
 });
 
+test('tocar en el lateral la cancion que suena no la vuelve a cargar', async () => {
+  const c = await setup(); if (c.skip) return c.skip;
+  const p = c.page;
+  await p.eval(`window.__pl = document.querySelector('.main').player`);
+  const pos0 = await p.eval(`document.querySelector('.main').player.positionMs`);
+  await p.eval(`[...document.querySelectorAll('.dr')].find((r) => r.textContent.includes('Cancion buena')).click()`);
+  await new Promise((r) => setTimeout(r, 700));
+  const st = await p.eval(`({ same: document.querySelector('.main').player === window.__pl, curtain: !!document.querySelector('canvas.curtain-c'), pos: document.querySelector('.main').player.positionMs })`);
+  expect(st.same && !st.curtain && st.pos >= pos0, `recargada: ${JSON.stringify({ ...st, pos0 })}`);
+  return 'sigue sonando sin recargar';
+});
+
 test('metronomo: encender y elegir 2x desde su desplegable', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
@@ -294,16 +313,16 @@ test('sonido en downbeat: interruptor y sonido en el menu; baja el WAV y lo carg
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
   await p.eval(`document.querySelector('.top .ib').click()`);
-  await p.waitFor(`document.querySelector('.menu-pop .dbpick')`);
-  const hiddenOff = await p.eval(`document.querySelector('.menu-pop .dbpick').hidden`);
-  await p.eval(`document.querySelectorAll('.menu-pop .switch')[1].click()`);
-  await p.eval(`document.querySelector('.menu-pop .dbpick').click()`);
-  const n = await p.eval(`document.querySelectorAll('.menu-pop .dblist button').length`);
-  await p.eval(`document.querySelectorAll('.menu-pop .dblist button')[4].click()`); // stick
+  await p.waitFor(`document.querySelector('.menu-pop:not(.leaving) .dbpick')`);
+  const hiddenOff = await p.eval(`document.querySelector('.menu-pop:not(.leaving) .dbpick').hidden`);
+  await p.eval(`document.querySelectorAll('.menu-pop:not(.leaving) .switch')[1].click()`);
+  await p.eval(`document.querySelector('.menu-pop:not(.leaving) .dbpick').click()`);
+  const n = await p.eval(`document.querySelectorAll('.menu-pop:not(.leaving) .dblist button').length`);
+  await p.eval(`document.querySelectorAll('.menu-pop:not(.leaving) .dblist button')[4].click()`); // stick
   await p.waitFor(`performance.getEntriesByType('resource').some((r) => r.name.endsWith('/dbclick_stick.wav'))`, 5000);
-  const st = await p.eval(`({ on: document.querySelector('.main').player.downbeatOn, sub: document.querySelector('.menu-pop .dbpick small').textContent,
+  const st = await p.eval(`({ on: document.querySelector('.main').player.downbeatOn, sub: document.querySelector('.menu-pop:not(.leaving) .dbpick small').textContent,
     saved: JSON.parse(localStorage.getItem('fision.settings')).downbeatType })`);
-  await p.eval(`document.querySelectorAll('.menu-pop .switch')[1].click()`); // dejarlo apagado
+  await p.eval(`document.querySelectorAll('.menu-pop:not(.leaving) .switch')[1].click()`); // dejarlo apagado
   const off = await p.eval(`document.querySelector('.main').player.downbeatOn`);
   await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
   expect(hiddenOff && n === 13 && st.on && st.saved === 4 && /Baqueta|Stick/.test(st.sub) && !off, JSON.stringify({ hiddenOff, n, ...st, off }));
@@ -362,6 +381,25 @@ test('letra magnetica: cerca del centro se engancha y vuelve; lejos se desprende
     await p.eval(`[...document.querySelectorAll('.pbar button')].find((b) => /Adelante 5|Forward 5/.test(b.getAttribute('aria-label') || '')).click()`);
     await new Promise((r) => setTimeout(r, 1200));
     const back = await p.eval(off);
+    // Ir a otra vista y volver: la letra sigue en la linea activa (antes volvia al principio hasta el cambio de linea)
+    await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
+    await new Promise((r) => setTimeout(r, 500));
+    await p.eval(`document.querySelectorAll('.seg2 button')[0].click()`);
+    await new Promise((r) => setTimeout(r, 700));
+    const again = await p.eval(off);
+    expect(Math.abs(again) < 30, `al volver a la letra: ${again} px del centro`);
+    // Modo karaoke: rotulo e interruptor sin pisarse; al activarlo (en pausa) la linea activa pasa ya a karaoke
+    const kar = await p.eval(`(() => { const l = document.querySelector('.lyopts .lykar'), sw = l.querySelector('.switch'), r = document.createRange();
+      r.selectNodeContents(l.firstChild); const a = r.getBoundingClientRect(), b = sw.getBoundingClientRect();
+      return { gap: Math.round(b.left - a.right), mid: Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) }; })()`);
+    expect(kar.gap >= 6 && kar.mid < 4, `rotulo e interruptor de karaoke: ${JSON.stringify(kar)}`);
+    await p.eval(`document.querySelectorAll('.lyrics .cl')[0].click()`); // una linea con texto (la nota instrumental va siempre en blanco)
+    await new Promise((r) => setTimeout(r, 300));
+    await p.eval(`document.querySelector('.lyopts .lykar .switch').click()`);
+    await new Promise((r) => setTimeout(r, 500)); // fin de la transicion de color
+    const kon = await p.eval(`(() => { const n = document.querySelector('.lyrics .cl.now'); return { kar: document.querySelector('.lyrics').classList.contains('kar'), color: getComputedStyle(n).color }; })()`);
+    await p.eval(`document.querySelector('.lyopts .lykar .switch').click()`);
+    expect(kon.kar && /0\.55\)/.test(kon.color), `karaoke al activarlo: ${JSON.stringify(kon)}`);
     expect(Math.abs(o0) < 30 && Math.abs(near) < 30, `cerca: ${o0} -> ${near} px del centro`);
     expect(Math.abs(far) > 150 && det > 0, `lejos no vuelve: ${far} px`);
     expect(Math.abs(back) < 30, `tras el seek: ${back} px`);
@@ -429,8 +467,14 @@ test('diagramas: guitarra pintada, vocabulario, piano sin zonas, clic = seek y s
   const pianoLit = await p.eval(lit);
   expect(zoneShown && pianoZone === 'hidden' && pianoLit > 300, `zona con guitarra ${zoneShown}, con piano ${pianoZone}; piano ${pianoLit} px`);
   // Clic en Am del vocabulario: la cancion salta a su beat (12 s) y Am pasa a actual
+  // Sin parpadeo: el vocabulario no se rehace al cambiar de acorde (mismos nodos, dibujo intacto); solo cambia el marcado
+  await p.eval(`window.__minis = [...document.querySelectorAll('.cdmini')]`);
   await p.eval(`[...document.querySelectorAll('.cdmini')].find((b) => b.textContent.startsWith('Am')).click()`);
   await p.waitFor(`document.querySelector('.cdcard.cur .cdname b')?.textContent === 'Am'`, 4000);
+  const keep = await p.eval(`(() => { const now = [...document.querySelectorAll('.cdmini')], on = now.find((b) => b.classList.contains('on'));
+    const cv = on.querySelector('canvas'), d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n++;
+    return { same: now.length === window.__minis.length && now.every((b, i) => b === window.__minis[i]), on: on.textContent, px: n }; })()`);
+  expect(keep.same && keep.on === 'Am' && keep.px > 50, `vocabulario al cambiar de acorde: ${JSON.stringify(keep)}`);
   const pref = await p.eval(`localStorage.getItem('fision.chordInstrument')`);
   await p.eval(`document.querySelectorAll('.cdsel .seg')[0].querySelectorAll('button')[1].click()`);
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`);
@@ -530,11 +574,11 @@ test('fondo animado: apagado por defecto; encendido pinta color y no tapa clics'
   const off = await p.eval(state);
   expect(off.op === 0, `apagado por defecto: opacidad ${off.op}`);
   await p.eval(`document.querySelector('.top .ib').click()`);
-  await p.waitFor(`document.querySelector('.menu-pop .switch')`);
-  await p.eval(`document.querySelector('.menu-pop .switch').click()`);
+  await p.waitFor(`document.querySelector('.menu-pop:not(.leaving) .switch')`);
+  await p.eval(`document.querySelector('.menu-pop:not(.leaving) .switch').click()`);
   await new Promise((r) => setTimeout(r, 900));
   const on = await p.eval(state);
-  await p.eval(`document.querySelector('.menu-pop .switch').click()`); // dejarlo como estaba
+  await p.eval(`document.querySelector('.menu-pop:not(.leaving) .switch').click()`); // dejarlo como estaba
   await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
   expect(on.op === 1 && on.lit > 0.1, `encendido: opacidad ${on.op}, pixeles con color ${(on.lit * 100).toFixed(0)} %`);
   expect(on.top !== 'CANVAS', `el canvas tapa la UI: ${on.top}`);
@@ -568,14 +612,16 @@ for (const [w, hgt] of [[1440, 900], [1280, 800]]) {
 
 // Contraste sobre el fondo animado: el fondo se mide en el pixel (captura sin textos), no en el CSS.
 // Peor caso: pulso al maximo y 16 instantes de las orbitas; 4 acentos y colores de portada.
+// Minimo 3:1 en el peor instante (JP, 2026-11-08: nebulosa mas visible; antes 4.5:1 y casi no se veia).
+const NEBULA_MIN = 3;
 test('contraste con el fondo animado encendido: textos sobre la nebulosa en su peor instante', async () => {
   const c = await setup(); if (c.skip) return c.skip;
   const p = c.page;
   await p.size(1280, 800);
   await p.eval(`document.querySelectorAll('.seg2 button')[2].click()`); // vista Mezcla
   await p.eval(`document.querySelector('.top .ib').click()`);
-  await p.waitFor(`document.querySelector('.menu-pop .switch')`);
-  await p.eval(`document.querySelector('.menu-pop .switch').click()`);
+  await p.waitFor(`document.querySelector('.menu-pop:not(.leaving) .switch')`);
+  await p.eval(`document.querySelector('.menu-pop:not(.leaving) .switch').click()`);
   await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
   await new Promise((r) => setTimeout(r, 700));
   const SEL = ['.fxpanel b', '.fxv', '.lr small', '.fxpanel .seg button', '.bar2 .t', '.stem .nm', '.stem .val', '.solo', '.group', '.act small', '.act b',
@@ -611,8 +657,8 @@ test('contraste con el fondo animado encendido: textos sobre la nebulosa en su p
         rs.sort((a, b) => a - b);
         const v = rs[Math.floor(rs.length * 0.05)]; // el 5 % peor del fondo (bordes finos fuera)
         const key = `${it.s} "${it.txt}"`;
-        if (!worst.has(key) || v < worst.get(key).v) worst.set(key, { v, need: it.big ? 3 : 4.5, where: name });
-        if (v < (it.big ? 3 : 4.5)) (perPal[name] ??= new Set()).add(key);
+        if (!worst.has(key) || v < worst.get(key).v) worst.set(key, { v, need: NEBULA_MIN, where: name });
+        if (v < NEBULA_MIN) (perPal[name] ??= new Set()).add(key);
       });
     }
   };
@@ -647,8 +693,8 @@ test('contraste con el fondo animado encendido: textos sobre la nebulosa en su p
     await p.eval(`document.getElementById('nocolor')?.remove()`);
     await settingsDo(`if (${songSw}.getAttribute('aria-checked') === 'true') ${songSw}.click(); document.querySelectorAll('dialog.settings .acc')[0].click()`);
     await p.eval(`document.querySelector('.top .ib').click()`);
-    await p.waitFor(`document.querySelector('.menu-pop .switch')`);
-    await p.eval(`document.querySelector('.menu-pop .switch').click()`); // fondo animado apagado otra vez
+    await p.waitFor(`document.querySelector('.menu-pop:not(.leaving) .switch')`);
+    await p.eval(`document.querySelector('.menu-pop:not(.leaving) .switch').click()`); // fondo animado apagado otra vez
     await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
   }
   const bad = [...worst].filter(([, w]) => w.v < w.need).map(([k, w]) => `${k} ${w.v.toFixed(2)} (${w.where})`);
@@ -938,8 +984,10 @@ test('playlists: vacia, crear con el editor (solo las de la nube), abrirla, volv
   // Borrar desde el menu de la playlist
   await p.eval(`document.querySelector('.plr').click()`);
   await p.waitFor(`document.querySelector('.plhead:not([hidden]) .plopt')`, 3000);
-  await p.eval(`window.confirm = () => true; document.querySelector('.plopt').click()`);
+  await p.eval(`document.querySelector('.plopt').click()`);
   await p.eval(`document.querySelector('.plhead .menu .danger').click()`);
+  await p.waitFor(`document.querySelector('dialog.cfdlg[open]')`, 3000); // dialogo propio, no el confirm() del navegador
+  await p.eval(`document.querySelector('dialog.cfdlg .cfyes').click()`);
   await p.waitFor(`document.querySelector('.plsec .empty') && document.querySelector('.plhead').hidden`, 5000);
   const toastText = await p.eval(`document.querySelector('.toast')?.textContent ?? ''`);
   expect(back === 3 && calls.some((x) => x.startsWith('DELETE /playlists/abcdef012345')) && toastText, `vuelta ${back} filas, aviso "${toastText}"`);
@@ -985,6 +1033,10 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     catch { throw new Error(`dialogo: ${await p.eval(`JSON.stringify({ dlg: !!document.querySelector('dialog.imp'), input: !!document.querySelector('input.pick-audio'), files: document.querySelector('input.pick-audio')?.files?.length, load: document.querySelector('.imload')?.hidden })`)}`); }
     const warn = await p.eval(`!document.querySelector('.imwarn').hidden`);
     await p.waitFor(`/0:05/.test(document.querySelector('.imtx small').textContent)`, 5000);
+    // Sin portada: logo generico; sin x (ya esta Cancelar); variantes plegadas fuera de personalizada
+    const gen = await p.eval(`({ gen: !!document.querySelector('.imcv.gen img')?.src.includes('artcover_generic'), x: !!document.querySelector('dialog.imp .xbtn'),
+      var: Math.round(document.querySelector('.imvarw').getBoundingClientRect().height) })`);
+    expect(gen.gen && !gen.x && gen.var <= 1, /* plegada: solo la raya de 1 px, transparente */ `dialogo de anadir: ${JSON.stringify(gen)}`);
     // Contraste de todo texto del dialogo (4.5:1; 3:1 desde 18.66 px)
     const low = await p.eval(DIALOG_CONTRAST);
     expect(!low.length, `contraste bajo en el dialogo: ${low.join('; ')}`);
@@ -1002,6 +1054,11 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     expect(hero === 'Mi tema|La Autora|true', `tarjeta: ${hero}`);
     await p.eval(`document.querySelectorAll('.imtile')[1].click()`);
     const custom = await p.eval(`document.querySelectorAll('dialog.imp .seg button')[2].getAttribute('aria-checked')`);
+    // En personalizada las variantes se despliegan animando la altura: a medio camino y luego enteras
+    const vh = () => p.eval(`Math.round(document.querySelector('.imvarw').getBoundingClientRect().height)`);
+    await new Promise((r) => setTimeout(r, 60)); const mid = await vh();
+    await new Promise((r) => setTimeout(r, 400)); const full = await vh();
+    expect(full > 20 && mid < full, `variantes: ${mid} -> ${full} px`);
     up.hold = true;
     await p.eval(`${btnSend}.click()`);
     await p.waitFor(`!document.querySelector('dialog.imp')`, 10000);
@@ -1020,7 +1077,7 @@ test('anadir: comprueba antes de subir, sube con config; al acabar el job se des
     await p.waitFor(`document.querySelector('.top .t h2')?.textContent === 'Cancion buena' && !document.querySelector('canvas.curtain-c')`, 10000);
     const before = up.zips.filter((z) => z === H1).length;
     await p.eval(`document.querySelector('.top .ib').click()`);
-    await p.eval(`[...document.querySelectorAll('.menu-pop .menuitem')].find((b) => /Reprocesar|Reprocess/.test(b.textContent)).click()`);
+    await p.eval(`[...document.querySelectorAll('.menu-pop:not(.leaving) .menuitem')].find((b) => /Reprocesar|Reprocess/.test(b.textContent)).click()`);
     await p.waitFor(`document.querySelector('dialog.imp') && !${btnSend}.disabled`, 5000);
     await p.eval(`${btnSend}.click()`);
     await p.waitFor(`!document.querySelector('dialog.imp')`, 5000);
@@ -1125,7 +1182,7 @@ test('exportar: mezcla WAV con metronomo a la carpeta elegida; pista con eco (co
     const out = []; for await (const [n, h] of d.entries()) { const f = await h.getFile(); const b = new Uint8Array(await f.slice(0, 12).arrayBuffer()); out.push([n, f.size, String.fromCharCode(...b.subarray(0, 4)), String.fromCharCode(...b.subarray(4, 8))]); } return out; })()`;
   const opt = (i) => p.eval(`document.querySelectorAll('dialog.expdlg .expopt')[${i}].click()`);
   await p.eval(`document.querySelector('.top .ib').click()`);
-  await p.eval(`[...document.querySelectorAll('.menu-pop .menuitem')].find((b) => /Exportar|Export/.test(b.textContent)).click()`);
+  await p.eval(`[...document.querySelectorAll('.menu-pop:not(.leaving) .menuitem')].find((b) => /Exportar|Export/.test(b.textContent)).click()`);
   await p.waitFor(`document.querySelector('dialog.expdlg .expopt')`, 3000);
   await opt(0); await opt(0); // mezcla, volumen por defecto
   await p.waitFor(`document.querySelector('dialog.expdlg .expchk input')`, 3000);
@@ -1159,13 +1216,20 @@ test('borrar: en cola se saca de la cola; descargada borra la copia (y para si s
   const row = (t) => `[...document.querySelectorAll('.drw')].find((r) => r.querySelector('.dr').textContent.includes('${t}'))`;
   const menu = async (t) => {
     await p.eval(`${row(t)}.querySelector('.more').click()`);
-    await p.waitFor(`document.querySelector('.menu.rowmenu')`, 3000);
-    return p.eval(`[...document.querySelectorAll('.menu.rowmenu button')].map((b) => b.textContent + (b.disabled ? ' (off)' : ''))`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu:not(.leaving)')`, 3000);
+    return p.eval(`[...document.querySelectorAll('.menu.rowmenu:not(.leaving) button')].map((b) => b.textContent + (b.disabled ? ' (off)' : ''))`);
   };
-  const pickItem = (label) => p.eval(`window.confirm = () => true; [...document.querySelectorAll('.menu.rowmenu button')].find((b) => b.textContent === '${label}').click()`);
+  // Cada borrado pide confirmacion en el dialogo de la app (icono, texto, cancion afectada) y se acepta
+  const asked = [];
+  const pickItem = async (label) => {
+    await p.eval(`window.confirm = () => { throw new Error('confirm() nativo'); }; [...document.querySelectorAll('.menu.rowmenu:not(.leaving) button')].find((b) => b.textContent === '${label}').click()`);
+    await p.waitFor(`document.querySelector('dialog.cfdlg[open]')`, 3000);
+    asked.push(await p.eval(`document.querySelector('dialog.cfdlg').textContent`));
+    await p.eval(`document.querySelector('dialog.cfdlg .cfyes').click()`);
+  };
   // El menu cabe en la ventana (fijo, no lo recorta la lista)
   const queueItems = await menu('Cancion en cola');
-  const box = await p.eval(`(() => { const r = document.querySelector('.menu.rowmenu').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0; })()`);
+  const box = await p.eval(`(() => { const r = document.querySelector('.menu.rowmenu:not(.leaving)').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.left >= 0; })()`);
   await pickItem(queueItems[0]);
   await p.waitFor(`!${row('Cancion en cola')}.querySelector('.spin')`, 10000);
   expect(box && /cola|queue/i.test(queueItems[0]) && del.calls[0] === 'DELETE /jobs/j', `cola: ${queueItems} -> ${del.calls}, en ventana ${box}`);
@@ -1183,7 +1247,9 @@ test('borrar: en cola se saca de la cola; descargada borra la copia (y para si s
   await pickItem(cloudItems.at(-1));
   await p.waitFor(`!${row('Cancion rota')}`, 5000);
   expect(/nube|cloud/i.test(cloudItems.at(-1)) && stays && del.calls.join() === 'DELETE /jobs/j,DELETE H2 409,DELETE H2', `nube: ${cloudItems} -> ${del.calls}, tras 409 sigue ${stays}`);
-  return `cola cancelada, copia local borrada con la cancion sonando, nube 409 -> borrada`;
+  const names = ['Cancion en cola', 'Subida', 'Cancion rota', 'Cancion rota'];
+  expect(asked.length === 4 && asked.every((x, i) => x.includes(names[i])), `dialogos sin el nombre de la cancion: ${JSON.stringify(asked)}`);
+  return `cola cancelada, copia local borrada con la cancion sonando, nube 409 -> borrada; ${asked.length} dialogos con su cancion`;
 });
 
 test('sin red: entra con la sesion guardada, biblioteca y playlists de la copia offline; lo descargado suena', async () => {
@@ -1295,6 +1361,12 @@ test('licencias: lista desde Ajustes, detalle con texto y enlace, volver', async
   const det = await p.eval(`({ title: document.querySelector('dialog.licenses h2').textContent, text: document.querySelector('.lic-text').textContent,
     href: document.querySelector('.lic-visit').href, rel: document.querySelector('.lic-visit').rel,
     hscroll: document.querySelector('dialog.licenses').scrollWidth > document.querySelector('dialog.licenses').clientWidth })`);
+  // Texto largo (SoundTouch, LGPL): "Visitar proyecto" fijo abajo, visible sin desplazar
+  await p.eval(`document.querySelector('dialog.licenses .btn.ghost').click()`);
+  await p.eval(`[...document.querySelectorAll('.lic-row')].find((r) => r.textContent.startsWith('SoundTouch')).click(); document.querySelector('dialog.licenses').style.maxHeight = '420px'`); // ventana baja: el texto no cabe
+  const stick = await p.eval(`(() => { const d = document.querySelector('dialog.licenses'), v = document.querySelector('.lic-visit').getBoundingClientRect(), r = d.getBoundingClientRect();
+    return { long: d.scrollHeight > d.clientHeight + 100, inView: v.top >= r.top && v.bottom <= r.bottom, hit: document.elementFromPoint(v.left + 5, v.top + 5)?.closest('.lic-visit') !== null }; })()`);
+  expect(stick.long && stick.inView && stick.hit, `Visitar proyecto fijo abajo: ${JSON.stringify(stick)}`);
   await p.eval(`document.querySelector('dialog.licenses .btn.ghost').click()`);
   const back = await p.eval(`document.querySelectorAll('dialog.licenses .lic-row').length`);
   await p.eval(`document.querySelector('dialog.licenses .xbtn').click(); document.querySelector('dialog.settings .xbtn').click()`);
@@ -1357,10 +1429,10 @@ test('movil 412x915: biblioteca de Android, pestanas, reproductor a pantalla com
       return { tap: b.webkitTapHighlightColor, sel: b.userSelect, over: r.overscrollBehaviorY, body: getComputedStyle(document.body).overscrollBehaviorY, input: getComputedStyle(document.querySelector('.find input')).userSelect }; })()`);
     expect(tch.tap === 'rgba(0, 0, 0, 0)' && tch.sel === 'none' && tch.over === 'none' && tch.body === 'none' && tch.input !== 'none', `tactil: ${JSON.stringify(tch)}`);
     // Menus (ordenar y ⋮ de la fila): texto centrado en vertical en cada opcion
-    const offCenter = () => p.eval(`[...document.querySelectorAll('.menu.rowmenu button')].map((b) => { const r = document.createRange(); r.selectNodeContents(b); const t = r.getBoundingClientRect(), o = b.getBoundingClientRect(); return Math.abs((t.top + t.bottom) / 2 - (o.top + o.bottom) / 2); })`);
+    const offCenter = () => p.eval(`[...document.querySelectorAll('.menu.rowmenu:not(.leaving) button')].map((b) => { const r = document.createRange(); r.selectNodeContents(b); const t = r.getBoundingClientRect(), o = b.getBoundingClientRect(); return Math.abs((t.top + t.bottom) / 2 - (o.top + o.bottom) / 2); })`);
     for (const open of ['.msort', '.drw .more']) {
       await p.eval(`document.querySelector('${open}').click()`);
-      await p.waitFor(`document.querySelector('.menu.rowmenu')`);
+      await p.waitFor(`document.querySelector('.menu.rowmenu:not(.leaving)')`);
       const off = await offCenter();
       expect(off.length > 0 && off.every((v) => v <= 1), `${open}: texto descentrado ${off}`);
       await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
@@ -1489,20 +1561,20 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
     await p.eval(`document.querySelector('.mo-lyrics').click()`);
     // Cajon ☰: a la derecha, alto completo
     await p.eval(`document.querySelector('.top .ib').click()`);
-    await p.waitFor(`document.querySelector('.pop.menu-pop')`);
+    await p.waitFor(`document.querySelector('.pop.menu-pop:not(.leaving)')`);
     await wait(350); // entra deslizando (240 ms)
-    const dr = await p.eval(`(() => { const r = document.querySelector('.pop.menu-pop').getBoundingClientRect(); return [r.top, Math.round(r.right), Math.round(r.bottom)]; })()`);
+    const dr = await p.eval(`(() => { const r = document.querySelector('.pop.menu-pop:not(.leaving)').getBoundingClientRect(); return [r.top, Math.round(r.right), Math.round(r.bottom)]; })()`);
     expect(dr[0] === 0 && dr[1] === 412 && dr[2] === 915, `cajon: ${dr}`);
     await p.eval(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`);
     // Cabecera de bateria: el icono pone en solo todas las piezas
     await p.eval(`document.querySelector('.gsolo').click()`);
-    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
-    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu:not(.leaving)')`);
+    await p.eval(`document.querySelector('.menu.rowmenu:not(.leaving) button').click()`);
     const ds = await p.eval(`({ on: document.querySelector('.gsolo').classList.contains('on'), kick: ${P}.stems.find(s => s.stem === 'kick').solo, bass: ${P}.stems.find(s => s.stem === 'bass').solo })`);
     expect(ds.on && ds.kick && !ds.bass, `solo de bateria: ${JSON.stringify(ds)}`);
     await p.eval(`document.querySelector('.gsolo').click()`);
-    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
-    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu:not(.leaving)')`);
+    await p.eval(`document.querySelector('.menu.rowmenu:not(.leaving) button').click()`);
     expect(await p.eval(`!${P}.stems.some(s => s.solo)`), 'solo de bateria no se quita');
     expect(await p.eval(`document.querySelectorAll('.view .stem').length === 3`), 'letra no vuelve a la mezcla');
     // Pildora de acordes: diagramas arriba, carrusel abajo; diagramas abiertos y el boton los cierra
@@ -1568,13 +1640,13 @@ test('movil: reproductor de Android (tira arriba, BPM, 6 botones, hojas de tono 
     expect(!lp.on && !lp.sheet, `pulsacion larga: ${JSON.stringify(lp)}`);
     // Icono del stem: menu Solo / Silenciar; solo = acento, el resto atenuado
     await p.eval(`document.querySelector('.stem .s.btn-ic').click()`);
-    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
-    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu:not(.leaving)')`);
+    await p.eval(`document.querySelector('.menu.rowmenu:not(.leaving) button').click()`);
     const solo = await p.eval(`[...document.querySelectorAll('.stem')].map(r => (r.classList.contains('soloed') ? 'S' : '') + (r.classList.contains('soloout') ? 'o' : '')).join(',')`);
     expect(solo === 'S,o,o', `solo: ${solo}`);
     await p.eval(`document.querySelector('.stem .s.btn-ic').click()`);
-    await p.waitFor(`document.querySelector('.menu.rowmenu')`);
-    await p.eval(`document.querySelector('.menu.rowmenu button').click()`);
+    await p.waitFor(`document.querySelector('.menu.rowmenu:not(.leaving)')`);
+    await p.eval(`document.querySelector('.menu.rowmenu:not(.leaving) button').click()`);
     // ⋮ = hoja del stem con balance y FX
     await p.eval(`document.querySelector('.stem .mmore').click()`);
     await p.waitFor(`document.querySelector('dialog.sheet.in .fxpanel')`);
@@ -1646,11 +1718,13 @@ test('movil: panel de baile de la escena como Android (botones a la izquierda, t
     expect(await p.eval(fits), 'algo se sale de la tarjeta en Distancia');
     // Chevron: pliega a 32 px y abre
     await p.eval(`document.querySelector('.d3panel .dchev').click()`);
-    await wait(360);
+    // Transicion de 280 ms: con la escena 3D pintando puede tardar algo mas; se espera al final, no un tiempo fijo
+    await p.waitFor(`Math.abs(document.querySelector('.d3panel').getBoundingClientRect().width - 32) < 1`, 2000).catch(() => {});
+    await wait(300); // fundido del cuerpo
     const f = await p.eval(`({ w: document.querySelector('.d3panel').getBoundingClientRect().width, body: document.querySelector('.d3panel .dbody').checkVisibility({ visibilityProperty: true }) })`);
     expect(Math.abs(f.w - 32) < 1 && !f.body, `plegado: ${JSON.stringify(f)}`);
     await p.eval(`document.querySelectorAll('.d3panel .dchev')[0].click()`);
-    await wait(360);
+    await p.waitFor(`Math.abs(document.querySelector('.d3panel').getBoundingClientRect().width - ${m.panel.w}) < 1`, 2000).catch(() => {});
     expect(Math.abs((await p.eval(`(${box})('.d3panel')`)).w - m.panel.w) < 1, 'no vuelve a abrirse');
     // Parar el baile sigue funcionando
     await p.eval(`document.querySelector('.d3btns .d3btn').click()`);

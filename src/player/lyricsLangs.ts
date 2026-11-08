@@ -1,7 +1,8 @@
 // Idiomas de la transcripcion (LyricsLanguage de Android): Auto (null = lo decide Whisper) + 27.
 // Banderas convertidas de los vectores de Android; hi, pa y ta comparten la de India.
+import generic from '../assets/artcover_generic.png'; // Auto = el logo generico (como Android)
 const flags = import.meta.glob('../assets/flags/*.{svg,png}', { eager: true, import: 'default' }) as Record<string, string>;
-const flag = (n: string) => flags[`../assets/flags/${n}.svg`] ?? flags[`../assets/flags/${n}.png`] ?? '';
+const flag = (n: string) => n === 'flag_auto' ? generic : flags[`../assets/flags/${n}.svg`] ?? flags[`../assets/flags/${n}.png`] ?? '';
 
 export interface LyricsLang { code: string | null; key: string; flag: string }
 

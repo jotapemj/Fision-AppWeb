@@ -25,3 +25,9 @@ test('el texto sobre el acento sigue a --on-accent (con colores de portada pasa 
   const bad = css.split(/\r?\n/).filter((l) => /rgba?\(\s*4\s*,\s*20\s*,\s*15|#04140f/i.test(l) && !/^\s*--on-accent:/.test(l));
   expect(!bad.length, `${bad.length} con el valor fijo: ${bad[0] ?? ''}`);
 });
+
+test('sin seleccion de texto en la app: solo los campos de texto', () => {
+  const css = fs.readFileSync(new URL('../src/styles/app.css', import.meta.url), 'utf8');
+  expect(/^body \{[^}]*\buser-select: none/m.test(css), 'body sin user-select: none');
+  expect(/^input, textarea \{[^}]*\buser-select: text/m.test(css), 'los campos deben poder seleccionarse');
+});

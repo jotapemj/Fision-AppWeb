@@ -83,8 +83,7 @@ export class ChordGrid {
       const el = this.cellEls[k];
       if (!el) continue;
       el.classList.toggle('now', k === i);
-      el.classList.toggle('trail', i >= 0 && k < i && i - k < bpb);
-      el.classList.toggle('played', i >= 0 && k < i && i - k >= bpb);
+      el.classList.toggle('played', i >= 0 && k < i); // sin estela (como Android): lo sonado, todo igual
     }
     const r = this.rowOf(i);
     if (r !== this.row) { const first = this.row < 0; this.row = r; if (!this.browsing) this.follow(!first); }

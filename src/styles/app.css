@@ -28,8 +28,8 @@ html, body { background: var(--bg); color: var(--text); font: 15px/1.4 var(--fon
 .ico svg { display: block; }
 :where(button:has(> .ico:only-child)) { display: inline-grid; place-items: center; }
 .lic-back { display: inline-flex; align-items: center; gap: 6px; }
-button, label, img { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-@media (hover: none) { body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
+/* Sin seleccion de texto en toda la app (como Android): solo los campos de texto */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 input, textarea { -webkit-user-select: text; user-select: text; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -128,6 +128,8 @@ input[type=range].sl::-moz-range-thumb { width: 18px; height: 18px; border: 0; b
 @media (prefers-reduced-motion: reduce) { .eq i, .spin { animation: none; } .eq i { height: 9px; } }
 .me { display: flex; align-items: center; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
 .me .av { width: 34px; height: 34px; border-radius: 50%; background: #2b2b2b; box-shadow: 0 0 0 2px var(--accent); display: grid; place-items: center; color: #cfcfcf; font-size: 14px; flex: none; }
+.me .av { position: relative; } /* .mav ya es absoluta */
+.avimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; } /* foto de perfil sobre la inicial */
 .me .who { display: grid; line-height: 1.3; flex: 1; min-width: 0; }
 .me .who b { font-weight: 400; font-size: 13.5px; }
 .me .who span { font-size: 11.5px; color: var(--text-muted); }
@@ -205,6 +207,7 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .lylist { padding: 30vh 14% 40vh 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 .lyopts { position: absolute; top: 6px; right: 40px; z-index: 2; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); }
 .switch:disabled { opacity: .35; cursor: default; }
+.lykar { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; } /* texto y interruptor en fila, sin pisarse */
 /* Sin reflujo: todas a 32 px; la activa se escala (30/26 como Android) desde el borde inicial */
 .cl { font-size: 32px; line-height: 1.3; color: rgba(255,255,255,.4); cursor: pointer; transform-origin: 0 50%;
   transition: transform 520ms cubic-bezier(.4,0,.2,1), color 520ms cubic-bezier(.4,0,.2,1); width: fit-content; }
@@ -266,7 +269,6 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cgrid .g.db { background: var(--cell-db); }
 .cgrid .g.played { background: color-mix(in srgb, var(--accent) 22%, var(--cell)); }
 .cgrid .g.db.played { background: color-mix(in srgb, var(--accent) 22%, var(--cell-db)); }
-.cgrid .g.trail { background: color-mix(in srgb, var(--accent) 45%, #000); }
 .cgrid .g.now { background: var(--accent); color: var(--on-accent); }
 .cgrid .g.ghost { font-size: clamp(14px, 1.8vw, 22px); color: rgba(255,255,255,.32); }
 .cgrid .g.ghost.now { color: color-mix(in srgb, var(--on-accent) 60%, transparent); }
@@ -296,7 +298,7 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 @media (prefers-reduced-motion: reduce) { .strip-track { transition: none; } }
 /* Diagramas (chords.html): selectores + actual/siguiente a la izquierda, vocabulario a la derecha */
 .view.chv { overflow: hidden; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
-.cdg { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 340px); gap: 32px; padding-top: 18px; min-height: 0; }
+.cdg { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; padding-top: 18px; min-height: 0; }
 .cdmain { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 18px; min-width: 0; min-height: 0; overflow: hidden; }
 .cdsel { display: flex; flex-wrap: wrap; gap: 12px; }
 .cdsel .seg { width: auto; }
@@ -305,6 +307,8 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cdstage.piano { grid-template-columns: 1fr; grid-template-rows: auto auto; touch-action: pan-x; }
 .cdcard { display: grid; gap: 8px; min-width: 0; }
 .cdcard.nxt { opacity: .42; cursor: pointer; }
+.cdstage { position: relative; }
+.cdcard.gone { position: absolute; pointer-events: none; transform-origin: 50% 40%; } /* el que se va, fundiendose */
 .cdname { display: flex; align-items: baseline; gap: 12px; }
 .cdname b { font: 400 76px/1 "MusGlyphs", serif; color: var(--accent); }
 .cdname b.lat { font-family: var(--font); font-size: 60px; }
@@ -316,9 +320,19 @@ dialog.settings::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8
 .cdstage.piano .cdcard.nxt .cddia { height: 110px; }
 .cdstage.piano .cdcard.nxt .cdname b { font-size: 40px; }
 .cdcard.nxt .cddia { height: 200px; }
-.cdside { border-left: 1px solid var(--line); padding-left: 24px; min-width: 0; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; padding-bottom: 16px; }
-.cdvh { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
-.cdvocab { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+.cdside { position: relative; width: 28px; border-left: 1px solid var(--line); min-height: 0; transition: width 320ms cubic-bezier(.2,0,0,1); }
+.cdside.open { width: clamp(240px, 24vw, 340px); }
+.cdside.still { transition: none; }
+/* Vocabulario plegable en horizontal: chevron fino pegado a la raya, contenido que se funde */
+.cdvt { position: absolute; z-index: 1; top: 50%; left: -22px; width: 44px; height: 76px; margin-top: -38px; display: grid; place-items: center; border-radius: 20px; background: var(--bg); color: var(--text-faint); transition: color 150ms; } /* a media altura de la raya */
+.cdvt .ico { transform: rotate(90deg); transition: transform 320ms cubic-bezier(.2,0,0,1); }
+.cdvt svg path { stroke-width: 1; }
+.cdside.open .cdvt .ico { transform: rotate(-90deg); } /* abierto: apunta a la derecha (plegar); plegado: a la izquierda (sacar) */
+@media (hover: hover) { .cdvt:hover { color: var(--text-soft); } }
+.cdvw { height: 100%; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; padding: 0 0 16px 30px;
+  opacity: 0; visibility: hidden; transition: opacity 180ms, visibility 0s 320ms; }
+.cdside.open .cdvw { opacity: 1; visibility: visible; transition: opacity 240ms 120ms, visibility 0s; }
+.cdvocab { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; min-width: 216px; }
 .cdmini { display: grid; justify-items: center; gap: 4px; padding: 10px 6px; border-radius: 12px; }
 @media (hover: hover) { .cdmini:hover { background: var(--hover); } }
 .cdmini.on { background: var(--accent-12); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -381,6 +395,12 @@ input[type=range].sl.bi::-webkit-slider-runnable-track { background: linear-grad
 .btns .ib { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; }
 @media (hover: hover) { .btns .ib:hover { background: var(--press); } }
 .btns .ib img { width: 30px; height: 30px; }
+/* +5 / -5: signo que sube al pulsar (tv_seconds_*_sign de Android) */
+.btns .sk { position: relative; }
+.sksign { position: absolute; bottom: -2px; opacity: 0; pointer-events: none; color: #fff; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+.sksign.fwd { right: -6px; }
+.sksign.bwd { left: -6px; }
+.sksign svg path { stroke-width: 3; }
 .play { width: 76px; height: 76px; border-radius: 50%; background: #fff; display: grid; place-items: center; }
 .play svg { width: 34px; height: 34px; }
 .btns button:disabled, .acts button:disabled { opacity: .35; cursor: default; }
@@ -483,10 +503,13 @@ dialog.info3d hr { border: 0; height: 1px; background: rgba(255,255,255,.13); ma
 dialog.dance { width: min(480px, calc(100% - 32px)); }
 .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 8px 0 14px; }
 .dcell { display: grid; border-radius: 14px; background: var(--surface-2); overflow: hidden; }
-.dtile { aspect-ratio: 1; display: grid; place-items: center; opacity: .45; }
-.dtile[aria-pressed=true] { opacity: 1; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 14px; }
-.dtile img { width: 44px; height: 44px; }
-.dswing { height: 32px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-muted); }
+.dtile { aspect-ratio: 1; display: grid; place-items: center; opacity: .45; border-radius: 14px; box-shadow: inset 0 0 0 0 var(--accent);
+  transition: opacity 200ms, box-shadow 220ms cubic-bezier(.2,0,0,1); }
+.dtile[aria-pressed=true] { opacity: 1; box-shadow: inset 0 0 0 2px var(--accent); }
+.dtile img { width: 44px; height: 44px; transform: scale(.88); transition: transform 260ms cubic-bezier(.34,1.56,.64,1); } /* igual que los tiles de Anadir */
+.dtile[aria-pressed=true] img { transform: none; }
+.dtile:active img { transform: scale(.8); transition-duration: 90ms; }
+.dswing { height: 32px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-muted); transition: color 200ms; }
 .dswing[aria-pressed=true] { color: var(--accent); }
 .dchk { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 14px; }
 .dchk input { accent-color: var(--accent); width: 18px; height: 18px; }
@@ -559,6 +582,8 @@ dialog.imp { width: min(600px, calc(100% - 32px)); }
 .imhero { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: var(--r-card); background: var(--surface-2); margin: 6px 0 4px; }
 .imcv { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: var(--surface-3); flex: none; }
 .imcv img { width: 100%; height: 100%; object-fit: cover; }
+.imcv.gen { padding: 10px; } /* logo generico: blanco sobre el gris, con aire */
+.imcv.gen img { object-fit: contain; }
 .imhero { position: relative; overflow: hidden; isolation: isolate; }
 .imbg { position: absolute; inset: 0; z-index: -1; }
 .imbg img { width: 100%; height: 100%; object-fit: cover; filter: blur(28px) brightness(.4) saturate(1.2); transform: scale(1.3); }
@@ -569,11 +594,19 @@ dialog.imp { width: min(600px, calc(100% - 32px)); }
 dialog.imp > .seg { margin-bottom: 12px; }
 .imtiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .imcell { display: grid; border-radius: 14px; background: var(--surface-2); overflow: hidden; }
-.imtile { display: grid; justify-items: center; gap: 6px; padding: 14px 6px 10px; opacity: .45; font-size: 13px; }
-.imtile img { width: 40px; height: 40px; }
-.imtile.on { opacity: 1; box-shadow: inset 0 0 0 2px var(--accent); border-radius: 14px; }
+.imtile { display: grid; justify-items: center; gap: 6px; padding: 14px 6px 10px; opacity: .45; font-size: 13px; border-radius: 14px; box-shadow: inset 0 0 0 0 var(--accent);
+  transition: opacity 200ms, box-shadow 220ms cubic-bezier(.2,0,0,1); }
+.imtile img { width: 40px; height: 40px; transform: scale(.88); transition: transform 260ms cubic-bezier(.34,1.56,.64,1); }
+.imtile.on { opacity: 1; box-shadow: inset 0 0 0 2px var(--accent); }
+.imtile.on img { transform: none; }
+.imtile:active img { transform: scale(.8); transition-duration: 90ms; }
 .imtile[aria-disabled=true] { cursor: default; }
-.imvar { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+/* Variantes (Voces / Principal + coros...): la celda crece y se pliega animando la altura */
+.imvarw { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 280ms cubic-bezier(.2,0,0,1), opacity 200ms; }
+.imcell.open .imvarw { grid-template-rows: 1fr; opacity: 1; }
+.imvar { min-height: 0; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.imvar button { transition: color 200ms; }
+@media (prefers-reduced-motion: reduce) { .imtile, .imtile img, .imvarw, .cdside, .cdvt .ico, .cdvw, .dtile, .dtile img { transition: none; } }
 .imvar button { padding: 7px 4px; font-size: 11.5px; color: var(--text-muted); }
 .imvar button[aria-pressed=true] { color: var(--accent); }
 .imrest { margin-top: 10px; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); font-size: 13px; color: var(--text-soft); }
@@ -583,9 +616,10 @@ dialog.imp > .seg { margin-bottom: 12px; }
 .improg progress { width: 100%; height: 6px; accent-color: var(--accent); }
 
 /* ---------- Centro sin cancion: nebulosa relajada + marca ---------- */
-.main.idle { display: grid; place-items: center; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.main.idle { grid-row: 1 / 3; display: grid; place-items: center; grid-template-rows: minmax(0, 1fr); overflow: hidden; } /* sin barra: ocupa todo */
 .main.idle .idleneb { position: absolute; inset: 0; grid-column: auto; grid-row: auto; }
 .idlec { position: relative; display: grid; justify-items: center; gap: 18px; }
+.idlemark { width: 140px; height: 140px; }
 .idlec .hint { padding: 0; font-size: 14px; color: rgba(255,255,255,.6); }
 .app:has(> .main.idle) > .nebula { opacity: 0; } /* la de fondo no se suma a la del centro */
 
@@ -668,7 +702,8 @@ dialog.expdlg { width: min(460px, calc(100% - 32px)); }
 .lic-meta { margin-top: 14px; }
 .lic-text { margin-top: 14px; padding: 14px; border-radius: var(--r-input); background: var(--surface-2); color: var(--text-soft);
   font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-.lic-visit { display: inline-flex; align-items: center; margin-top: 14px; height: 36px; padding: 0 14px; border-radius: var(--r-input);
+.lic-foot { position: sticky; bottom: -24px; margin: 0 -24px -24px; padding: 14px 24px 24px; background: var(--surface-1); box-shadow: 0 -12px 16px -6px var(--surface-1); } /* tapa el padding del dialogo */
+.lic-visit { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: var(--r-input);
   background: var(--tint); color: var(--text); font-size: 13px; text-decoration: none; }
 @media (hover: hover) { .lic-visit:hover { background: rgba(255,255,255,.14); } }
 .settings .srow .btn.ghost { flex: none; }
@@ -984,3 +1019,50 @@ dialog.sheet .fxpanel { position: static; background: none; box-shadow: none; pa
   background: var(--accent); opacity: var(--fold); pointer-events: none; }
 .app.mob.lyfold .lyclose { pointer-events: auto; }
 .app.mob .lyclose img { width: 24px; height: 24px; filter: brightness(0); }
+
+/* Confirmar (delete_alert_dialog de Android): #181818, esquinas 24, icono 48, botones de pildora */
+dialog.cfdlg { margin: auto; min-width: 280px; max-width: min(420px, calc(100% - 32px)); padding: 24px; border: 0; border-radius: var(--r-dialog); background: var(--sheet); color: var(--text);
+  text-align: center; animation: cfin 220ms cubic-bezier(.2,0,0,1); }
+dialog.cfdlg::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(8px); animation: cffade 220ms ease-out; }
+dialog.cfdlg.out { animation: cfout 160ms ease-in forwards; }
+dialog.cfdlg.out::backdrop { animation: cffade 160ms ease-in reverse forwards; }
+.cfic { display: grid; place-items: center; margin-bottom: 10px; }
+.cfmsg { padding: 5px 20px 0; font-size: 18px; line-height: 1.35; }
+.cfdet { padding: 6px 20px 0; font-size: 14px; color: var(--text-muted); overflow-wrap: anywhere; }
+.cfbtns { display: flex; justify-content: center; gap: 20px; margin-top: 20px; }
+.cfbtns button { min-height: 40px; padding: 10px 20px; border-radius: 20px; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: #fff; }
+.cfno { box-shadow: inset 0 0 0 1px var(--accent); }
+.cfbtns .cfyes { background: var(--accent); color: var(--on-accent); } /* Android: blanco (2.6:1); aqui --on-accent como el resto */
+@keyframes cfin { from { opacity: 0; transform: scale(.92); } }
+@keyframes cfout { to { opacity: 0; transform: scale(.96); } }
+@keyframes cffade { from { opacity: 0; } }
+@media (hover: hover) { .cfno:hover { background: var(--accent-12); } .cfyes:hover { filter: brightness(1.08); } }
+@media (prefers-reduced-motion: reduce) { dialog.cfdlg, dialog.cfdlg::backdrop, dialog.cfdlg.out, dialog.cfdlg.out::backdrop { animation-duration: 1ms; } }
+
+/* Menus contextuales y desplegables: entrada con escala desde su esquina; salida (dismissable) con fundido */
+.menu, .pop { animation: popin 170ms cubic-bezier(.2,0,0,1); transform-origin: top right; }
+.pop:not(.menu-pop) { transform-origin: bottom right; }
+.menu.leaving, .pop.leaving, .cpill.leaving { animation: popout 120ms ease-in forwards; pointer-events: none; }
+@keyframes popin { from { opacity: 0; transform: scale(.94) translateY(-4px); } }
+@keyframes popout { to { opacity: 0; transform: scale(.97); } }
+.app.mob .pop.menu-pop.leaving { animation: drawerout 200ms cubic-bezier(.4,0,1,1) forwards; }
+@keyframes drawerout { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .menu, .pop { animation: none; } }
+
+/* Estado de la GPU (gpu_status_dialog): tile de acento 15 % con insignia, detalles en tarjeta */
+.gpucard { display: grid; gap: 14px; padding: 16px; border-radius: var(--r-card); background: var(--surface-2); border: 1px solid rgba(255,255,255,.12); }
+.gpuhd { display: flex; align-items: center; gap: 16px; }
+.gpuhd .stx { display: grid; gap: 2px; min-width: 0; }
+.gpuhd .stx b { font-weight: 400; font-size: 16px; }
+.gpuname { font-size: 13px; color: var(--text-soft); overflow-wrap: anywhere; }
+.gputile { position: relative; flex: none; width: 56px; height: 56px; display: grid; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.gpubadge { position: absolute; right: -8px; bottom: -8px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; border: 3px solid var(--surface-2); background: var(--surface-3); color: #fff; }
+.gpucard.ok .gpubadge { background: var(--accent); color: var(--on-accent); }
+.gpucard.bad .gpubadge { background: var(--offline); }
+.gpudet { display: grid; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--surface-1); font-size: 13px; }
+.gpudet > div { display: flex; justify-content: space-between; gap: 12px; }
+.gpudet span { color: var(--text-muted); }
+.gpudet b { font-weight: 400; color: var(--text); text-align: right; overflow-wrap: anywhere; }
+.gpudet b.low { color: var(--warn); }
+.gpuwarn { font-size: 12px; color: var(--warn); }
+.gpucard > .btn.ghost { justify-self: start; }

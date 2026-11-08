@@ -31,9 +31,10 @@ test('pulso: 4/4, 3/4, medio tiempo por encima de 130 BPM, decaimiento', () => {
   expect(decayPulse(0.004, 0.01) === 0, 'suelo');
 });
 
-test('tope de brillo: el peor punto (todo sumado, pulso maximo, velo) no pasa del tope; una paleta oscura no se toca', () => {
+test('tope de brillo: el peor punto (todo sumado, velo; el pulso no sube el alpha) no pasa del tope; una paleta oscura no se toca', () => {
   const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
-  const worst = (p, k) => lum([0, 1, 2].map((ch) => Math.min(255, k * (p.blobs[0][ch] * 230 / 255 + (p.blobs[1][ch] + p.blobs[2][ch]) * 195 / 255 + p.anchor[ch] * 240 / 255)) * 0.6));
+  // Alpha fijo (el pulso solo agranda): 170 nucleo, 135 halos, 160 ancla
+  const worst = (p, k) => lum([0, 1, 2].map((ch) => Math.min(255, k * (p.blobs[0][ch] * 170 / 255 + (p.blobs[1][ch] + p.blobs[2][ch]) * 135 / 255 + p.anchor[ch] * 160 / 255)) * 0.6));
   const out = [];
   for (const a of ['#27B397', '#3B82F6', '#A855F7', '#F59E0B']) {
     const p = accentPalette(a), k = brightnessCap(p);

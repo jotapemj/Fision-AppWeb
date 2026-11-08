@@ -9,7 +9,7 @@ import {
 } from '../library/importConfig.ts';
 import { iconOf } from './stemIcons.ts';
 import { h, img, toast } from './dom.ts';
-import { icon } from './icons.ts';
+import genericCover from '../assets/artcover_generic.png';
 
 const NAME: Record<TileStem, string> = { vocals: 'import_vocals_always', guitar: 'import_stem_guitar', bass: 'import_stem_bass', drums: 'import_stem_drums', piano: 'import_stem_piano', winds: 'import_stem_brass' };
 const ACCEPT = AUDIO_EXTS.map((e) => `.${e}`).join(',') + ',audio/*';
@@ -73,14 +73,13 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
   const progress = h('div', { class: 'improg', hidden: true }, h('span', { textContent: t('import_uploading') }), bar, pct);
   const send = h('button', { class: 'btn', textContent: t(reprocess ? 'import_reprocess_short' : 'import_send_short'), disabled: true });
   const cancel = h('button', { class: 'btn ghost', textContent: t('gpu_timeout_cancel') });
-  const close = h('button', { class: 'xbtn', attrs: { 'aria-label': t('web_close') } }, icon('close'));
 
   const paintHero = async () => {
     if (target.kind === 'reprocess') {
       titleEl.textContent = target.entry.title || target.entry.filename;
       artistEl.textContent = target.entry.artist;
       metaEl.textContent = '';
-      cover.replaceChildren(...(target.cover ? [img(target.cover, '', '')] : []));
+      setCover(target.cover);
       return;
     }
     if (!file) return;
@@ -100,13 +99,40 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
     metaEl.textContent = fileMeta(file.name, file.size, duration);
   };
 
+  // Sin portada: el logo blanco generico (artcover_generic de Android)
+  const setCover = (url: string | null) => {
+    cover.classList.toggle('gen', !url);
+    cover.replaceChildren(img(url ?? genericCover, '', ''));
+  };
+
   const setPicture = (b: Blob | null) => {
     if (picUrl) URL.revokeObjectURL(picUrl);
     picture = b; picUrl = b ? URL.createObjectURL(b) : null;
-    cover.replaceChildren(...(picUrl ? [img(picUrl, '', '')] : []));
+    setCover(picUrl);
     heroBg.replaceChildren(...(picUrl ? [img(picUrl, '', '')] : []));
     hero.classList.toggle('pic', !!picUrl);
   };
+
+  // Voces y bateria llevan variante (solo se ve en personalizada)
+  const cells = TILE_STEMS.map((st) => {
+    const locked = st === LOCKED_STEM;
+    const tile = h('button', { class: 'imtile', attrs: { 'aria-label': t(NAME[st]), ...(locked ? { 'aria-disabled': 'true' } : {}) } },
+      img(iconOf(st, false), 's', ''), h('span', { textContent: t(NAME[st]) }));
+    tile.onclick = () => { tapTile(sep, st); paintSep(); };
+    const cell = h('div', { class: 'imcell' }, tile);
+    let vars: HTMLElement | null = null;
+    if (st === 'vocals' || st === 'drums') {
+      const [a, b] = st === 'vocals' ? ['import_tile_vocals_single', 'import_tile_vocals_split'] : ['import_tile_drums_full', 'import_tile_drums_split'];
+      vars = h('div', { class: 'imvar' }, ...[[a, false], [b, true]].map(([k, sp]) => {
+        const x = h('button', { textContent: t(k as string) });
+        x.onclick = () => { tapVariant(sep, st, sp as boolean); paintSep(); };
+        return x;
+      }));
+      cell.append(h('div', { class: 'imvarw' }, vars)); // envoltorio que pliega la altura (0fr <-> 1fr)
+    }
+    tiles.append(cell);
+    return { st, tile, cell, vars };
+  });
 
   const paintSep = () => {
     const modes: [SepMode, string][] = [['4stem', t('import_mode_4stem')], ['2stem', t('import_mode_2stem')], ['custom', t('import_personalized')]];
@@ -115,25 +141,17 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
       b.onclick = () => { sep.mode = m; paintSep(); };
       return b;
     }));
-    tiles.replaceChildren(...TILE_STEMS.map((st) => {
-      const on = isSelected(sep, st), locked = st === LOCKED_STEM;
-      const tile = h('button', { class: `imtile${on ? ' on' : ''}`, attrs: { 'aria-pressed': String(on), 'aria-label': t(NAME[st]), ...(locked ? { 'aria-disabled': 'true' } : {}) } },
-        img(iconOf(st, false), 's', ''), h('span', { textContent: t(NAME[st]) }));
-      tile.onclick = () => { tapTile(sep, st); paintSep(); };
-      const cell = h('div', { class: 'imcell' }, tile);
-      // Voces y bateria llevan variante (solo se ve en personalizada)
-      if ((st === 'vocals' || st === 'drums') && sep.mode === 'custom') {
-        const split = st === 'vocals' ? vocalsSplit(sep) : drumsSplit(sep);
-        const [a, b] = st === 'vocals' ? ['import_tile_vocals_single', 'import_tile_vocals_split'] : ['import_tile_drums_full', 'import_tile_drums_split'];
-        const v = h('div', { class: 'imvar' }, ...[[a, false], [b, true]].map(([k, sp]) => {
-          const x = h('button', { textContent: t(k as string), attrs: { 'aria-pressed': String(on && split === sp) } });
-          x.onclick = () => { tapVariant(sep, st, sp as boolean); paintSep(); };
-          return x;
-        }));
-        cell.append(v);
-      }
-      return cell;
-    }));
+    // Tiles fijos y estado en su sitio: asi se animan (seleccion y variantes que se despliegan)
+    for (const c of cells) {
+      const on = isSelected(sep, c.st);
+      c.tile.classList.toggle('on', on);
+      c.tile.setAttribute('aria-pressed', String(on));
+      if (!c.vars) continue;
+      const split = c.st === 'vocals' ? vocalsSplit(sep) : drumsSplit(sep), open = sep.mode === 'custom';
+      c.cell.classList.toggle('open', open);
+      c.vars.inert = !open;
+      c.vars.querySelectorAll('button').forEach((x, k) => x.setAttribute('aria-pressed', String(on && split === (k === 1))));
+    }
     rest.textContent = t(restKey(sep));
   };
 
@@ -187,11 +205,10 @@ export function openImport(target: ImportTarget, ctx: ImportCtx): HTMLDialogElem
 
   send.onclick = () => void (reprocess ? submitReprocess() : submitUpload());
   cancel.onclick = () => { if (abort) abort.abort(); else dlg.close(); };
-  close.onclick = () => { abort?.abort(); dlg.close(); };
   changeBtn.onclick = async () => { const f = await pickAudio(); if (f) { file = f; err.textContent = ''; void paintHero(); } };
 
   const dlg = h('dialog', { class: 'settings imp', attrs: { 'aria-label': t(reprocess ? 'import_reprocess_title' : 'import_title') } },
-    h('div', { class: 'shd' }, h('h2', { textContent: t(reprocess ? 'import_reprocess_title' : 'import_title') }), close),
+    h('div', { class: 'shd' }, h('h2', { textContent: t(reprocess ? 'import_reprocess_title' : 'import_title') })), // sin x: ya esta Cancelar
     hero, h('h3', { textContent: t('import_section_separation') }), modeSeg, tiles, rest, gpuWarn, loading, progress, err,
     h('div', { class: 'plfoot' }, cancel, send));
   dlg.addEventListener('close', () => { if (picUrl) URL.revokeObjectURL(picUrl); dlg.remove(); });
