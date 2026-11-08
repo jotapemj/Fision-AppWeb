@@ -27,6 +27,24 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`;
 
+const LIC_APACHE_2_0 = `                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+   For the full text visit http://www.apache.org/licenses/LICENSE-2.0`;
+
 const LIC_LGPL_2_1 = `GNU LESSER GENERAL PUBLIC LICENSE
 Version 2.1, February 1999
 
@@ -119,6 +137,10 @@ export const LICENSES: LicenseEntry[] = [
     text: 'Metronome sounds recorded by Ludwig Peter Müller in December 2020.\nFree to use under the license Creative Commons CC0 1.0 Universal.' },
   { name: 'Noto Sans', author: 'The Noto Project Authors', license: 'SIL OFL 1.1', url: 'https://github.com/notofonts/latin-greek-cyrillic',
     text: `Copyright 2022 The Noto Project Authors\n\n${LIC_OFL}` },
+  { name: 'Material Icons', author: 'Google', license: 'Apache 2.0', url: 'https://github.com/google/material-design-icons',
+    text: `Copyright Google LLC
+
+${LIC_APACHE_2_0}` },
   { name: 'MusGlyphs', author: 'Dan Kreider', license: 'SIL OFL 1.1', url: 'https://www.notationcentral.com/product/musglyphs/',
     text: `Copyright (c) Dan Kreider, 2021\n\n${LIC_OFL}` },
 ];

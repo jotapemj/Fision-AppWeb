@@ -1370,7 +1370,7 @@ test('licencias: lista desde Ajustes, detalle con texto y enlace, volver', async
   await p.eval(`document.querySelector('dialog.licenses .btn.ghost').click()`);
   const back = await p.eval(`document.querySelectorAll('dialog.licenses .lic-row').length`);
   await p.eval(`document.querySelector('dialog.licenses .xbtn').click(); document.querySelector('dialog.settings .xbtn').click()`);
-  for (const need of ['SoundTouch', 'three.js', 'mp4-muxer', 'Emscripten', 'KEMAR HRTF dataset', 'Noto Sans', 'Downbeat click sounds']) expect(rows.includes(need), `falta ${need}: ${rows}`);
+  for (const need of ['SoundTouch', 'three.js', 'mp4-muxer', 'Emscripten', 'KEMAR HRTF dataset', 'Noto Sans', 'Downbeat click sounds', 'Material Icons']) expect(rows.includes(need), `falta ${need}: ${rows}`);
   expect(det.title === 'three.js' && det.text.includes('three.js authors') && det.href === 'https://threejs.org/' && det.rel.includes('noopener') && !det.hscroll,
     `detalle: ${JSON.stringify({ ...det, text: det.text.slice(0, 40) })}`);
   expect(back === rows.length, `volver: ${back}`);
